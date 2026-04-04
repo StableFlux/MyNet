@@ -1,0 +1,85 @@
+name: mynet_dev
+
+services:
+  mynet-backend:
+    build:
+      context: ../../site/backend
+      dockerfile: ../../_dev_env/docker/Dockerfile.backend
+    image: mynet_dev_backend
+    container_name: mynet_dev_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../site/backend:/app             # hot reload — code changes reflected immediately
+      - mynet_dev_db:/app/data           # SQLite database persistence
+    environment:
+      - DB_PATH=/app/data/mynet.db
+      - FERNET_KEY=${FERNET_KEY:-}       # set in .env
+      - APP_URL=http://localhost         # dev: nginx on port 80
+    cap_add:
+      - NET_RAW                           # required for ICMP ping (monitoring F7)
+    networks:
+      - mynet_dev_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/auth/setup-required')"]
+      interval: 5s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
+  mynet-frontend:
+    build:
+      context: ../../site/frontend
+      dockerfile: ../../_dev_env/docker/Dockerfile.frontend
+    image: mynet_dev_frontend
+    container_name: mynet_dev_frontend
+    restart: unless-stopped
+    # Port 5173 is NOT exposed to the host — access goes through mynet_dev_nginx on port 80.
+    # Uncomment the line below if you ever need direct Vite access for debugging:
+    # ports:
+    #   - "5173:5173"
+    volumes:
+      - ../../site/frontend:/app            # hot reload
+      - mynet_dev_frontend_modules:/app/node_modules  # named volume — prevents host override
+    # No VITE_API_URL/VITE_WS_URL here — vite.config.ts falls back to the
+    # Docker service name (mynet-backend:8000) which is correct inside the network
+    depends_on:
+      mynet-backend:
+        condition: service_healthy
+    networks:
+      - mynet_dev_net
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5173/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 60s
+
+  mynet-nginx:
+    image: nginx:alpine
+    container_name: mynet_dev_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ../nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      mynet-frontend:
+        condition: service_healthy
+      mynet-backend:
+        condition: service_healthy
+    networks:
+      - mynet_dev_net
+    # nginx starts in <1s with no meaningful init — no health check needed.
+    # --wait in dev.ps1 treats it as ready once the container is running.
+
+volumes:
+  mynet_dev_db:
+    name: mynet_dev_db
+  mynet_dev_frontend_modules:
+    name: mynet_dev_frontend_modules
+
+networks:
+  mynet_dev_net:
+    name: mynet_dev_net

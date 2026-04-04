@@ -1,0 +1,14 @@
+# Ruff configuration for MyNet backend.
+# E711/E712 are suppressed because SQLAlchemy filter() uses overloaded == and !=
+# operators to generate SQL (e.g. `!= None` → IS NOT NULL). Changing these to
+# Python-idiomatic `is not None` would break the SQL generation.
+# E401 is suppressed for the archived one-off migration scripts only (see per-file).
+
+line-length = 120
+
+[lint]
+select = ["E", "F", "W"]
+ignore = ["E711", "E712", "E501"]
+
+[lint.per-file-ignores]
+"migrations/archive/*.py" = ["E401", "F401", "F811"]

@@ -1,0 +1,51 @@
+name: mynet
+
+services:
+  mynet-backend:
+    build:
+      context: ..                          # repo root — Dockerfile copies from site/backend/
+      dockerfile: deploy/Dockerfile.backend
+    image: mynet_backend
+    container_name: mynet_backend
+    restart: unless-stopped
+    volumes:
+      - mynet_db:/app/data                 # SQLite database persistence
+    environment:
+      - DB_PATH=/app/data/mynet.db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}   # REQUIRED — see env/.env.example
+      - APP_URL=${APP_URL:-http://localhost}
+      - PIHOLE1_URL=${PIHOLE1_URL:-}
+      - PIHOLE2_URL=${PIHOLE2_URL:-}
+    cap_add:
+      - NET_RAW                            # required for ICMP ping (device monitoring)
+    networks:
+      - mynet_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/auth/setup-required')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mynet-frontend:
+    build:
+      context: ..                          # repo root — Dockerfile copies from site/frontend/
+      dockerfile: deploy/Dockerfile.frontend
+    image: mynet_frontend
+    container_name: mynet_frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      mynet-backend:
+        condition: service_healthy
+    networks:
+      - mynet_net
+
+volumes:
+  mynet_db:
+    name: mynet_db
+
+networks:
+  mynet_net:
+    name: mynet_net

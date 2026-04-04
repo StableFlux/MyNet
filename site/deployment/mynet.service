@@ -1,0 +1,16 @@
+[Unit]
+Description=MyNet Backend (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/mynet/backend
+ExecStart=/home/pi/mynet/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/home/pi/mynet/.env
+
+[Install]
+WantedBy=multi-user.target

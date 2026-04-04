@@ -1,0 +1,21 @@
+# Default: normalise line endings to LF in the repo
+* text=auto eol=lf
+
+# Windows-only scripts can use CRLF
+*.ps1 text eol=crlf
+
+# Binary files — no line ending conversion
+*.db     binary
+*.db-shm binary
+*.db-wal binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
+*.pdf    binary
+*.zip    binary

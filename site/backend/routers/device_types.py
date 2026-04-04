@@ -1,0 +1,76 @@
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from typing import Optional
+
+from database import get_db
+from models.device_type import DeviceType
+from models.user import User
+from services.auth import require_editor, require_viewer
+
+router = APIRouter(prefix="/api/device-types", tags=["device-types"])
+
+
+class DeviceTypeIn(BaseModel):
+    name: str
+    category: Optional[str] = None
+    icon: Optional[str] = None
+    color: str = "#64748b"
+    fields_schema: dict = {}
+
+
+class DeviceTypeOut(DeviceTypeIn):
+    id: int
+    is_system: bool
+    class Config:
+        from_attributes = True
+
+
+@router.get("", response_model=list[DeviceTypeOut])
+def list_device_types(db: Session = Depends(get_db), _: User = Depends(require_viewer)):
+    return db.query(DeviceType).order_by(DeviceType.name).all()
+
+
+@router.post("", response_model=DeviceTypeOut, status_code=201)
+def create_device_type(
+    body: DeviceTypeIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    dt = DeviceType(**body.model_dump(), is_system=False)
+    db.add(dt)
+    db.commit()
+    db.refresh(dt)
+    return dt
+
+
+@router.put("/{dt_id}", response_model=DeviceTypeOut)
+def update_device_type(
+    dt_id: int,
+    body: DeviceTypeIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    dt = db.get(DeviceType, dt_id)
+    if not dt:
+        raise HTTPException(404, "Device type not found")
+    for k, v in body.model_dump().items():
+        setattr(dt, k, v)
+    db.commit()
+    db.refresh(dt)
+    return dt
+
+
+@router.delete("/{dt_id}", status_code=204)
+def delete_device_type(
+    dt_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_editor),
+):
+    dt = db.get(DeviceType, dt_id)
+    if not dt:
+        raise HTTPException(404, "Device type not found")
+    if dt.is_system:
+        raise HTTPException(400, "Cannot delete system device types")
+    db.delete(dt)
+    db.commit()

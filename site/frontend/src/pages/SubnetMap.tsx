@@ -21,8 +21,8 @@ export default function SubnetMap() {
   const [selectedNetworkId, setSelectedNetworkId] = useState<number | null>(
     searchParams.get('network') ? Number(searchParams.get('network')) : null
   )
-  const [showFree, setShowFree] = useState(true)
-  const [showDhcp, setShowDhcp] = useState(true)
+  const [showFree, setShowFree] = useState(false)
+  const [showDhcp, setShowDhcp] = useState(false)
 
   const { data: networks } = useQuery({
     queryKey: ['networks'],

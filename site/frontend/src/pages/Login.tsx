@@ -57,6 +57,7 @@ export default function Login() {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(e as any) }}
                 required
               />
             </div>

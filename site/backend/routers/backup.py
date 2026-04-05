@@ -9,7 +9,7 @@ password fields are exported as ciphertext. Restoring on a different instance
 """
 import json
 from datetime import datetime, timezone
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, text
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -90,6 +90,11 @@ def export_backup(db: Session = Depends(get_db)):
 
 def _do_restore(db: Session, data: dict) -> dict:
     """Core restore logic shared by both restore endpoints."""
+    # Defer FK checks to commit time — allows inserts in any order within the transaction.
+    # Required for self-referential tables (locations.parent_id, devices.upstream_device_id).
+    # SQLite resets this automatically after each commit.
+    db.execute(text("PRAGMA defer_foreign_keys = ON"))
+
     db.query(SwitchPort).delete(synchronize_session=False)
     db.query(Nic).delete(synchronize_session=False)
     db.query(Device).delete(synchronize_session=False)

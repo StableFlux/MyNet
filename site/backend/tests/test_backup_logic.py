@@ -194,6 +194,25 @@ class TestDoRestore:
         assert len(networks) == 1
         assert networks[0].name == "Restored Net"
 
+    def test_restore_handles_self_referential_locations(self, db_session):
+        """Child location inserted before its parent must not raise FK error."""
+        payload = {
+            "version": "1.4",
+            "users": [],
+            "networks": [], "device_types": [],
+            # id=1 references parent_id=2 which appears later in the list
+            "locations": [
+                {"id": 1, "name": "Attic", "type": "Room", "parent_id": 2},
+                {"id": 2, "name": "House", "type": "Home", "parent_id": None},
+            ],
+            "devices": [], "nics": [], "switch_ports": [],
+        }
+        _do_restore(db_session, payload)
+        from models.location import Location
+        locs = {l.id: l for l in db_session.query(Location).all()}
+        assert locs[1].parent_id == 2
+        assert locs[2].parent_id is None
+
     def test_restore_parses_datetime_strings(self, db_session):
         """ISO datetime strings in the backup must be coerced back to datetime objects."""
         payload = {

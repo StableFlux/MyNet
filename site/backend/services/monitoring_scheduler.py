@@ -117,7 +117,7 @@ async def run_batch_tick():
                 count=1,
                 timeout=2,
                 concurrent_tasks=min(len(ip_list), 150),
-                privileged=False,
+                privileged=True,
             )
             result_by_ip = {r.address: r for r in ping_results}
         except Exception as e:
@@ -344,7 +344,7 @@ def schedule_device_nics(device_id: int, nic_ips: list[str], interval_secs: int)
 async def ping_device(device_id: int, ip: str) -> dict:
     try:
         result = await asyncio.to_thread(
-            icmplib.ping, ip, count=2, timeout=2, privileged=False
+            icmplib.ping, ip, count=2, timeout=2, privileged=True
         )
         status = "up" if result.is_alive else "down"
         latency = round(result.avg_rtt, 2) if result.is_alive else None

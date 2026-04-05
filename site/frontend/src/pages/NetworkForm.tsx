@@ -318,16 +318,16 @@ export default function NetworkForm() {
       <Section title="IP Addressing">
         <div className="grid grid-cols-2 gap-3">
           <Field label="CIDR">
-            <TextInput value={form.cidr} onChange={(v) => set({ cidr: v })} placeholder="10.10.20.0/24" mono />
+            <TextInput value={form.cidr} onChange={(v) => set({ cidr: v })} placeholder="192.168.1.0/24" mono />
           </Field>
           <Field label="Gateway">
-            <TextInput value={form.gateway} onChange={(v) => set({ gateway: v })} placeholder="10.10.20.1" mono />
+            <TextInput value={form.gateway} onChange={(v) => set({ gateway: v })} placeholder="192.168.1.1" mono />
           </Field>
           <Field label="DHCP Range Start">
-            <TextInput value={form.dhcp_range_start} onChange={(v) => set({ dhcp_range_start: v })} placeholder="10.10.20.100" mono />
+            <TextInput value={form.dhcp_range_start} onChange={(v) => set({ dhcp_range_start: v })} placeholder="192.168.1.100" mono />
           </Field>
           <Field label="DHCP Range End">
-            <TextInput value={form.dhcp_range_end} onChange={(v) => set({ dhcp_range_end: v })} placeholder="10.10.20.200" mono />
+            <TextInput value={form.dhcp_range_end} onChange={(v) => set({ dhcp_range_end: v })} placeholder="192.168.1.200" mono />
           </Field>
         </div>
       </Section>
@@ -379,7 +379,7 @@ export default function NetworkForm() {
                     next[i] = e.target.value
                     set({ dns_servers: next })
                   }}
-                  placeholder={i === 0 ? '10.10.10.10' : i === 1 ? '10.10.10.20' : '0.0.0.0'}
+                  placeholder={i === 0 ? '192.168.1.1' : i === 1 ? '8.8.8.8' : '0.0.0.0'}
                   className="glass-input flex-1 text-sm font-mono"
                 />
                 {form.dns_servers.length > 2 && (

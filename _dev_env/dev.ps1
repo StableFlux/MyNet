@@ -39,5 +39,5 @@ docker compose -f docker\docker-compose.yml --env-file env\.env up --build --det
 Write-Host ""
 Write-Host "MyNet is running:"
 Write-Host "  http://localhost"
-Write-Host "  http://10.10.20.50"
+Write-Host "  http://<your-server-ip>"
 Write-Host "  API docs: http://localhost:8000/docs"

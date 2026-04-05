@@ -945,7 +945,7 @@ export default function DeviceForm() {
                 </Field>
                 <Field label="IP Address">
                   <input value={mgmt.ip_address} onChange={(e) => setMgmt({ ip_address: e.target.value })}
-                    placeholder="10.10.10.x or DHCP" className="glass-input w-full text-sm font-mono" />
+                    placeholder="192.168.1.x or DHCP" className="glass-input w-full text-sm font-mono" />
                 </Field>
                 <Field label="Address Type">
                   <select value={mgmt.address_type} onChange={(e) => setMgmt({ address_type: e.target.value as any })}

@@ -73,7 +73,7 @@ function DeployForm({
         <div>
           <label className="text-[10px] text-white/40 block mb-1">IP Address</label>
           <input className="glass-input w-full text-sm font-mono" value={form.ip_address}
-            onChange={e => set('ip_address', e.target.value)} placeholder="10.10.x.x" />
+            onChange={e => set('ip_address', e.target.value)} placeholder="192.168.1.x" />
         </div>
       </div>
       <div className="flex gap-2">

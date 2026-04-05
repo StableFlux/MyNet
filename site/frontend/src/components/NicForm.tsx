@@ -144,7 +144,7 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
             <div>
               <label className="block text-[10px] text-white/40 mb-1">IP Address</label>
               <input value={nic.ip_address} onChange={(e) => update(i, { ip_address: e.target.value })}
-                disabled={readOnly} placeholder="10.10.20.x or DHCP"
+                disabled={readOnly} placeholder="192.168.1.x or DHCP"
                 className="glass-input w-full text-sm font-mono" />
             </div>
             <div>

@@ -41,6 +41,7 @@ export default function Login() {
               <label htmlFor="login-username" className="block text-xs font-medium text-white/60 mb-1.5">Username</label>
               <input
                 id="login-username"
+                type="text"
                 className="glass-input w-full"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}

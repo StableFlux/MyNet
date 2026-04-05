@@ -25,6 +25,10 @@ from models.nic import Nic
 from models.switch_port import SwitchPort
 from models.location import Location
 from models.user import User
+from models.monitoring import MonitoringResult
+from models.pihole import PiHoleCache
+from models.alert import Alert
+from models.audit import AuditLog
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
@@ -95,6 +99,12 @@ def _do_restore(db: Session, data: dict) -> dict:
     # SQLite resets this automatically after each commit.
     db.execute(text("PRAGMA defer_foreign_keys = ON"))
 
+    # Clear tables that reference devices/users but are not included in the backup.
+    # Must be deleted before their parent rows to satisfy FK constraints at commit.
+    db.query(MonitoringResult).delete(synchronize_session=False)
+    db.query(PiHoleCache).delete(synchronize_session=False)
+    db.query(Alert).delete(synchronize_session=False)
+    db.query(AuditLog).delete(synchronize_session=False)
     db.query(SwitchPort).delete(synchronize_session=False)
     db.query(Nic).delete(synchronize_session=False)
     db.query(Device).delete(synchronize_session=False)

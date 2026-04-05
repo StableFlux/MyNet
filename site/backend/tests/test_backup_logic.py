@@ -194,6 +194,23 @@ class TestDoRestore:
         assert len(networks) == 1
         assert networks[0].name == "Restored Net"
 
+    def test_restore_parses_datetime_strings(self, db_session):
+        """ISO datetime strings in the backup must be coerced back to datetime objects."""
+        payload = {
+            "version": "1.4",
+            "users": [
+                {"id": 1, "username": "u", "display_name": "U",
+                 "password_hash": hash_password("x"), "role": "viewer",
+                 "last_login": "2026-04-04T18:31:13.433179"}  # string, not datetime
+            ],
+            "networks": [], "device_types": [], "locations": [],
+            "devices": [], "nics": [], "switch_ports": [],
+        }
+        # Should not raise TypeError about datetime
+        _do_restore(db_session, payload)
+        user = db_session.query(User).first()
+        assert user.last_login is not None
+
     def test_restore_ignores_unknown_columns(self, db_session):
         """Unknown keys in a backup row should be silently ignored (forward-compat)."""
         payload = {

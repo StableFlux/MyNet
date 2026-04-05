@@ -9,6 +9,7 @@ password fields are exported as ciphertext. Restoring on a different instance
 """
 import json
 from datetime import datetime, timezone
+from sqlalchemy import DateTime
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -100,8 +101,23 @@ def _do_restore(db: Session, data: dict) -> dict:
 
     def _insert_rows(model, rows: list[dict]):
         cols = _col_names(model)
+        # Identify DateTime columns so ISO strings can be parsed back to datetime objects
+        dt_cols = {
+            c.name for c in model.__table__.columns
+            if isinstance(c.type, DateTime)
+        }
+        def _coerce(k, v):
+            if k in dt_cols and isinstance(v, str):
+                try:
+                    return datetime.fromisoformat(v)
+                except ValueError:
+                    return None
+            return v
         for row in rows:
-            db.execute(model.__table__.insert(), {k: v for k, v in row.items() if k in cols})
+            db.execute(
+                model.__table__.insert(),
+                {k: _coerce(k, v) for k, v in row.items() if k in cols},
+            )
 
     _insert_rows(User,               data.get("users",         []))
     _insert_rows(Network,            data.get("networks",      []))

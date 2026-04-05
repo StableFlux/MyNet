@@ -60,7 +60,9 @@ success "Dependencies up to date"
 # ── Fix ownership and restart ─────────────────────────────────────────────────
 step "Restarting services"
 
-chown -R mynet:mynet "$INSTALL_DIR"
+SERVICE_USER="${SUDO_USER:-$(whoami)}"
+SERVICE_GROUP="$(id -gn "$SERVICE_USER")"
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 systemctl restart mynet
 nginx -t && systemctl reload nginx
 success "Services restarted"

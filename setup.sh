@@ -160,13 +160,10 @@ fi
 # ── Directory structure ───────────────────────────────────────────────────────
 step "Creating directory structure"
 
-# Create a dedicated system user (no login shell, no home dir)
-if ! id mynet &>/dev/null; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin mynet
-    success "System user 'mynet' created"
-else
-    success "System user 'mynet' already exists"
-fi
+# Run the service as the user who invoked sudo (the repo owner)
+SERVICE_USER="${SUDO_USER:-$(whoami)}"
+SERVICE_GROUP="$(id -gn "$SERVICE_USER")"
+info "Service will run as $SERVICE_USER"
 
 mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$STATIC_DIR"
 success "Directories created under $INSTALL_DIR"
@@ -364,8 +361,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=mynet
-Group=mynet
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
 WorkingDirectory=$BACKEND_SRC
 EnvironmentFile=$ENV_FILE
 
@@ -395,7 +392,7 @@ WantedBy=multi-user.target
 SERVICE
 
 # Ownership
-chown -R mynet:mynet "$INSTALL_DIR"
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chmod 750 "$DATA_DIR"
 
 systemctl daemon-reload

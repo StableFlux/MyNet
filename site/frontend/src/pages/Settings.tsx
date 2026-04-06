@@ -338,9 +338,33 @@ export default function Settings() {
         />
       )}
 
-      <div>
-        <h1 className="text-xl font-bold text-white">Settings</h1>
-        <p className="text-sm text-white/40 mt-0.5">Administration</p>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h1 className="text-xl font-bold text-white">Settings</h1>
+          <p className="text-sm text-white/40 mt-0.5">Administration</p>
+        </div>
+        <div className="w-1/4 flex-shrink-0">
+          <GlassCard className="border-red-500/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-red-600/15 flex items-center justify-center flex-shrink-0">
+                  <Trash2 size={14} className="text-red-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white">Factory Reset</p>
+                  <p className="text-[10px] text-white/35 leading-tight">Wipe all data and restart setup</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetModal(true)}
+                className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                Reset…
+              </button>
+            </div>
+          </GlassCard>
+        </div>
       </div>
 
       {/* Nav cards */}
@@ -486,31 +510,6 @@ export default function Settings() {
         </GlassCard>
       </div>
 
-      {/* Danger Zone */}
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-red-400/60 uppercase tracking-widest">Danger Zone</h2>
-        <GlassCard className="border-red-500/20">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg bg-red-600/15 flex items-center justify-center flex-shrink-0">
-              <Trash2 size={18} className="text-red-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white">Factory Reset</p>
-              <p className="text-xs text-white/40 mt-0.5">
-                Wipe all users, devices, networks, and settings. Returns the system to a
-                freshly installed state and launches the setup wizard.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowResetModal(true)}
-              className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
-            >
-              Reset…
-            </button>
-          </div>
-        </GlassCard>
-      </div>
     </div>
   )
 }

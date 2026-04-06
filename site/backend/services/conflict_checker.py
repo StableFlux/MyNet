@@ -165,12 +165,13 @@ def check_device_conflicts(db: Session, device_id: int) -> list[dict]:
     Returns a flat list of conflict dicts suitable for the frontend popup.
     """
     from models.nic import NicType
-    device_nics = db.query(Nic).filter(Nic.device_id == device_id).all()
+    device_nics = db.query(Nic).options(joinedload(Nic.device)).filter(Nic.device_id == device_id).all()
     conflicts = []
 
     for nic in device_nics:
         # IP conflict
         if nic.ip_address and nic.ip_address not in ("DHCP", ""):
+            # Cross-device: another device has the same IP
             others = (
                 db.query(Nic)
                 .options(joinedload(Nic.device))
@@ -190,6 +191,20 @@ def check_device_conflicts(db: Session, device_id: int) -> list[dict]:
                     "conflicting_device_name": other.device.name,
                     "conflicting_nic_label": other.label or f"NIC {other.id}",
                 })
+
+            # Intra-device: another NIC on this same device shares the same IP
+            # Use id > nic.id to report each pair only once
+            for sibling in device_nics:
+                if sibling.id > nic.id and sibling.ip_address == nic.ip_address:
+                    conflicts.append({
+                        "type": "ip",
+                        "ip": nic.ip_address,
+                        "nic_id": nic.id,
+                        "nic_label": nic.label or f"NIC {nic.id}",
+                        "conflicting_device_id": device_id,
+                        "conflicting_device_name": nic.device.name,
+                        "conflicting_nic_label": sibling.label or f"NIC {sibling.id}",
+                    })
 
         # MAC conflict (skip VIRT, skip suppressed)
         if (

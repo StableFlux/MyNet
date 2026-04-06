@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Save, Loader, ChevronDown, Globe, ChevronUp } from 'lucide-react'
 import { GlassCard } from '../../components/GlassCard'
 import { DEVICE_CATEGORIES, useColorSettings } from '../../hooks/useColorSettings'
-import { NicForm, NicDraft, emptyNic } from '../../components/NicForm'
+import { NicForm, NicDraft, emptyNic, isValidIp, isRfc1918, isIpInCidr } from '../../components/NicForm'
 import { SwitchPortsForm } from '../../components/SwitchPortsForm'
 import { ConflictModal, Conflict } from '../../components/ConflictModal'
 import { useAuthStore } from '../../store/authStore'
@@ -601,11 +601,32 @@ export default function DeviceForm() {
     queryFn: async () => { const { data } = await api.get('/locations?flat=true'); return data },
   })
 
-  // Fetch all devices (for hypervisor selector)
+  // Fetch all devices (for hypervisor selector + NIC conflict detection)
   const { data: allDevices } = useQuery({
     queryKey: ['devices', 'all'],
     queryFn: async () => { const { data } = await api.get('/devices'); return data },
   })
+
+  const currentDeviceId = id ? Number(id) : null
+  const occupiedIps: { ip: string; deviceName: string }[] = React.useMemo(() => {
+    if (!allDevices) return []
+    return (allDevices as any[])
+      .filter((d: any) => d.id !== currentDeviceId)
+      .flatMap((d: any) => (d.nics ?? [])
+        .filter((n: any) => n.ip_address && n.ip_address !== 'DHCP')
+        .map((n: any) => ({ ip: n.ip_address, deviceName: d.name }))
+      )
+  }, [allDevices, currentDeviceId])
+
+  const occupiedMacs: { mac: string; deviceName: string }[] = React.useMemo(() => {
+    if (!allDevices) return []
+    return (allDevices as any[])
+      .filter((d: any) => d.id !== currentDeviceId)
+      .flatMap((d: any) => (d.nics ?? [])
+        .filter((n: any) => n.mac && n.nic_type !== 'VIRT')
+        .map((n: any) => ({ mac: n.mac.trim().toLowerCase(), deviceName: d.name }))
+      )
+  }, [allDevices, currentDeviceId])
 
   // Fetch switch devices with their ports (for NIC dropdowns + uplink configuration)
   const { data: switchDevices } = useQuery({
@@ -1199,12 +1220,42 @@ export default function DeviceForm() {
               : [{ ...emptyNic(), ...patch }]
             set({ nics: updated })
           }
+
+          // NIC validation for management interface
+          const mgmtIp = mgmt.ip_address?.trim()
+          const mgmtIpComplete = mgmtIp ? mgmtIp.split('.').length === 4 : false
+          const mgmtSelectedNet = mgmt.network_id ? (networks ?? []).find((n: any) => String(n.id) === mgmt.network_id) : null
+          const mgmtNetCidr: string | null = mgmtSelectedNet?.cidr ?? null
+          const mgmtMalformedIp = mgmtIpComplete && mgmtIp && !isValidIp(mgmtIp) && mgmtIp.toUpperCase() !== 'DHCP'
+            ? `"${mgmtIp}" is not a valid IP address` : null
+          const mgmtSubnetWarn = !mgmtMalformedIp && mgmtIp && isValidIp(mgmtIp) && mgmtIp.toUpperCase() !== 'DHCP' && mgmtNetCidr
+            ? (!isIpInCidr(mgmtIp, mgmtNetCidr) ? `${mgmtIp} is outside ${mgmtSelectedNet?.name}'s subnet (${mgmtNetCidr})` : null)
+            : null
+          const mgmtNetIsPublic = mgmtNetCidr ? !isRfc1918(mgmtNetCidr.split('/')[0]) : false
+          const mgmtRfc1918Warn = !mgmtMalformedIp && !mgmtSubnetWarn && mgmtIp && isValidIp(mgmtIp) && mgmtIp.toUpperCase() !== 'DHCP' && !isRfc1918(mgmtIp) && !mgmtNetIsPublic
+            ? `${mgmtIp} is a public IP — use private (RFC 1918) ranges for LAN interfaces` : null
+          const mgmtDupIpWarn = !mgmtMalformedIp && mgmtIp && mgmtIp.toUpperCase() !== 'DHCP'
+            ? occupiedIps.find(o => o.ip === mgmtIp)
+              ? `${mgmtIp} is already assigned to ${occupiedIps.find(o => o.ip === mgmtIp)!.deviceName}` : null
+            : null
+          const mgmtMac = mgmt.mac?.trim().toLowerCase()
+          const mgmtDupMacWarn = mgmtMac
+            ? occupiedMacs.find(o => o.mac === mgmtMac)
+              ? `${mgmt.mac.trim()} is already assigned to ${occupiedMacs.find(o => o.mac === mgmtMac)!.deviceName}` : null
+            : null
+
           return (
             <Section title="Network Configuration">
               <div className="grid grid-cols-2 gap-4">
                 <Field label="MAC Address">
                   <input value={mgmt.mac} onChange={(e) => setMgmt({ mac: e.target.value })}
-                    placeholder="aa:bb:cc:dd:ee:ff" className="glass-input w-full text-sm font-mono" />
+                    placeholder="aa:bb:cc:dd:ee:ff"
+                    className={`glass-input w-full text-sm font-mono${mgmtDupMacWarn ? ' border-amber-500/50' : ''}`} />
+                  {mgmtDupMacWarn && (
+                    <p className="flex items-center gap-1 mt-1 text-[10px] text-amber-400">
+                      <span>⚠</span>{mgmtDupMacWarn}
+                    </p>
+                  )}
                 </Field>
                 <Field label="Network / VLAN">
                   <select value={mgmt.network_id} onChange={(e) => setMgmt({ network_id: e.target.value })}
@@ -1219,7 +1270,13 @@ export default function DeviceForm() {
                 </Field>
                 <Field label="IP Address">
                   <input value={mgmt.ip_address} onChange={(e) => setMgmt({ ip_address: e.target.value })}
-                    placeholder="192.168.1.x or DHCP" className="glass-input w-full text-sm font-mono" />
+                    placeholder="192.168.1.x or DHCP"
+                    className={`glass-input w-full text-sm font-mono${mgmtMalformedIp || mgmtDupIpWarn ? ' border-red-500/50' : mgmtSubnetWarn || mgmtRfc1918Warn ? ' border-amber-500/50' : ''}`} />
+                  {mgmtMalformedIp && <p className="flex items-center gap-1 mt-1 text-[10px] text-red-400"><span>⚠</span>{mgmtMalformedIp}</p>}
+                  {mgmtDupIpWarn && <p className="flex items-center gap-1 mt-1 text-[10px] text-red-400"><span>⚠</span>{mgmtDupIpWarn}</p>}
+                  {!mgmtMalformedIp && !mgmtDupIpWarn && (mgmtSubnetWarn || mgmtRfc1918Warn) && (
+                    <p className="flex items-center gap-1 mt-1 text-[10px] text-amber-400"><span>⚠</span>{mgmtSubnetWarn ?? mgmtRfc1918Warn}</p>
+                  )}
                 </Field>
                 <Field label="Address Type">
                   <select value={mgmt.address_type} onChange={(e) => setMgmt({ address_type: e.target.value as any })}
@@ -1362,6 +1419,8 @@ export default function DeviceForm() {
             }))}
             switchDevices={switchDevices ?? []}
             dnsDomain={dnsDomain}
+            occupiedIps={occupiedIps}
+            occupiedMacs={occupiedMacs}
           />
         </Section>
         )}

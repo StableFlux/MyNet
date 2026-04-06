@@ -305,8 +305,9 @@ export default function DeviceList() {
     const NicIcon = NIC_TYPE_ICON[(nic.nic_type ?? '').toUpperCase()] ?? NIC_TYPE_ICON.ETH
     return (
       <>
-        <span className="w-5 flex-shrink-0 flex items-center justify-center text-white/20 mr-1">
-          <NicIcon size={16} />
+        <span className="w-5 flex-shrink-0 flex flex-col items-center justify-center text-white/20 mr-1 gap-0.5">
+          <NicIcon size={14} />
+          {nic.is_active === false && <span className="text-[7px] font-medium text-white/30 uppercase tracking-wide leading-none">off</span>}
         </span>
         <span className="w-[4.5rem] flex-shrink-0 flex items-center">
           {(nic.network_name || nic.vlan_id) && (
@@ -382,7 +383,7 @@ export default function DeviceList() {
                 {nics.length === 0
                   ? <span className="text-[10px] text-white/20">—</span>
                   : visibleNics.map((nic: any, idx: number) => (
-                      <span key={nic.id ?? idx} className="flex items-center flex-shrink-0">
+                      <span key={nic.id ?? idx} className={`flex items-center flex-shrink-0 transition-opacity${nic.is_active === false ? ' opacity-50' : ''}`}>
                         {idx > 0 && <span className="flex-shrink-0 w-px h-3.5 bg-white/15 mx-3" />}
                         {renderNic(device, nic, idx)}
                       </span>
@@ -406,7 +407,7 @@ export default function DeviceList() {
               )}
             </span>
             {isExpanded && overflowNics.map((nic: any, idx: number) => (
-              <div key={nic.id ?? idx} className="flex items-center">
+              <div key={nic.id ?? idx} className={`flex items-center transition-opacity${nic.is_active === false ? ' opacity-50' : ''}`}>
                 {renderNic(device, nic, idx + 2)}
               </div>
             ))}

@@ -2,7 +2,20 @@ import { Cable, Wifi, X, Plus, AlertTriangle } from 'lucide-react'
 import { NIC_TYPE_ICON } from './DeviceTypeIcon'
 import clsx from 'clsx'
 
-function isIpInCidr(ip: string, cidr: string): boolean {
+export function isValidIp(ip: string): boolean {
+  const parts = ip.split('.')
+  if (parts.length !== 4) return false
+  return parts.every(p => p.length > 0 && !isNaN(Number(p)) && Number(p) >= 0 && Number(p) <= 255)
+}
+
+export function isRfc1918(ip: string): boolean {
+  const [a, b] = ip.split('.').map(Number)
+  return a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+}
+
+export function isIpInCidr(ip: string, cidr: string): boolean {
   try {
     if (!cidr.includes('/')) return false
     const [network, prefixStr] = cidr.split('/')
@@ -86,6 +99,8 @@ interface Props {
   switchDevices?: SwitchDevice[]
   readOnly?: boolean
   dnsDomain?: string
+  occupiedIps?: { ip: string; deviceName: string }[]
+  occupiedMacs?: { mac: string; deviceName: string }[]
 }
 
 const ALL_BANDS = ['2.4GHz', '5GHz', '6GHz']
@@ -137,7 +152,7 @@ function getTransceiverSpeeds(nicType: string, transceiverType: string): string[
 function getSubnetWarning(nic: NicDraft, networks: Props['networks']): string | null {
   const ip = nic.ip_address.trim()
   if (!ip || ip.toUpperCase() === 'DHCP' || nic.address_type === 'dhcp') return null
-  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return null
+  if (!isValidIp(ip)) return null  // malformed handled separately
 
   const selectedNet = nic.network_id ? networks.find(n => String(n.id) === nic.network_id) : null
 
@@ -154,7 +169,7 @@ function getSubnetWarning(nic: NicDraft, networks: Props['networks']): string | 
   return `${ip} does not fall within any defined network subnet`
 }
 
-export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly = false, dnsDomain = '' }: Props) {
+export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly = false, dnsDomain = '', occupiedIps = [], occupiedMacs = [] }: Props) {
   const update = (i: number, patch: Partial<NicDraft>) => {
     const next = nics.map((n, idx) => idx === i ? { ...n, ...patch } : n)
     onChange(next)
@@ -191,6 +206,34 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
         const selectedSsidEntry = networkSsids.find(s => s.ssid === nic.ssid)
         const availableBands = selectedSsidEntry?.bands?.length ? selectedSsidEntry.bands : ALL_BANDS
         const subnetWarning = getSubnetWarning(nic, networks)
+        const ip = nic.ip_address?.trim()
+        const looksComplete = ip ? ip.split('.').length === 4 : false
+        const malformedIpWarning = looksComplete && !isValidIp(ip!) && ip!.toUpperCase() !== 'DHCP' && nic.address_type !== 'dhcp'
+          ? `"${ip}" is not a valid IP address`
+          : null
+        // Suppress RFC 1918 warning if the assigned network itself has a public CIDR (WAN network)
+        const selectedNetIsPublic = selectedNet?.cidr
+          ? !isRfc1918(selectedNet.cidr.split('/')[0])
+          : false
+        const rfc1918Warning = !malformedIpWarning && ip && isValidIp(ip) && ip.toUpperCase() !== 'DHCP' && nic.address_type !== 'dhcp' && !isRfc1918(ip) && !subnetWarning && !selectedNetIsPublic
+          ? `${ip} is a public IP — use private (RFC 1918) ranges for LAN interfaces`
+          : null
+        const dupIpWarning = !malformedIpWarning && ip && ip.toUpperCase() !== 'DHCP' && nic.address_type !== 'dhcp'
+          ? nics.some((other, j) => j !== i && other.ip_address?.trim() === ip)
+            ? `${ip} is already used by another NIC on this device`
+            : occupiedIps.find(o => o.ip === ip)
+              ? `${ip} is already assigned to ${occupiedIps.find(o => o.ip === ip)!.deviceName}`
+              : null
+          : null
+
+        const mac = nic.mac?.trim().toLowerCase()
+        const dupMacWarning = mac && nic.nic_type !== 'VIRT'
+          ? nics.some((other, j) => j !== i && other.nic_type !== 'VIRT' && other.mac?.trim().toLowerCase() === mac)
+            ? `${nic.mac.trim()} is already used by another NIC on this device`
+            : occupiedMacs.find(o => o.mac === mac)
+              ? `${nic.mac.trim()} is already assigned to ${occupiedMacs.find(o => o.mac === mac)!.deviceName}`
+              : null
+          : null
 
         return (
           <div key={i} className="p-4 rounded-xl border border-glass-border bg-white/[0.02] space-y-3">
@@ -237,7 +280,13 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
                 <label className="block text-[10px] text-white/40 mb-1">MAC Address</label>
                 <input value={nic.mac} onChange={(e) => update(i, { mac: e.target.value })}
                   disabled={readOnly} placeholder="aa:bb:cc:dd:ee:ff"
-                  className="glass-input w-full text-sm font-mono" />
+                  className={clsx('glass-input w-full text-sm font-mono', dupMacWarning && 'border-amber-500/50')} />
+                {!readOnly && dupMacWarning && (
+                  <p className="flex items-center gap-1 mt-1 text-[10px] text-amber-400">
+                    <AlertTriangle size={10} className="flex-shrink-0" />
+                    {dupMacWarning}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-[10px] text-white/40 mb-1">Network / VLAN</label>
@@ -256,11 +305,23 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
                 <label className="block text-[10px] text-white/40 mb-1">IP Address</label>
                 <input value={nic.ip_address} onChange={(e) => update(i, { ip_address: e.target.value })}
                   disabled={readOnly} placeholder="192.168.1.x or DHCP"
-                  className={clsx('glass-input w-full text-sm font-mono', subnetWarning && 'border-amber-500/50')} />
-                {!readOnly && subnetWarning && (
+                  className={clsx('glass-input w-full text-sm font-mono',
+                    (malformedIpWarning || dupIpWarning) ? 'border-red-500/50' :
+                    (subnetWarning || rfc1918Warning) ? 'border-amber-500/50' : ''
+                  )} />
+                {!readOnly && malformedIpWarning && (
+                  <p className="flex items-center gap-1 mt-1 text-[10px] text-red-400">
+                    <AlertTriangle size={10} className="flex-shrink-0" />{malformedIpWarning}
+                  </p>
+                )}
+                {!readOnly && dupIpWarning && (
+                  <p className="flex items-center gap-1 mt-1 text-[10px] text-red-400">
+                    <AlertTriangle size={10} className="flex-shrink-0" />{dupIpWarning}
+                  </p>
+                )}
+                {!readOnly && (subnetWarning || rfc1918Warning) && !malformedIpWarning && !dupIpWarning && (
                   <p className="flex items-center gap-1 mt-1 text-[10px] text-amber-400">
-                    <AlertTriangle size={10} className="flex-shrink-0" />
-                    {subnetWarning}
+                    <AlertTriangle size={10} className="flex-shrink-0" />{subnetWarning ?? rfc1918Warning}
                   </p>
                 )}
               </div>

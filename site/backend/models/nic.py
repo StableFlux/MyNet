@@ -12,6 +12,8 @@ class NicType(str, enum.Enum):
     eth = "ETH"
     wifi = "WIFI"
     virt = "VIRT"
+    sfp = "SFP"
+    qsfp = "QSFP"
 
 
 class AddressType(str, enum.Enum):
@@ -54,7 +56,16 @@ class Nic(Base):
     ssid = Column(String, nullable=True)
     band = Column(SAEnum(WifiBand), nullable=True)
 
+    # ETH/WiFi connection type and speed
+    connection_type = Column(String, nullable=True)    # built-in, usb
+    nic_speed = Column(String, nullable=True)          # 1GbE, WiFi6, etc.
+
+    # SFP/QSFP-only fields
+    transceiver_type = Column(String, nullable=True)   # fiber-sm, fiber-mm, dac, aoc, copper
+    transceiver_speed = Column(String, nullable=True)  # 1G, 10G, 25G, 40G, 100G, 200G, 400G
+
     is_active = Column(Boolean, nullable=False, default=True)
+    mac_conflict_suppressed = Column(Boolean, nullable=False, default=False)
 
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

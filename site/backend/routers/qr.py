@@ -1,5 +1,3 @@
-import io
-import zipfile
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -78,33 +76,4 @@ def url_label(
         content=png,
         media_type="image/png",
         headers={"Content-Disposition": f'attachment; filename="label_{safe}.png"'},
-    )
-
-
-@router.post("/devices/batch-labels")
-def batch_labels(
-    device_ids: list[int],
-    db: Session = Depends(get_db),
-    _: User = Depends(require_viewer),
-):
-    """Returns a ZIP archive of label PNGs for multiple devices."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for did in device_ids:
-            device = db.get(Device, did)
-            if not device:
-                continue
-            primary_ip = next(
-                (n.ip_address for n in device.nics if n.ip_address and n.ip_address != "DHCP"),
-                None,
-            )
-            png = generate_label_png(did, device.name, primary_ip)
-            safe_name = device.name.replace("/", "_").replace(" ", "_")
-            zf.writestr(f"label_{did}_{safe_name}.png", png)
-
-    buf.seek(0)
-    return Response(
-        content=buf.read(),
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="mynet_labels.zip"'},
     )

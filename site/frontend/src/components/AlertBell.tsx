@@ -6,9 +6,9 @@ import api from '../lib/api'
 export function AlertBell() {
   const navigate = useNavigate()
   const { data } = useQuery({
-    queryKey: ['alerts', 'unread'],
+    queryKey: ['events-count'],
     queryFn: async () => {
-      const { data } = await api.get('/alerts/unread-count')
+      const { data } = await api.get('/events/active-count')
       return data as { count: number }
     },
     refetchInterval: 30_000,
@@ -18,9 +18,9 @@ export function AlertBell() {
 
   return (
     <button
-      onClick={() => navigate('/alerts')}
+      onClick={() => navigate('/events?active_only=true')}
       className="relative p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
-      title="Alerts"
+      title="Active Events"
     >
       <Bell size={18} />
       {count > 0 && (

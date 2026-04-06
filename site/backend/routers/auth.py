@@ -214,5 +214,11 @@ def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    if user.role == UserRole.admin:
+        admin_count = db.query(User).filter(
+            User.role == UserRole.admin, User.is_active.is_(True)
+        ).count()
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the last admin")
     db.delete(user)
     db.commit()

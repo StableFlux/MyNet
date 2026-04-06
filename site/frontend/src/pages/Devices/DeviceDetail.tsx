@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ExternalLink, Copy, Terminal, Zap, Activity, Tag,
   Pencil, Trash2, ChevronLeft, Cable, Wifi, Check, CopyPlus, ArrowUp, History, X,
-  Shield, CheckCircle, MapPin, XCircle, Clock,
+  Shield, CheckCircle, MapPin, XCircle, Clock, Globe, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { AreaChart, Area, ResponsiveContainer } from 'recharts'
@@ -14,7 +14,7 @@ import {
 import type { DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { GlassCard } from '../../components/GlassCard'
-import { DeviceTypeIcon, HARDWARE_TYPE_ICON } from '../../components/DeviceTypeIcon'
+import { DeviceTypeIcon, HARDWARE_TYPE_ICON, NIC_TYPE_ICON } from '../../components/DeviceTypeIcon'
 import { NetworkBadge } from '../../components/NetworkBadge'
 import { DraggableCard } from '../../components/DraggableCard'
 import { SwitchDiagram } from '../../components/SwitchDiagram'
@@ -46,9 +46,7 @@ function fallback(text: string, done: () => void) {
   done()
 }
 
-function MonitoringNicStatus({ deviceId }: {
-  deviceId: number
-}) {
+function MonitoringTargets({ deviceId }: { deviceId: number }) {
   const navigate = useNavigate()
   const { data } = useQuery({
     queryKey: ['monitoring', deviceId],
@@ -63,61 +61,53 @@ function MonitoringNicStatus({ deviceId }: {
 
   const nicsList: any[] = data.nics ?? []
 
+  // Fallback: single entry from top-level history
+  if (nicsList.length === 0) {
+    const history = data.history as { latency: number | null; status: string }[] | undefined
+    if (!history || history.length < 2) return null
+    return (
+      <button type="button" onClick={() => navigate(`/monitoring?device=${deviceId}`)} className="w-full text-left space-y-1">
+        <div className="h-14 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={history} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="mg-grad-fb" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="latency" stroke="#10b981" strokeWidth={1.5} fill="url(#mg-grad-fb)" dot={false} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </button>
+    )
+  }
+
   return (
-    <button
-      type="button"
-      onClick={() => navigate(`/monitoring?device=${deviceId}`)}
-      className="flex flex-col gap-1 w-full text-left"
-      title="View monitoring details"
-    >
-      {nicsList.map((nic: any) => {
+    <button type="button" onClick={() => navigate(`/monitoring?device=${deviceId}`)} className="w-full text-left space-y-3">
+      {nicsList.map((nic: any, i: number) => {
         const dotClass =
           nic.current_status === 'up' ? 'bg-emerald-500' :
           nic.current_status === 'down' ? 'bg-red-500' :
           nic.current_status === 'timeout' ? 'bg-amber-500' :
           'bg-slate-500'
+        const gradId = `mg-grad-${nic.nic_id ?? i}`
+        const hasChart = nic.history && nic.history.length >= 2
         return (
-          <div key={nic.nic_id ?? nic.ip} className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 animate-pulse ${dotClass}`} />
-            {nic.nic_type?.toUpperCase() === 'ETH'
-              ? <Cable size={12} className="flex-shrink-0" />
-              : <Wifi size={12} className="flex-shrink-0" />
-            }
-            <span className="font-mono text-xs truncate">{nic.nic_label || nic.ip}</span>
-            {nic.current_latency != null && <span className="font-mono text-xs ml-auto flex-shrink-0">{nic.current_latency}ms</span>}
-          </div>
-        )
-      })}
-    </button>
-  )
-}
-
-function MonitoringMiniChart({ deviceId }: { deviceId: number }) {
-  const { data } = useQuery({
-    queryKey: ['monitoring', deviceId],
-    queryFn: async () => {
-      const { data } = await api.get(`/monitoring/device/${deviceId}?hours=1`)
-      return data
-    },
-    refetchInterval: 30_000,
-  })
-
-  if (!data) return null
-
-  const nicsList: any[] = data.nics ?? []
-
-  // Per-NIC charts when data.nics is available and non-empty
-  if (nicsList.length > 0) {
-    const chartsToRender = nicsList.filter((nic: any) => nic.history && nic.history.length >= 2)
-    if (chartsToRender.length === 0) return null
-    return (
-      <div className="space-y-2 w-full">
-        {chartsToRender.map((nic: any, i: number) => {
-          const gradId = `mg-grad-${nic.nic_id ?? i}`
-          return (
-            <div key={gradId}>
-              <p className="text-[10px] text-white/40 font-mono mb-0.5">{nic.ip || nic.nic_label}</p>
-              <div className="h-14 w-full">
+          <div key={nic.nic_id ?? nic.ip}>
+            {/* Title row */}
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotClass}`} />
+              {(() => { const I = NIC_TYPE_ICON[nic.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH; return <I size={11} className="flex-shrink-0 text-white/50" /> })()}
+              <span className="text-xs text-white/60 truncate">{nic.nic_label || nic.ip}</span>
+              {nic.current_latency != null && <span className="text-[10px] font-mono text-white/35 ml-auto flex-shrink-0">{nic.current_latency}ms</span>}
+            </div>
+            {/* IP row */}
+            <p className="text-[10px] font-mono text-white/30 mb-1">{nic.ip}</p>
+            {/* Graph */}
+            {hasChart && (
+              <div className="h-10 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={nic.history} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
                     <defs>
@@ -126,57 +116,106 @@ function MonitoringMiniChart({ deviceId }: { deviceId: number }) {
                         <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <Area
-                      type="monotone"
-                      dataKey="latency"
-                      stroke="#10b981"
-                      strokeWidth={1.5}
-                      fill={`url(#${gradId})`}
-                      dot={false}
-                      isAnimationActive={false}
-                    />
+                    <Area type="monotone" dataKey="latency" stroke="#10b981" strokeWidth={1.5} fill={`url(#${gradId})`} dot={false} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </button>
+  )
+}
+
+const CONNECTION_TYPE_LABELS: Record<string, string> = {
+  dhcp: 'DHCP', static: 'Static IP', pppoe: 'PPPoE', '4g-lte': '4G/LTE', 'ds-lite': 'DS-Lite',
+}
+
+function WanConfigCard({ wanConfigs }: { wanConfigs: any[] }) {
+  const [shownPasswords, setShownPasswords] = useState<Set<number>>(new Set())
+  const { wanPortColor } = useColorSettings()
+  const togglePassword = (id: number) => setShownPasswords(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
+  return (
+    <GlassCard>
+      <div className="flex items-center gap-2 mb-3">
+        <Globe size={13} style={{ color: wanPortColor }} />
+        <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">WAN Configuration</h3>
+      </div>
+      <div className="space-y-4">
+        {wanConfigs.map((wc: any) => {
+          const portLabel = wc.port_name ? `Port ${wc.port_number} / ${wc.port_name}` : `Port ${wc.port_number}`
+          const connLabel = CONNECTION_TYPE_LABELS[wc.connection_type] ?? wc.connection_type ?? '—'
+          return (
+            <div key={wc.id} className="rounded-lg border p-3"
+              style={{ borderColor: wanPortColor + '33', backgroundColor: wanPortColor + '05' }}>
+              {/* Port header */}
+              <div className="flex items-center gap-2 mb-3">
+                <Globe size={11} className="shrink-0" style={{ color: wanPortColor + 'b3' }} />
+                <span className="text-xs font-medium text-white/60">{portLabel}</span>
+              </div>
+              {/* Fields */}
+              <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+                {/* Row 1: Connection | VLAN ID | MTU */}
+                <div><Field label="Connection" value={connLabel} /></div>
+                <div>{wc.vlan_id != null ? <Field label="VLAN ID" value={String(wc.vlan_id)} mono /> : <span />}</div>
+                <div>{wc.mtu != null ? <Field label="MTU" value={String(wc.mtu)} mono /> : <span />}</div>
+                {/* Row 2: WAN IP | DNS 1 | DNS 2 */}
+                <div>{wc.ip_address ? <Field label="WAN IP" value={wc.ip_address} mono /> : <span />}</div>
+                <div>{wc.dns_primary ? <Field label="DNS 1" value={wc.dns_primary} mono /> : <span />}</div>
+                <div>{wc.dns_secondary ? <Field label="DNS 2" value={wc.dns_secondary} mono /> : <span />}</div>
+                {/* Row 3: PPPoE (only when present) */}
+                {(wc.pppoe_username || wc.pppoe_password) && <>
+                  <div>{wc.pppoe_username ? <Field label="PPPoE Username" value={wc.pppoe_username} mono /> : <span />}</div>
+                  <div>
+                    {wc.pppoe_password && (
+                      <>
+                        <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">PPPoE Password</p>
+                        {shownPasswords.has(wc.id) ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-mono text-white">{wc.pppoe_password}</span>
+                            <button type="button" onClick={() => togglePassword(wc.id)}
+                              className="text-white/30 hover:text-white/70 transition-colors" aria-label="Hide password">
+                              <X size={11} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => togglePassword(wc.id)}
+                            className="text-xs text-indigo-400 hover:text-indigo-300">
+                            Reveal password
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div />
+                </>}
+                {/* Row 4: Speed Down | Speed Up */}
+                {(wc.speed_down || wc.speed_up) && <>
+                  <div>{wc.speed_down ? <Field label="Speed Down" value={wc.speed_down} /> : <span />}</div>
+                  <div>{wc.speed_up ? <Field label="Speed Up" value={wc.speed_up} /> : <span />}</div>
+                  <div />
+                </>}
+                {/* Row 5: Notes */}
+                {wc.notes && <div className="col-span-3"><Field label="Notes" value={wc.notes} /></div>}
               </div>
             </div>
           )
         })}
       </div>
-    )
-  }
-
-  // Fallback: single chart from data.history (backwards compat)
-  const history = data.history as { latency: number | null; status: string }[] | undefined
-  if (!history || history.length < 2) return null
-
-  return (
-    <div className="h-14 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={history} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id="mg-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <Area
-            type="monotone"
-            dataKey="latency"
-            stroke="#10b981"
-            strokeWidth={1.5}
-            fill="url(#mg-grad)"
-            dot={false}
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
+    </GlassCard>
   )
 }
 
 export default function DeviceDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const { user } = useAuthStore()
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copiedSsh, setCopiedSsh] = useState(false)
@@ -205,8 +244,8 @@ export default function DeviceDetail() {
 const { data: auditHistory, isLoading: auditLoading } = useQuery({
     queryKey: ['audit', 'device', id, historyPage],
     queryFn: async () => {
-      const { data } = await api.get(`/audit?entity_type=device&entity_id=${id}&limit=${historyLimit}&offset=${historyPage * historyLimit}`)
-      return data
+      const { data } = await api.get(`/events?entity_type=device&entity_id=${id}&limit=${historyLimit}&offset=${historyPage * historyLimit}`)
+      return { total: data.total, entries: data.items }
     },
     enabled: !!device && showHistory,
   })
@@ -231,14 +270,30 @@ const { data: auditHistory, isLoading: auditLoading } = useQuery({
     refetchInterval: 60_000,
   })
 
+  const { data: piholeGlobal } = useQuery({
+    queryKey: ['pihole', 'dashboard'],
+    queryFn: async () => { const { data } = await api.get('/pihole/dashboard'); return data },
+    staleTime: 300_000,
+  })
+  const piholeConfigured = piholeGlobal?.enabled === true
+
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/devices/${id}`),
-    onSuccess: () => navigate('/devices'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: ['search'] })
+      qc.invalidateQueries({ queryKey: ['monitoring'] })
+      qc.invalidateQueries({ queryKey: ['switches'] })
+      qc.invalidateQueries({ queryKey: ['pihole-status'] })
+      qc.invalidateQueries({ queryKey: ['subnet-map'] })
+      navigate('/devices')
+    },
     onError: (err: any) => alert(`Delete failed: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })
 
   const wolMutation = useMutation({
     mutationFn: () => api.post(`/devices/${id}/wol`),
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Wake on LAN failed'),
   })
 
   const fetchPassword = async () => {
@@ -285,6 +340,7 @@ const profile: LayoutProfile = device.switch_ports?.length > 0 ? 'switch' : 'gen
       auditHistory={auditHistory}
       auditLoading={auditLoading}
       pihole={pihole}
+      piholeConfigured={piholeConfigured}
       piholeStatus={piholeStatus}
       showQueryLog={showQueryLog}
       setShowQueryLog={setShowQueryLog}
@@ -303,12 +359,37 @@ function DeviceDetailInner({
   wolMutation, showPassword, password, fetchPassword,
   showHistory, setShowHistory, historyPage,
   setHistoryPage, historyLimit, auditHistory, auditLoading,
-  pihole, piholeStatus, showQueryLog, setShowQueryLog, queryLog, queryLogFetching,
+  pihole, piholeConfigured, piholeStatus, showQueryLog, setShowQueryLog, queryLog, queryLogFetching,
   deleteMutation, showQrPanel, setShowQrPanel,
 }: any) {
   const { layout, reorderInZone, toggleColSpan, swapColumn, resetLayout } = useDeviceLayout(profile)
   const queryClient = useQueryClient()
   const colors = useColorSettings()
+
+  const WAN_TYPE_NAMES = ['Router / Gateway', 'Firewall', '4G / 5G Router']
+  const isWanCapable = WAN_TYPE_NAMES.includes((device as any).device_type_name ?? '')
+  const { data: wanConfigs = [] } = useQuery<any[]>({
+    queryKey: ['wan-configs', device.id],
+    queryFn: async () => { const { data } = await api.get(`/wan-configs/device/${device.id}`); return data },
+    enabled: isWanCapable,
+  })
+
+  const { data: monitoringData } = useQuery({
+    queryKey: ['monitoring', device.id],
+    queryFn: async () => { const { data } = await api.get(`/monitoring/device/${device.id}?hours=1`); return data },
+    refetchInterval: 30_000,
+    enabled: device.monitoring_enabled,
+  })
+  const wanStatusByPortId: Record<number, string> = {}
+  if (monitoringData?.nics) {
+    for (const nic of monitoringData.nics) {
+      if (nic.is_wan_ping && nic.switch_port_id != null) wanStatusByPortId[nic.switch_port_id] = nic.current_status
+    }
+  }
+  const wanConfigsWithStatus = wanConfigs.map((wc: any) => ({
+    ...wc,
+    wan_current_status: wanStatusByPortId[wc.switch_port_id] ?? null,
+  }))
 
   const [pingResults, setPingResults] = useState<Record<string, any>>({})
   const [pingHighlight, setPingHighlight] = useState<Record<string, 'success' | 'failure'>>({})
@@ -320,24 +401,45 @@ function DeviceDetailInner({
       setPingHighlight(prev => ({ ...prev, [ip]: hl }))
       setTimeout(() => setPingHighlight(prev => { const n = { ...prev }; delete n[ip]; return n }), 5000)
     },
+    onError: (err: any) => alert(`Ping failed: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })
 
   const blockingMutation = useMutation({
     mutationFn: (enabled: boolean) =>
       api.post(`/pihole/blocking/${device.id}?enabled=${enabled}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pihole', 'status', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pihole', 'status', id] })
+      queryClient.invalidateQueries({ queryKey: ['pihole', 'dashboard'] })
+    },
+    onError: (err: any) => alert(`Failed to update blocking: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })
 
   const monitoringMutation = useMutation({
     mutationFn: ({ enabled, interval_secs }: { enabled: boolean; interval_secs: number }) =>
       api.patch(`/devices/${device.id}/monitoring?enabled=${enabled}&interval_secs=${interval_secs}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['device', id] }),
+    onError: (err: any) => alert(`Failed to update monitoring: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
+  })
+
+  const [wanPingTargets, setWanPingTargets] = useState<Record<number, string>>({})
+  const wanPingMutation = useMutation({
+    mutationFn: ({ portId, target, enabled }: { portId: number; target: string; enabled?: boolean }) => {
+      const body: any = { wan_ping_target: target || null }
+      if (enabled !== undefined) body.wan_monitoring_enabled = enabled
+      return api.put(`/wan-configs/port/${portId}`, body)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wan-configs', device.id] })
+      queryClient.invalidateQueries({ queryKey: ['wan-configs-all'] })
+    },
+    onError: (err: any) => alert(`Failed to save WAN config: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })
 
   const monitorNicsMutation = useMutation({
     mutationFn: (nic_ids: number[]) =>
       api.patch(`/devices/${device.id}/monitor-nics`, { nic_ids }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['device', id] }),
+    onError: (err: any) => alert(`Failed to update monitored NICs: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })
 
   const sensors = useSensors(
@@ -376,7 +478,7 @@ function DeviceDetailInner({
               {device.nics?.map((nic: any) => (
                 <div key={nic.id} className={`flex items-start gap-3 p-3 rounded-lg border transition-opacity ${nic.is_active === false ? 'bg-white/[0.01] border-white/[0.06] opacity-50' : 'bg-white/[0.03] border-glass-border'}`}>
                   <div className="mt-0.5 text-white/30 flex flex-col items-center gap-1">
-                    {nic.nic_type?.toUpperCase() === 'ETH' ? <Cable size={14} /> : <Wifi size={14} />}
+                    {(() => { const I = NIC_TYPE_ICON[nic.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH; return <I size={14} /> })()}
                     {nic.is_active === false && (
                       <span className="text-[8px] font-medium text-white/30 uppercase tracking-wide leading-none">off</span>
                     )}
@@ -433,11 +535,6 @@ function DeviceDetailInner({
                         </>
                       )}
                     </div>
-                    {nic.dns_entry && <>
-                      <div />
-                      <div><Field label="DNS Name" value={nic.dns_entry} mono /></div>
-                      <div />
-                    </>}
                     {(() => {
                       const dns1 = nic.dns_server_1 || nic.network_dns_primary
                       const dns2 = nic.dns_server_2 || nic.network_dns_secondary
@@ -448,25 +545,41 @@ function DeviceDetailInner({
                       return (dns1 || dns2 || nic.gateway || nic.subnet_mask) ? <>
                         {nic.gateway && <div><Field label="Gateway" value={nic.gateway} mono /></div>}
                         {nic.subnet_mask && <div><Field label="Subnet Mask" value={nic.subnet_mask} mono /></div>}
+                        {dns1 && <div>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">
+                            DNS Server 1{dns1Inherited && <span className="text-white/25 normal-case tracking-normal ml-1">{inheritedLabel}</span>}
+                          </p>
+                          <p className={`text-sm font-mono ${dns1Inherited ? 'text-white/50' : 'text-white'}`}>{dns1}</p>
+                        </div>}
+                        {dns2 && <div>
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">
+                            DNS Server 2{dns2Inherited && <span className="text-white/25 normal-case tracking-normal ml-1">{inheritedLabel}</span>}
+                          </p>
+                          <p className={`text-sm font-mono ${dns2Inherited ? 'text-white/50' : 'text-white'}`}>{dns2}</p>
+                        </div>}
                         <div><Field label="Address Type" value={addrLabel} /></div>
-                        {(dns1 || dns2) && (
-                          <div className="col-span-2 col-start-1 grid grid-cols-2 gap-x-4">
-                            {dns1 && <div>
-                              <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">
-                                DNS Server 1{dns1Inherited && <span className="text-white/25 normal-case tracking-normal ml-1">{inheritedLabel}</span>}
-                              </p>
-                              <p className={`text-sm font-mono ${dns1Inherited ? 'text-white/50' : 'text-white'}`}>{dns1}</p>
-                            </div>}
-                            {dns2 && <div>
-                              <p className="text-[10px] text-white/40 uppercase tracking-wider mb-0.5">
-                                DNS Server 2{dns2Inherited && <span className="text-white/25 normal-case tracking-normal ml-1">{inheritedLabel}</span>}
-                              </p>
-                              <p className={`text-sm font-mono ${dns2Inherited ? 'text-white/50' : 'text-white'}`}>{dns2}</p>
-                            </div>}
-                          </div>
-                        )}
                       </> : null
                     })()}
+                    {/* ETH/WiFi — dns name, connection + speed */}
+                    {(nic.nic_type?.toUpperCase() === 'ETH' || nic.nic_type?.toUpperCase() === 'WIFI') && (nic.dns_entry || nic.connection_type || nic.nic_speed) && <>
+                      <div>{nic.dns_entry && <Field label="DNS Name" value={nic.dns_entry} mono />}</div>
+                      {nic.connection_type && <div><Field label="Connection" value={nic.connection_type === 'built-in' ? 'Built-in' : 'USB'} /></div>}
+                      {nic.nic_speed && <div><Field label="NIC Speed" value={nic.nic_speed} /></div>}
+                      {nic.nic_type?.toUpperCase() === 'ETH' && nic.poe_enabled && <div><Field label="PoE" value="Enabled" /></div>}
+                    </>}
+                    {/* SFP/QSFP — dns name + transceiver */}
+                    {(nic.nic_type?.toUpperCase() === 'SFP' || nic.nic_type?.toUpperCase() === 'QSFP') && (nic.dns_entry || nic.transceiver_type || nic.transceiver_speed) && <>
+                      {nic.dns_entry && <div><Field label="DNS Name" value={nic.dns_entry} mono /></div>}
+                      {nic.transceiver_type && <div><Field label="Transceiver" value={
+                        nic.transceiver_type === 'fiber-sm' ? 'Fiber — Single-mode' :
+                        nic.transceiver_type === 'fiber-mm' ? 'Fiber — Multi-mode' :
+                        nic.transceiver_type === 'dac'      ? 'DAC' :
+                        nic.transceiver_type === 'aoc'      ? 'AOC' :
+                        nic.transceiver_type === 'copper'   ? 'Copper / RJ45' : nic.transceiver_type
+                      } /></div>}
+                      {nic.transceiver_speed && <div><Field label="Speed" value={nic.transceiver_speed} /></div>}
+                    </>}
+                    {nic.notes && <div className="col-span-3"><Field label="Notes" value={nic.notes} /></div>}
                   </div>
                 </div>
               ))}
@@ -509,20 +622,22 @@ function DeviceDetailInner({
               {device.switch_ports.map((port: any) => {
                 const isUplink = device.uplink_port_id && port.id === device.uplink_port_id
                 const isMgmt = !!port.is_management
+                const isWan = port.port_mode === 'wan'
                 const isConnected = !!port.connected_device_name || isUplink
-                const accentColor = isUplink ? '#818cf8' : isMgmt ? '#a78bfa' : (port.connected_network_color || '#4ade80')
+                const accentColor = isUplink ? '#818cf8' : isWan ? colors.wanPortColor : isMgmt ? '#a78bfa' : (port.connected_network_color || '#4ade80')
                 const connectedName = isUplink ? device.upstream_device_name : port.connected_device_name
                 const targetId = isUplink ? device.upstream_device_id : port.connected_device_id
+                const wanConfig = isWan ? wanConfigs.find((wc: any) => wc.switch_port_id === port.id) : null
 
                 return (
                   <div
                     key={port.id}
                     className={`relative flex items-center gap-3 pl-4 pr-3 py-2 rounded-lg transition-colors
-                      ${isConnected ? 'hover:bg-white/[0.04] cursor-pointer' : isMgmt ? 'hover:bg-violet-500/[0.04] cursor-pointer' : ''}`}
+                      ${isConnected ? 'hover:bg-white/[0.04] cursor-pointer' : isMgmt ? 'hover:bg-violet-500/[0.04] cursor-pointer' : isWan ? 'hover:bg-white/[0.03]' : ''}`}
                     onClick={() => { if (targetId) navigate(`/devices/${targetId}`) }}
                   >
                     {/* Left accent bar */}
-                    {(isConnected || isMgmt) && (
+                    {(isConnected || isMgmt || isWan) && (
                       <div className="absolute left-0 top-[5px] bottom-[5px] w-[3px] rounded-full"
                         style={{ backgroundColor: accentColor }} />
                     )}
@@ -534,7 +649,20 @@ function DeviceDetailInner({
 
                     {/* Primary content */}
                     <div className="flex-1 min-w-0">
-                      {isConnected ? (
+                      {isWan ? (
+                        <>
+                          <p className="text-sm truncate leading-snug"
+                            style={{ color: colors.wanPortColor + 'cc' }}>
+                            {wanConfig?.isp_name || 'WAN'}
+                          </p>
+                          {(wanConfig?.connection_type || port.port_name) && (
+                            <p className="text-[10px] truncate leading-tight"
+                              style={{ color: colors.wanPortColor + '66' }}>
+                              {[wanConfig && (CONNECTION_TYPE_LABELS[wanConfig.connection_type] ?? wanConfig.connection_type), port.port_name].filter(Boolean).join(' — ')}
+                            </p>
+                          )}
+                        </>
+                      ) : isConnected ? (
                         <>
                           <p className="text-sm text-white/85 truncate leading-snug">{connectedName}</p>
                           {port.port_name && (
@@ -564,9 +692,12 @@ function DeviceDetailInner({
                         {port.port_type ? (typeLabel[port.port_type] ?? port.port_type.toUpperCase()) : ''}
                       </span>
                       <span className="w-20 flex justify-center">
-                        {port.connected_vlan_id
-                          ? <NetworkBadge vlan={port.connected_vlan_id} color={port.connected_network_color} size="sm" />
-                          : null}
+                        {isWan
+                          ? <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              style={{ backgroundColor: colors.wanPortColor + '26', color: colors.wanPortColor + 'cc' }}>WAN</span>
+                          : port.connected_vlan_id
+                            ? <NetworkBadge vlan={port.connected_vlan_id} color={port.connected_network_color} size="sm" />
+                            : null}
                       </span>
                     </div>
                   </div>
@@ -919,7 +1050,7 @@ function DeviceDetailInner({
               onClick={() => pingMutation.mutate(nic.ip_address)}
               disabled={pingMutation.isPending}
               className={`btn-ghost relative flex items-center gap-1.5 text-sm transition-colors duration-700 ${highlight === 'success' ? 'text-emerald-400' : highlight === 'failure' ? 'text-red-400' : ''}`}>
-              {nic.nic_type?.toUpperCase() === 'ETH' ? <Cable size={14} /> : <Wifi size={14} />}
+              {(() => { const I = NIC_TYPE_ICON[nic.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH; return <I size={14} /> })()}
               {isPending ? 'Pinging…' : `Ping ${nic.label || nic.ip_address}`}
               {result && (
                 <span className={`absolute top-full left-1/2 -translate-x-1/2 -mt-1 text-[10px] leading-none whitespace-nowrap pointer-events-none transition-opacity duration-700 ${highlight ? 'opacity-80' : 'opacity-0'}`}>
@@ -943,7 +1074,7 @@ function DeviceDetailInner({
       {/* Switch port diagram */}
       {device.switch_ports?.length > 0 && (
         <div className="flex justify-center">
-          <SwitchDiagram device={device} />
+          <SwitchDiagram device={device} wanConfigs={wanConfigsWithStatus} wanColor={colors.wanPortColor} />
         </div>
       )}
 
@@ -978,18 +1109,24 @@ function DeviceDetailInner({
               <div className="flex gap-4 items-start">
                 <SortableContext items={col0Cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
                   <div className="flex-1 flex flex-col gap-4">
-                    {col0Cards.map(card => (
-                      <DraggableCard
-                        key={card.id}
-                        id={card.id}
-                        colSpan={1}
-                        onToggleColSpan={() => toggleColSpan(card.id)}
-                        onSwapColumn={() => swapColumn(card.id)}
-                        canEdit={canEdit}
-                      >
-                        {renderCard(card.id)}
-                      </DraggableCard>
-                    ))}
+                    {col0Cards.flatMap(card => {
+                      const draggable = (
+                        <DraggableCard
+                          key={card.id}
+                          id={card.id}
+                          colSpan={1}
+                          onToggleColSpan={() => toggleColSpan(card.id)}
+                          onSwapColumn={() => swapColumn(card.id)}
+                          canEdit={canEdit}
+                        >
+                          {renderCard(card.id)}
+                        </DraggableCard>
+                      )
+                      if (card.id === 'nics' && isWanCapable && wanConfigs.length > 0) {
+                        return [draggable, <WanConfigCard key="wan-config" wanConfigs={wanConfigs} />]
+                      }
+                      return [draggable]
+                    })}
                   </div>
                 </SortableContext>
 
@@ -1104,7 +1241,7 @@ function DeviceDetailInner({
             </GlassCard>
           )}
 
-          {pihole && !device.pihole_enabled && (pihole.queries_today > 0 || pihole.blocked_today > 0) && (
+          {pihole && !device.pihole_enabled && piholeConfigured && (pihole.queries_today > 0 || pihole.blocked_today > 0) && (
             <GlassCard>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider">DNS Activity</h3>
@@ -1219,6 +1356,50 @@ function DeviceDetailInner({
                 )}
               </div>
 
+              {isWanCapable && wanConfigs.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1.5">WAN Targets</p>
+                  <div className="space-y-2">
+                    {wanConfigs.map((wc: any) => {
+                      const portLabel = wc.port_name ? `Port ${wc.port_number} / ${wc.port_name}` : `Port ${wc.port_number}`
+                      const savedIp = wc.wan_ping_target || '1.1.1.1'
+                      const editVal = wanPingTargets[wc.id] ?? savedIp
+                      return (
+                        <div key={wc.id} className={`flex items-center gap-2 ${device.monitoring_enabled ? '' : 'opacity-40'}`}>
+                          {canEdit ? (
+                            <input
+                              type="checkbox"
+                              checked={wc.wan_monitoring_enabled !== false}
+                              disabled={!device.monitoring_enabled}
+                              onChange={() => wanPingMutation.mutate({ portId: wc.switch_port_id, target: savedIp === '1.1.1.1' ? '' : savedIp, enabled: wc.wan_monitoring_enabled === false })}
+                              className="rounded border-white/20 bg-white/10 text-indigo-500 disabled:opacity-40"
+                            />
+                          ) : null}
+                          <Globe size={12} className="flex-shrink-0 text-white/30" />
+                          {canEdit ? (
+                            <input
+                              value={editVal}
+                              onChange={e => setWanPingTargets(prev => ({ ...prev, [wc.id]: e.target.value }))}
+                              onBlur={e => {
+                                const val = e.target.value.trim() || '1.1.1.1'
+                                if (val !== savedIp) wanPingMutation.mutate({ portId: wc.switch_port_id, target: val === '1.1.1.1' ? '' : val })
+                              }}
+                              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                              disabled={!device.monitoring_enabled || wc.wan_monitoring_enabled === false}
+                              placeholder="1.1.1.1"
+                              className="glass-input text-xs font-mono w-1/2 disabled:opacity-40"
+                            />
+                          ) : (
+                            <span className="text-xs font-mono text-white/50">{savedIp}</span>
+                          )}
+                          <span className="text-[10px] text-white/25 truncate">{wc.isp_name || portLabel}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {device.nics?.length > 0 && (
                 <div>
                   <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1.5">Monitor NICs</p>
@@ -1240,10 +1421,7 @@ function DeviceDetailInner({
                             }}
                             className="rounded border-white/20 bg-white/10 text-indigo-500 disabled:opacity-40"
                           />
-                          {nic.nic_type?.toUpperCase() === 'ETH'
-                            ? <Cable size={12} className={device.monitoring_enabled ? 'text-white/50' : 'text-white/20'} />
-                            : <Wifi size={12} className={device.monitoring_enabled ? 'text-white/50' : 'text-white/20'} />
-                          }
+                          {(() => { const I = NIC_TYPE_ICON[nic.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH; return <I size={12} className={device.monitoring_enabled ? 'text-white/50' : 'text-white/20'} /> })()}
                           <span className={`text-xs font-mono ${device.monitoring_enabled ? 'text-white/70 group-hover:text-white/90' : 'text-white/30'}`}>
                             {nic.label || nic.nic_type}{nic.ip_address ? ` — ${nic.ip_address}` : ''}
                           </span>
@@ -1255,9 +1433,8 @@ function DeviceDetailInner({
               )}
 
               {device.monitoring_enabled && (
-                <div className="pt-1 border-t border-glass-border space-y-2">
-                  <MonitoringNicStatus deviceId={device.id} />
-                  <MonitoringMiniChart deviceId={device.id} />
+                <div className="pt-1 border-t border-glass-border">
+                  <MonitoringTargets deviceId={device.id} />
                 </div>
               )}
             </div>

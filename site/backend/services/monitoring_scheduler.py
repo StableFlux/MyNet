@@ -22,6 +22,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 import icmplib
 
 from config import settings
+from services.events import log_event, resolve_events
+from models.event import EventType
 
 log = logging.getLogger(__name__)
 
@@ -82,19 +84,40 @@ async def run_batch_tick():
     from database import SessionLocal
     from models.device import Device
     from models.monitoring import MonitoringResult, PingStatus
-    from models.alert import Alert, AlertType, AlertSeverity
+    from models.event import Event, EventType
     from sqlalchemy.orm import joinedload
 
     now = datetime.now(timezone.utc)
 
     db = SessionLocal()
     try:
+        from models.wan_config import WanConfig
+
         devices = (
             db.query(Device)
             .filter(Device.monitoring_enabled.is_(True))
             .options(joinedload(Device.nics))
             .all()
         )
+
+        monitored_ids = {d.id for d in devices}
+
+        # Load WAN configs for monitored devices
+        wan_configs_for_devices: dict[int, list] = {}
+        if monitored_ids:
+            for wc in db.query(WanConfig).filter(WanConfig.device_id.in_(monitored_ids)).all():
+                wan_configs_for_devices.setdefault(wc.device_id, []).append(wc)
+
+        # Build a set of WAN ping keys so we can separate them from NIC pings in event handling
+        wan_keys: set[tuple[int, str]] = set()
+        # (device_id, switch_port_id) → WanConfig for event messaging
+        wan_config_by_key: dict[tuple[int, str], object] = {}
+        for device_id, wcs in wan_configs_for_devices.items():
+            for wc in wcs:
+                if wc.wan_monitoring_enabled is not False:
+                    wan_ip = wc.wan_ping_target or "1.1.1.1"
+                    wan_keys.add((device_id, wan_ip))
+                    wan_config_by_key[(device_id, wan_ip)] = wc
 
         # Collect (device_id, ip, interval_secs) for devices that are due
         due: list[tuple[int, str, int]] = []
@@ -104,6 +127,14 @@ async def run_batch_tick():
                 last = _last_pinged.get((device.id, ip))
                 if last is None or (now - last).total_seconds() >= interval:
                     due.append((device.id, ip, interval))
+            # WAN ping targets
+            for wc in wan_configs_for_devices.get(device.id, []):
+                if wc.wan_monitoring_enabled is False:
+                    continue
+                wan_ip = wc.wan_ping_target or "1.1.1.1"
+                last = _last_pinged.get((device.id, wan_ip))
+                if last is None or (now - last).total_seconds() >= interval:
+                    due.append((device.id, wan_ip, interval))
 
         if not due:
             return
@@ -161,17 +192,23 @@ async def run_batch_tick():
         db.add_all(rows)
         db.flush()  # get IDs without committing yet
 
-        # Alert handling — batch-load recent results and open alerts to avoid per-device queries
+        # Event handling — split WAN keys from NIC keys
         device_map = {d.id: d for d in devices}
-        failed_device_ids = list({device_id for device_id, _ in failed_keys})
-        recovered_keys = [(device_id, ip) for device_id, ip, _ in due if (device_id, ip) not in set(failed_keys)]
-        all_alert_device_ids = list({device_id for device_id, _ in failed_keys} | {device_id for device_id, _ in recovered_keys})
+        failed_set = set(failed_keys)
+        nic_failed = [(did, ip) for did, ip in failed_keys if (did, ip) not in wan_keys]
+        wan_failed = [(did, ip) for did, ip in failed_keys if (did, ip) in wan_keys]
+        recovered_keys = [(did, ip) for did, ip, _ in due if (did, ip) not in failed_set]
+        nic_recovered = [(did, ip) for did, ip in recovered_keys if (did, ip) not in wan_keys]
+        wan_recovered_keys = [(did, ip) for did, ip in recovered_keys if (did, ip) in wan_keys]
 
-        # Batch: last N results per (device_id, ip) for failed devices
+        all_event_device_ids = list({did for did, _ in failed_keys} | {did for did, _ in recovered_keys})
+
+        # Batch: last N results per (device_id, ip) for threshold checks
         threshold = settings.monitoring_failure_threshold
-        if failed_device_ids:
+        all_failed_device_ids = list({did for did, _ in failed_keys})
+        if all_failed_device_ids:
             from sqlalchemy import text as _text
-            id_list = ",".join(str(i) for i in failed_device_ids)
+            id_list = ",".join(str(i) for i in all_failed_device_ids)
             recent_rows = db.execute(_text(f"""
                 SELECT device_id, ip_pinged, status
                 FROM (
@@ -185,55 +222,101 @@ async def run_batch_tick():
                 ) ranked
                 WHERE rn <= :threshold
             """), {"threshold": threshold}).fetchall()
-            # Group: {(device_id, ip): [status, ...]}
             recent_by_key: dict[tuple, list] = {}
             for row in recent_rows:
                 recent_by_key.setdefault((row.device_id, row.ip_pinged), []).append(row.status)
         else:
             recent_by_key = {}
 
-        # Batch: open offline alerts for all involved devices
-        open_offline_alerts: dict[int, Alert] = {}
-        if all_alert_device_ids:
-            for alert in (
-                db.query(Alert)
+        # Open device_offline events (NIC pings only)
+        open_device_offline: dict[int, Event] = {}
+        open_wan_offline: dict[tuple[int, str], Event] = {}
+        if all_event_device_ids:
+            for ev in (
+                db.query(Event)
                 .filter(
-                    Alert.device_id.in_(all_alert_device_ids),
-                    Alert.alert_type == AlertType.device_offline,
-                    Alert.acknowledged_at.is_(None),
+                    Event.entity_id.in_(all_event_device_ids),
+                    Event.event_type.in_([EventType.device_offline, EventType.wan_offline]),
+                    Event.resolved_at.is_(None),
                 )
                 .all()
             ):
-                open_offline_alerts[alert.device_id] = alert
+                if ev.event_type == EventType.device_offline:
+                    open_device_offline[ev.entity_id] = ev
+                elif ev.event_type == EventType.wan_offline:
+                    ip = (ev.detail or {}).get("ip", "")
+                    open_wan_offline[(ev.entity_id, ip)] = ev
 
-        for device_id, ip in failed_keys:
+        # NIC failures → device_offline
+        for device_id, ip in nic_failed:
             statuses = recent_by_key.get((device_id, ip), [])
             if (
                 len(statuses) >= threshold
                 and all(s != PingStatus.up for s in statuses)
-                and device_id not in open_offline_alerts
+                and device_id not in open_device_offline
             ):
                 dev = device_map.get(device_id)
                 name = dev.name if dev else f"Device {device_id}"
-                db.add(Alert(
-                    alert_type=AlertType.device_offline,
-                    device_id=device_id,
+                log_event(
+                    db, EventType.device_offline,
                     message=f"{name} ({ip}) has been offline for {threshold} consecutive checks.",
-                    severity=AlertSeverity.critical,
-                ))
+                    entity_type="device", entity_id=device_id, entity_name=name,
+                    detail={"ip": ip, "threshold": threshold},
+                )
 
-        for device_id, ip in recovered_keys:
-            offline_alert = open_offline_alerts.get(device_id)
-            if offline_alert:
+        # WAN failures → wan_offline
+        for device_id, ip in wan_failed:
+            statuses = recent_by_key.get((device_id, ip), [])
+            if (
+                len(statuses) >= threshold
+                and all(s != PingStatus.up for s in statuses)
+                and (device_id, ip) not in open_wan_offline
+            ):
+                dev = device_map.get(device_id)
+                dev_name = dev.name if dev else f"Device {device_id}"
+                wc = wan_config_by_key.get((device_id, ip))
+                isp = wc.isp_name if wc and wc.isp_name else ip
+                log_event(
+                    db, EventType.wan_offline,
+                    message=f"{dev_name} — WAN connection {isp} ({ip}) has been offline for {threshold} consecutive checks.",
+                    entity_type="device", entity_id=device_id, entity_name=dev_name,
+                    detail={"ip": ip, "isp_name": isp, "threshold": threshold},
+                )
+
+        # NIC recoveries → device_recovered
+        for device_id, ip in nic_recovered:
+            if device_id in open_device_offline:
                 dev = device_map.get(device_id)
                 name = dev.name if dev else f"Device {device_id}"
-                db.add(Alert(
-                    alert_type=AlertType.device_recovered,
-                    device_id=device_id,
+                log_event(
+                    db, EventType.device_recovered,
                     message=f"{name} ({ip}) is back online.",
-                    severity=AlertSeverity.info,
-                ))
-                offline_alert.acknowledged_at = now
+                    entity_type="device", entity_id=device_id, entity_name=name,
+                    detail={"ip": ip},
+                )
+                resolve_events(db, EventType.device_offline, device_id)
+
+        # WAN recoveries → wan_recovered
+        # Keyed by device (not IP) so IP changes don't prevent resolution
+        seen_wan_recovered: set[int] = set()
+        for device_id, ip in wan_recovered_keys:
+            if device_id in seen_wan_recovered:
+                continue
+            # Any open wan_offline event for this device, regardless of which IP it was for
+            has_open = any(did == device_id for did, _ in open_wan_offline)
+            if has_open:
+                seen_wan_recovered.add(device_id)
+                dev = device_map.get(device_id)
+                dev_name = dev.name if dev else f"Device {device_id}"
+                wc = wan_config_by_key.get((device_id, ip))
+                isp = wc.isp_name if wc and wc.isp_name else ip
+                log_event(
+                    db, EventType.wan_recovered,
+                    message=f"{dev_name} — WAN connection {isp} ({ip}) is back online.",
+                    entity_type="device", entity_id=device_id, entity_name=dev_name,
+                    detail={"ip": ip, "isp_name": isp},
+                )
+                resolve_events(db, EventType.wan_offline, device_id)
 
         db.commit()
 

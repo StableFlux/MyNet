@@ -58,10 +58,13 @@ export function categoryFallbackColor(category: string): string {
   return CATEGORY_FALLBACK[hash % CATEGORY_FALLBACK.length]
 }
 
+export const DEFAULT_WAN_PORT_COLOR = '#ef4444'
+
 export interface ColorSettings {
   locationTypeColors: Record<string, string>
   deviceCategoryColors: Record<string, string>
   deviceStatusColors: Record<string, string>
+  wanPortColor: string
   /** Resolve location type → hex, with fallback */
   locationColor: (type: string | null | undefined) => string
   /** Resolve category → hex, with cycling fallback for unknown categories */
@@ -80,11 +83,13 @@ export function useColorSettings(): ColorSettings {
   const locationTypeColors: Record<string, string> = data?.location_type_colors ?? DEFAULT_LOCATION_TYPE_COLORS
   const deviceCategoryColors: Record<string, string> = data?.device_category_colors ?? DEFAULT_DEVICE_CATEGORY_COLORS
   const deviceStatusColors: Record<string, string> = data?.device_status_colors ?? DEFAULT_DEVICE_STATUS_COLORS
+  const wanPortColor: string = data?.wan_port_color ?? DEFAULT_WAN_PORT_COLOR
 
   return {
     locationTypeColors,
     deviceCategoryColors,
     deviceStatusColors,
+    wanPortColor,
     locationColor: (type) => {
       if (!type) return 'rgba(255,255,255,0.35)'
       return locationTypeColors[type] ?? DEFAULT_LOCATION_TYPE_COLORS[type] ?? 'rgba(255,255,255,0.35)'

@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Save, Loader, ChevronDown } from 'lucide-react'
+import { ChevronLeft, Save, Loader, ChevronDown, Globe, ChevronUp } from 'lucide-react'
 import { GlassCard } from '../../components/GlassCard'
-import { DEVICE_CATEGORIES } from '../../hooks/useColorSettings'
+import { DEVICE_CATEGORIES, useColorSettings } from '../../hooks/useColorSettings'
 import { NicForm, NicDraft, emptyNic } from '../../components/NicForm'
 import { SwitchPortsForm } from '../../components/SwitchPortsForm'
+import { ConflictModal, Conflict } from '../../components/ConflictModal'
+import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
 
 // ---------------------------------------------------------------------------
@@ -161,6 +163,10 @@ function deviceToForm(device: any, password?: string): FormState {
       poe_enabled: n.poe_enabled ?? false,
       ssid: n.ssid ?? '',
       band: n.band ?? '',
+      connection_type: n.connection_type ?? 'built-in',
+      nic_speed: n.nic_speed ?? '',
+      transceiver_type: n.transceiver_type ?? '',
+      transceiver_speed: n.transceiver_speed ?? '',
       notes: n.notes ?? '',
       is_active: n.is_active ?? true,
     })),
@@ -232,6 +238,10 @@ function formToPayload(f: FormState) {
       poe_enabled: n.poe_enabled,
       ssid: n.ssid || null,
       band: n.band || null,
+      connection_type: n.connection_type || null,
+      nic_speed: n.nic_speed || null,
+      transceiver_type: n.transceiver_type || null,
+      transceiver_speed: n.transceiver_speed || null,
       notes: n.notes || null,
       is_active: n.is_active,
     })),
@@ -302,6 +312,236 @@ function Section({ title, children, defaultOpen = true }: {
 }
 
 const INFRA_TYPE_NAMES = ['Network Switch', 'Router / Gateway', 'Access Point - With Switch', 'Firewall']
+const WAN_TYPE_NAMES = ['Router / Gateway', 'Firewall', '4G / 5G Router']
+
+// ---------------------------------------------------------------------------
+// WAN Configuration section
+// ---------------------------------------------------------------------------
+
+const CONNECTION_TYPES = [
+  { value: 'dhcp',    label: 'DHCP' },
+  { value: 'static',  label: 'Static IP' },
+  { value: 'pppoe',   label: 'PPPoE' },
+  { value: '4g-lte',  label: '4G/LTE' },
+  { value: 'ds-lite', label: 'DS-Lite' },
+]
+
+function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDeleted }: {
+  portId: number
+  portNumber: number
+  portName?: string | null
+  existing: any | null
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const [open, setOpen] = useState(!!existing)
+  const [form, setForm] = useState<any>({
+    isp_name: '', connection_type: 'dhcp', vlan_id: '',
+    ip_address: '', subnet_mask: '', gateway: '',
+    pppoe_username: '', pppoe_password: '',
+    mtu: '', dns_primary: '', dns_secondary: '', notes: '',
+    speed_down: '', speed_up: '',
+    ...(existing ?? {}),
+    vlan_id: existing?.vlan_id != null ? String(existing.vlan_id) : '',
+    mtu: existing?.mtu != null ? String(existing.mtu) : '',
+    speed_down: existing?.speed_down ?? '',
+    speed_up: existing?.speed_up ?? '',
+  })
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        ...form,
+        vlan_id: form.vlan_id ? Number(form.vlan_id) : null,
+        mtu: form.mtu ? Number(form.mtu) : null,
+      }
+      await api.put(`/wan-configs/port/${portId}`, payload)
+    },
+    onSuccess: onSaved,
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Failed to save WAN config'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: async () => { await api.delete(`/wan-configs/port/${portId}`) },
+    onSuccess: onDeleted,
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Failed to delete WAN config'),
+  })
+
+  const { wanPortColor } = useColorSettings()
+  const label = portName ? `Port ${portNumber} / ${portName}` : `Port ${portNumber}`
+  const connType = form.connection_type
+
+  return (
+    <div className="rounded-lg border overflow-hidden"
+      style={{ borderColor: wanPortColor + '4d', backgroundColor: wanPortColor + '08' }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
+        <Globe size={13} className="shrink-0" style={{ color: wanPortColor }} />
+        <span className="text-sm text-white/80 flex-1 text-left">{label}</span>
+        {existing && <span className="text-[10px]" style={{ color: wanPortColor + '99' }}>{existing.isp_name || existing.connection_type || 'Configured'}</span>}
+        {open ? <ChevronUp size={14} className="text-white/30" /> : <ChevronDown size={14} className="text-white/30" />}
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 pt-2 border-t space-y-3" style={{ borderColor: wanPortColor + '33' }}>
+          {/* Row 1: ISP Name | Connection Type */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">ISP Name</label>
+              <input value={form.isp_name} onChange={e => setForm((f: any) => ({ ...f, isp_name: e.target.value }))}
+                placeholder="e.g. Comcast" className="glass-input w-full text-sm" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">Connection Type</label>
+              <select value={form.connection_type} onChange={e => setForm((f: any) => ({ ...f, connection_type: e.target.value }))}
+                className="glass-input w-full text-sm" title="Connection type">
+                {CONNECTION_TYPES.map(ct => (
+                  <option key={ct.value} value={ct.value} className="bg-surface-overlay">{ct.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Row 2: VLAN ID | MTU */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">VLAN ID</label>
+              <input type="number" value={form.vlan_id} onChange={e => setForm((f: any) => ({ ...f, vlan_id: e.target.value }))}
+                placeholder="e.g. 100" className="glass-input w-full text-sm" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">MTU</label>
+              <input type="number" value={form.mtu} onChange={e => setForm((f: any) => ({ ...f, mtu: e.target.value }))}
+                placeholder="1500" className="glass-input w-full text-sm" />
+            </div>
+          </div>
+
+          {/* Row 3: Speed Down (1/4) | Speed Up (1/4) | WAN IP (1/2, non-DHCP only) */}
+          <div className="grid grid-cols-4 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">Speed Down</label>
+              <input value={form.speed_down} onChange={e => setForm((f: any) => ({ ...f, speed_down: e.target.value }))}
+                placeholder="500 Mbps" className="glass-input w-full text-sm" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">Speed Up</label>
+              <input value={form.speed_up} onChange={e => setForm((f: any) => ({ ...f, speed_up: e.target.value }))}
+                placeholder="50 Mbps" className="glass-input w-full text-sm" />
+            </div>
+            {connType !== 'dhcp' && (
+              <div className="col-span-2">
+                <label className="block text-[10px] text-white/40 mb-1">WAN IP Address</label>
+                <input value={form.ip_address} onChange={e => setForm((f: any) => ({ ...f, ip_address: e.target.value }))}
+                  placeholder="e.g. 203.0.113.1" className="glass-input w-full text-sm" />
+              </div>
+            )}
+          </div>
+
+          {/* Static only: Subnet Mask + Gateway */}
+          {connType === 'static' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-white/40 mb-1">Subnet Mask</label>
+                <input value={form.subnet_mask} onChange={e => setForm((f: any) => ({ ...f, subnet_mask: e.target.value }))}
+                  placeholder="255.255.255.0" className="glass-input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-white/40 mb-1">Gateway</label>
+                <input value={form.gateway} onChange={e => setForm((f: any) => ({ ...f, gateway: e.target.value }))}
+                  placeholder="203.0.113.254" className="glass-input w-full text-sm" />
+              </div>
+            </div>
+          )}
+
+          {connType === 'pppoe' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-white/40 mb-1">PPPoE Username</label>
+                <input value={form.pppoe_username} onChange={e => setForm((f: any) => ({ ...f, pppoe_username: e.target.value }))}
+                  placeholder="user@isp.com" className="glass-input w-full text-sm" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-white/40 mb-1">PPPoE Password</label>
+                <input type="password" value={form.pppoe_password} onChange={e => setForm((f: any) => ({ ...f, pppoe_password: e.target.value }))}
+                  placeholder="••••••••" className="glass-input w-full text-sm" />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">Primary DNS</label>
+              <input value={form.dns_primary} onChange={e => setForm((f: any) => ({ ...f, dns_primary: e.target.value }))}
+                placeholder="8.8.8.8" className="glass-input w-full text-sm" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-white/40 mb-1">Secondary DNS</label>
+              <input value={form.dns_secondary} onChange={e => setForm((f: any) => ({ ...f, dns_secondary: e.target.value }))}
+                placeholder="8.8.4.4" className="glass-input w-full text-sm" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-white/40 mb-1">Notes</label>
+            <input value={form.notes} onChange={e => setForm((f: any) => ({ ...f, notes: e.target.value }))}
+              placeholder="Any notes about this WAN connection…" className="glass-input w-full text-sm" />
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button type="button" onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+              className="btn-ghost flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300">
+              <Save size={12} /> {saveMut.isPending ? 'Saving…' : 'Save'}
+            </button>
+            {existing && (
+              <button type="button" onClick={() => deleteMut.mutate()}
+                disabled={deleteMut.isPending}
+                className="btn-ghost text-xs text-red-400/60 hover:text-red-400 ml-auto">
+                Remove config
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function WanConfigsSection({ deviceId, wanConfigs, onRefresh }: {
+  deviceId: number
+  wanConfigs: any[]
+  onRefresh: () => void
+}) {
+  const { data: ports = [] } = useQuery<any[]>({
+    queryKey: ['switch-ports', deviceId],
+    queryFn: async () => { const { data } = await api.get(`/switch-ports/device/${deviceId}`); return data },
+  })
+
+  const wanPorts = ports.filter((p: any) => p.port_mode === 'wan')
+
+  if (wanPorts.length === 0) return null
+
+  return (
+    <Section title="WAN Configuration">
+      <div className="space-y-2">
+        {wanPorts.map((port: any) => {
+          const existing = wanConfigs.find((wc: any) => wc.switch_port_id === port.id) ?? null
+          return (
+            <WanPortCard
+              key={port.id}
+              portId={port.id}
+              portNumber={port.port_number}
+              portName={port.port_name}
+              existing={existing}
+              onSaved={onRefresh}
+              onDeleted={onRefresh}
+            />
+          )
+        })}
+      </div>
+    </Section>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -312,6 +552,8 @@ export default function DeviceForm() {
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const canEdit = user?.role === 'admin' || user?.role === 'editor'
   const isEdit = !!id && id !== 'new'
 
   const [form, setForm] = useState<FormState>(() => {
@@ -330,6 +572,7 @@ export default function DeviceForm() {
   const [error, setError] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [showInfraWarning, setShowInfraWarning] = useState(false)
+  const [pendingConflicts, setPendingConflicts] = useState<{ deviceId: number; conflicts: Conflict[] } | null>(null)
 
   // Fetch existing device for edit mode
   const { data: device, isLoading: deviceLoading } = useQuery({
@@ -385,6 +628,7 @@ export default function DeviceForm() {
 
   const selectedDt = (deviceTypes ?? []).find((dt: any) => String(dt.id) === form.device_type_id) as any
   const isInfraDevice = INFRA_TYPE_NAMES.includes(selectedDt?.name ?? '')
+  const isWanCapable = WAN_TYPE_NAMES.includes(selectedDt?.name ?? '')
 
   // Track whether the original loaded device was an infra type
   const originalDt = (deviceTypes ?? []).find((dt: any) => device && String(dt.id) === String(device.device_type_id)) as any
@@ -404,6 +648,19 @@ export default function DeviceForm() {
     queryFn: async () => { const { data } = await api.get(`/switch-ports/device/${upstreamDeviceId}`); return data },
     enabled: !!upstreamDeviceId,
   })
+
+  // WAN configs for WAN-capable infra devices
+  const { data: wanConfigs = [], refetch: refetchWanConfigs } = useQuery<any[]>({
+    queryKey: ['wan-configs', Number(id)],
+    queryFn: async () => { const { data } = await api.get(`/wan-configs/device/${id}`); return data },
+    enabled: isEdit && isWanCapable,
+  })
+
+  const { data: sysSettings } = useQuery({
+    queryKey: ['system-settings'],
+    queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
+  })
+  const dnsDomain: string = sysSettings?.dns_domain ?? ''
 
   // OOB switch ports — keyed on selected OOB device
   const oobDeviceId = form.nics[0]?.switch_device_id ? Number(form.nics[0].switch_device_id) : null
@@ -519,7 +776,16 @@ export default function DeviceForm() {
       qc.invalidateQueries({ queryKey: ['devices'] })
       qc.invalidateQueries({ queryKey: ['device', id] })
       qc.invalidateQueries({ queryKey: ['search'] })
-      navigate(`/devices/${res.data.id}`, { replace: isEdit })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: ['switches'] })
+      qc.invalidateQueries({ queryKey: ['wan-configs-all'] })
+      qc.invalidateQueries({ queryKey: ['subnet-map'] })
+      const conflicts: Conflict[] = res.data.conflicts ?? []
+      if (conflicts.length > 0) {
+        setPendingConflicts({ deviceId: res.data.id, conflicts })
+      } else {
+        navigate(`/devices/${res.data.id}`, { replace: isEdit })
+      }
     },
     onError: (err: any) => setError(err.response?.data?.detail ?? 'Save failed'),
   })
@@ -535,11 +801,17 @@ export default function DeviceForm() {
     saveMutation.mutate(formToPayload(form))
   }
 
+  if (!canEdit) {
+    navigate(isEdit ? `/devices/${id}` : '/devices', { replace: true })
+    return null
+  }
+
   if (isEdit && deviceLoading) {
     return <div className="glass-card h-48 animate-pulse rounded-xl" />
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-4">
 
       {/* Header */}
@@ -1083,11 +1355,17 @@ export default function DeviceForm() {
             nics={form.nics}
             onChange={(nics) => set({ nics })}
             networks={(networks ?? []).map((n: any) => ({
-              id: n.id, name: n.name, vlan_id: n.vlan_id, color: n.color
+              id: n.id, name: n.name, vlan_id: n.vlan_id, color: n.color, cidr: n.cidr ?? null,
+              ssids: (n.ssids ?? []).map((s: any) => ({ ssid: s.ssid, bands: s.bands ?? [] })),
             }))}
             switchDevices={switchDevices ?? []}
+            dnsDomain={dnsDomain}
           />
         </Section>
+        )}
+
+        {isWanCapable && isEdit && (
+          <WanConfigsSection deviceId={Number(id)} wanConfigs={wanConfigs} onRefresh={() => { refetchWanConfigs(); qc.invalidateQueries({ queryKey: ['wan-configs-all'] }) }} />
         )}
 
         {isInfraDevice && isEdit && (
@@ -1099,6 +1377,7 @@ export default function DeviceForm() {
               portNumbering={form.port_numbering}
               onPortDisplayRowsChange={(v) => set({ port_display_rows: v })}
               onPortNumberingChange={(v) => set({ port_numbering: v })}
+              isWanCapable={isWanCapable}
             />
           </Section>
         )}
@@ -1161,25 +1440,25 @@ export default function DeviceForm() {
                 </span>
               </div>
             </div>
-            {form.pihole_enabled && (
-              <div className="flex-1">
-                <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1.5">Poll via NIC</label>
-                <select
-                  value={form.pihole_nic_id}
-                  onChange={(e) => set({ pihole_nic_id: e.target.value })}
-                  className="glass-input text-sm w-full"
-                >
-                  <option value="">Auto (first available)</option>
-                  {form.nics.map((n: any, idx: number) => {
-                    const host = n.dns_entry || n.ip_address
-                    const nicLabel = n.label || `NIC ${idx + 1}`
-                    const label = host ? `${nicLabel} — ${host}` : nicLabel
-                    return <option key={n.id ?? `new-${idx}`} value={String(n.id ?? '')}>{label}</option>
-                  })}
-                </select>
-              </div>
-            )}
           </div>
+          {form.pihole_enabled && (
+            <div>
+              <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1.5">Poll via NIC</label>
+              <select
+                value={form.pihole_nic_id}
+                onChange={(e) => set({ pihole_nic_id: e.target.value })}
+                className="glass-input text-sm w-full"
+              >
+                <option value="">Auto (first available)</option>
+                {form.nics.map((n: any, idx: number) => {
+                  const host = n.dns_entry || n.ip_address
+                  const nicLabel = n.label || `NIC ${idx + 1}`
+                  const label = host ? `${nicLabel} — ${host}` : nicLabel
+                  return <option key={n.id ?? `new-${idx}`} value={String(n.id ?? '')}>{label}</option>
+                })}
+              </select>
+            </div>
+          )}
           {form.pihole_enabled && (
             <div className="mt-3">
               <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1.5">
@@ -1214,5 +1493,18 @@ export default function DeviceForm() {
         </button>
       </div>
     </form>
+
+    {pendingConflicts && (
+      <ConflictModal
+        deviceId={pendingConflicts.deviceId}
+        conflicts={pendingConflicts.conflicts}
+        onClose={() => {
+          const targetId = pendingConflicts.deviceId
+          setPendingConflicts(null)
+          navigate(`/devices/${targetId}`, { replace: isEdit })
+        }}
+      />
+    )}
+    </>
   )
 }

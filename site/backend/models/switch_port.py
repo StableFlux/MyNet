@@ -25,6 +25,8 @@ class SwitchPort(Base):
     speed         = Column(String, nullable=True)             # "1G", "2.5G", "10G"
     notes         = Column(String, nullable=True)
 
+    port_mode       = Column(String, nullable=False, default="lan")  # lan | wan
+
     is_management   = Column(Boolean, nullable=False, default=False)
     mgmt_network_id = Column(Integer, ForeignKey("networks.id"), nullable=True)
     mgmt_ip_address = Column(String, nullable=True)

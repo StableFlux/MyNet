@@ -62,7 +62,7 @@ export interface Nic {
   id: number
   device_id: number
   label: string | null
-  nic_type: 'ETH' | 'WIFI' | 'VIRT'
+  nic_type: 'ETH' | 'WIFI' | 'VIRT' | 'SFP' | 'QSFP' | 'WAN'
   mac: string | null
   ip_address: string | null
   dns_entry: string | null

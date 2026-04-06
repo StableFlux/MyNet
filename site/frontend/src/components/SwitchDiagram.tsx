@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUp, ArrowDown, ShieldAlert, ExternalLink } from 'lucide-react'
+import { ArrowUp, ArrowDown, ShieldAlert, ExternalLink, Globe } from 'lucide-react'
 
 interface SwitchPort {
   id: number
@@ -8,6 +8,7 @@ interface SwitchPort {
   port_name: string | null
   port_type: string
   poe_enabled: boolean
+  port_mode?: string
   is_management: boolean
   is_downlink: boolean
   connected_device_id: number | null
@@ -31,7 +32,11 @@ interface SwitchDevice {
   switch_ports: SwitchPort[]
 }
 
-export function SwitchDiagram({ device }: { device: SwitchDevice }) {
+const CONNECTION_TYPE_LABELS: Record<string, string> = {
+  dhcp: 'DHCP', static: 'Static IP', pppoe: 'PPPoE', '4g-lte': '4G/LTE', 'ds-lite': 'DS-Lite',
+}
+
+export function SwitchDiagram({ device, wanConfigs = [], wanColor = '#f59e0b' }: { device: SwitchDevice; wanConfigs?: any[]; wanColor?: string }) {
   const navigate = useNavigate()
   const [hoveredPort, setHoveredPort] = useState<{ port: SwitchPort; x: number; y: number } | null>(null)
 
@@ -49,10 +54,13 @@ export function SwitchDiagram({ device }: { device: SwitchDevice }) {
     const isUplink = device.uplink_port_id != null && port.id === device.uplink_port_id
     const isMgmt = port.is_management
     const isDownlink = port.is_downlink
+    const isWan = port.port_mode === 'wan'
     const isConnected = !!port.connected_device_name || isUplink
-    const accentColor = isUplink ? '#818cf8' : isMgmt ? '#a78bfa' : (port.connected_network_color || '#4ade80')
+    const wanConfig = isWan ? wanConfigs.find((wc: any) => wc.switch_port_id === port.id) : null
+    const wanOnline = wanConfig?.wan_monitoring_enabled !== false && wanConfig?.wan_current_status === 'up'
+    const accentColor = isUplink ? '#818cf8' : isWan ? (wanOnline ? '#22c55e' : wanColor) : isMgmt ? '#a78bfa' : (port.connected_network_color || '#4ade80')
 
-    const cssVars = isConnected ? {
+    const cssVars = (isConnected || isWan) ? {
       '--port-accent': accentColor,
       '--port-accent-bg': accentColor + '22',
       '--port-accent-border': accentColor + '55',
@@ -65,8 +73,8 @@ export function SwitchDiagram({ device }: { device: SwitchDevice }) {
         className={[
           'switch-port',
           isSfp ? 'switch-port-sfp' : '',
-          isConnected ? 'switch-port-connected' : '',
-          isMgmt && !isConnected ? 'switch-port-mgmt' : '',
+          isConnected || isWan ? 'switch-port-connected' : '',
+          isMgmt && !isConnected && !isWan ? 'switch-port-mgmt' : '',
           isConnected || isMgmt ? 'cursor-pointer' : 'cursor-default',
         ].join(' ')}
         style={cssVars}
@@ -84,11 +92,13 @@ export function SwitchDiagram({ device }: { device: SwitchDevice }) {
           ? <ArrowUp size={9} className="text-indigo-400" />
           : isDownlink
             ? <ArrowDown size={9} className="text-indigo-300/70" />
-            : isMgmt
-              ? <ShieldAlert size={9} className="text-violet-400" />
-              : isConnected
-                ? <div className="switch-port-led" />
-                : <div className="w-1.5 h-1.5 rounded-full bg-white/[0.08]" />
+            : isWan
+              ? <Globe size={9} style={{ color: wanColor }} />
+              : isMgmt
+                ? <ShieldAlert size={9} className="text-violet-400" />
+                : isConnected
+                  ? <div className="switch-port-led" />
+                  : <div className="w-1.5 h-1.5 rounded-full bg-white/[0.08]" />
         }
       </div>
     )
@@ -185,7 +195,7 @@ export function SwitchDiagram({ device }: { device: SwitchDevice }) {
             </p>
 
             {/* Type badges */}
-            {(device.uplink_port_id === hoveredPort.port.id || hoveredPort.port.is_downlink || hoveredPort.port.is_management || hoveredPort.port.poe_enabled) && (
+            {(device.uplink_port_id === hoveredPort.port.id || hoveredPort.port.is_downlink || hoveredPort.port.is_management || hoveredPort.port.port_mode === 'wan' || hoveredPort.port.poe_enabled) && (
               <div className="flex flex-wrap gap-1">
                 {device.uplink_port_id === hoveredPort.port.id && (
                   <span className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-400">↑ Uplink</span>
@@ -196,14 +206,34 @@ export function SwitchDiagram({ device }: { device: SwitchDevice }) {
                 {hoveredPort.port.is_management && (
                   <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400">Management</span>
                 )}
+                {hoveredPort.port.port_mode === 'wan' && (
+                  <span className="px-1.5 py-0.5 rounded"
+                    style={{ backgroundColor: wanColor + '26', color: wanColor }}>WAN</span>
+                )}
                 {hoveredPort.port.poe_enabled && (
                   <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400/80">PoE</span>
                 )}
               </div>
             )}
 
+            {/* WAN config details */}
+            {hoveredPort.port.port_mode === 'wan' && (() => {
+              const wc = wanConfigs.find((w: any) => w.switch_port_id === hoveredPort.port.id)
+              if (!wc) return <p className="text-white/30">No WAN config set</p>
+              return (
+                <div className="space-y-0.5">
+                  {wc.isp_name && <p className="text-white/70">{wc.isp_name}</p>}
+                  {wc.connection_type && <p className="text-white/40">{CONNECTION_TYPE_LABELS[wc.connection_type] ?? wc.connection_type}</p>}
+                  {wc.ip_address && <p className="text-white/40 font-mono">{wc.ip_address}</p>}
+                  {(wc.speed_down || wc.speed_up) && (
+                    <p className="text-white/30">↓ {wc.speed_down || '—'} / ↑ {wc.speed_up || '—'}</p>
+                  )}
+                </div>
+              )
+            })()}
+
             {/* Connection details */}
-            {device.uplink_port_id === hoveredPort.port.id ? (
+            {hoveredPort.port.port_mode !== 'wan' && device.uplink_port_id === hoveredPort.port.id ? (
               <>
                 <p className="text-white/70">{device.upstream_device_name ?? 'Upstream device'}</p>
                 {hoveredPort.port.remote_port_number != null && (
@@ -230,9 +260,9 @@ export function SwitchDiagram({ device }: { device: SwitchDevice }) {
                   <p className="text-white/40">VLAN {hoveredPort.port.connected_vlan_id}</p>
                 )}
               </>
-            ) : (
+            ) : hoveredPort.port.port_mode !== 'wan' ? (
               <p className="text-white/30">No device connected</p>
-            )}
+            ) : null}
           </div>
         </div>
       )}

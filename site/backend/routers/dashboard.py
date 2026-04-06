@@ -10,8 +10,7 @@ from models.device import Device, DeviceStatus
 from models.device_type import DeviceType
 from models.network import Network
 from models.nic import Nic
-from models.alert import Alert, AlertSeverity
-from models.audit import AuditLog
+from models.event import Event, EventSeverity, EventCategory
 from models.monitoring import MonitoringResult, PingStatus
 from models.user import User
 from services.auth import require_viewer
@@ -31,11 +30,54 @@ def dashboard_summary(
     decommissioned_count = db.query(Device).filter(Device.status == DeviceStatus.decommissioned).count()
     total_devices = in_service + stock_count + undeployed_count + decommissioned_count
 
-    # Alert counts by severity
-    unread_alerts = db.query(Alert).filter(Alert.acknowledged_at.is_(None)).count()
-    critical_alerts = db.query(Alert).filter(Alert.acknowledged_at.is_(None), Alert.severity == AlertSeverity.critical).count()
-    warning_alerts = db.query(Alert).filter(Alert.acknowledged_at.is_(None), Alert.severity == AlertSeverity.warning).count()
-    info_alerts = db.query(Alert).filter(Alert.acknowledged_at.is_(None), Alert.severity == AlertSeverity.info).count()
+    # Active event counts by severity (unresolved warning/critical)
+    active_events_q = db.query(Event).filter(Event.resolved_at.is_(None))
+    critical_count = active_events_q.filter(Event.severity == EventSeverity.critical).count()
+    warning_count = active_events_q.filter(Event.severity == EventSeverity.warning).count()
+    active_count = critical_count + warning_count
+
+    # Top 5 active events for dashboard card (critical first, then warning, newest first)
+    active_events = [
+        {
+            "id": e.id,
+            "message": e.message,
+            "severity": e.severity.value,
+            "category": e.category.value,
+            "event_type": e.event_type.value,
+            "entity_id": e.entity_id,
+            "entity_name": e.entity_name,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in (
+            active_events_q
+            .filter(Event.severity.in_([EventSeverity.critical, EventSeverity.warning]))
+            .order_by(Event.severity.desc(), Event.created_at.desc())
+            .limit(5)
+            .all()
+        )
+    ]
+
+    # Recent activity feed (all resolved/point-in-time events, newest first)
+    recent_activity = [
+        {
+            "id": e.id,
+            "severity": e.severity.value,
+            "category": e.category.value,
+            "event_type": e.event_type.value,
+            "entity_type": e.entity_type,
+            "entity_id": e.entity_id,
+            "entity_name": e.entity_name,
+            "message": e.message,
+            "username": e.username,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in (
+            db.query(Event)
+            .order_by(Event.created_at.desc())
+            .limit(50)
+            .all()
+        )
+    ]
 
     # Per-network device counts
     network_counts = (
@@ -82,38 +124,68 @@ def dashboard_summary(
     )
     by_brand = [{"brand": b, "count": c} for b, c in brand_counts]
 
-    # Monitoring: offline devices + totals
-    monitored = db.query(Device).filter(Device.monitoring_enabled.is_(True)).all()
+    # Monitoring: offline devices + totals + WAN summary — all from one query
+    from models.wan_config import WanConfig
+    from sqlalchemy import text as _text
+    from sqlalchemy.orm import joinedload
+
+    monitored = (
+        db.query(Device)
+        .filter(Device.monitoring_enabled.is_(True))
+        .options(joinedload(Device.nics))
+        .all()
+    )
     monitoring_total = len(monitored)
 
     if monitored:
         monitored_ids = [d.id for d in monitored]
-        latest_ts_sub = (
-            db.query(
-                MonitoringResult.device_id,
-                func.max(MonitoringResult.timestamp).label("max_ts"),
-            )
-            .filter(MonitoringResult.device_id.in_(monitored_ids))
-            .group_by(MonitoringResult.device_id)
-            .subquery()
-        )
-        latest_results = (
-            db.query(MonitoringResult)
-            .join(
-                latest_ts_sub,
-                (MonitoringResult.device_id == latest_ts_sub.c.device_id)
-                & (MonitoringResult.timestamp == latest_ts_sub.c.max_ts),
-            )
-            .all()
-        )
-        last_by_device = {r.device_id: r for r in latest_results}
+
+        # Load WAN configs once — used for both LAN exclusion and WAN summary
+        all_wan_configs = db.query(WanConfig).filter(WanConfig.device_id.in_(monitored_ids)).all()
+
+        wan_ips_by_device: dict[int, set] = {}
+        active_wan_configs = []
+        for wc in all_wan_configs:
+            wan_ip = wc.wan_ping_target or "1.1.1.1"
+            wan_ips_by_device.setdefault(wc.device_id, set()).add(wan_ip)
+            if wc.wan_monitoring_enabled is not False:
+                active_wan_configs.append(wc)
+
+        placeholders = ",".join(f":id{i}" for i in range(len(monitored_ids)))
+        params = {f"id{i}": v for i, v in enumerate(monitored_ids)}
+        last_rows = db.execute(_text(f"""
+            SELECT mr.device_id, mr.ip_pinged, mr.status, mr.timestamp
+            FROM monitoring_results mr
+            INNER JOIN (
+                SELECT device_id, ip_pinged, MAX(id) AS max_id
+                FROM monitoring_results
+                WHERE device_id IN ({placeholders})
+                GROUP BY device_id, ip_pinged
+            ) latest ON mr.id = latest.max_id
+        """), params).fetchall()
+
+        # Index by (device_id, ip) for WAN lookup
+        last_by_key: dict[tuple, object] = {}
+        for row in last_rows:
+            last_by_key[(row.device_id, row.ip_pinged)] = row
+
+        # LAN: most recent non-WAN result per device
+        last_by_device: dict[int, object] = {}
+        for row in last_rows:
+            if row.ip_pinged in wan_ips_by_device.get(row.device_id, set()):
+                continue
+            existing = last_by_device.get(row.device_id)
+            if existing is None or row.timestamp > existing.timestamp:
+                last_by_device[row.device_id] = row
     else:
         last_by_device = {}
+        last_by_key = {}
+        active_wan_configs = []
 
     offline_devices = []
     for device in monitored:
         last = last_by_device.get(device.id)
-        if last and last.status != PingStatus.up:
+        if last and str(last.status) != PingStatus.up:
             primary_ip = next(
                 (n.ip_address for n in device.nics if n.ip_address and n.ip_address != "DHCP"),
                 None,
@@ -122,10 +194,24 @@ def dashboard_summary(
                 "id": device.id,
                 "name": device.name,
                 "ip": primary_ip,
-                "status": last.status.value,
+                "status": str(last.status),
                 "last_seen": last.timestamp.isoformat(),
             })
     monitoring_online = monitoring_total - len(offline_devices)
+
+    # WAN summary — reuses last_rows already fetched above
+    wan_connections = []
+    for wc in active_wan_configs:
+        wan_ip = wc.wan_ping_target or "1.1.1.1"
+        row = last_by_key.get((wc.device_id, wan_ip))
+        status = str(row.status) if row else "unknown"
+        wan_connections.append({
+            "switch_port_id": wc.switch_port_id,
+            "isp_name": wc.isp_name,
+            "status": status,
+        })
+    wan_total = len(wan_connections)
+    wan_online_count = sum(1 for c in wan_connections if c["status"] == "up")
 
     # Recently added devices (in-service, last 5)
     recent_devices_rows = (
@@ -147,40 +233,28 @@ def dashboard_summary(
         for d in recent_devices_rows
     ]
 
-    recent_audit = (
-        db.query(AuditLog)
-        .order_by(AuditLog.timestamp.desc())
-        .limit(50)
-        .all()
-    )
-
     return {
         "total_devices": total_devices,
         "in_service": in_service,
         "stock_count": stock_count,
         "undeployed_count": undeployed_count,
         "decommissioned_count": decommissioned_count,
-        "unread_alerts": unread_alerts,
-        "critical_alerts": critical_alerts,
-        "warning_alerts": warning_alerts,
-        "info_alerts": info_alerts,
+        "active_events": active_count,
+        "critical_events": critical_count,
+        "warning_events": warning_count,
+        "active_event_list": active_events,
         "monitoring_total": monitoring_total,
         "monitoring_online": monitoring_online,
+        "wan_summary": {
+            "total": wan_total,
+            "online": wan_online_count,
+            "offline": wan_total - wan_online_count,
+            "connections": wan_connections,
+        },
         "networks": networks,
         "by_category": by_category,
         "by_brand": by_brand,
         "offline_devices": offline_devices,
         "recent_devices": recent_devices,
-        "recent_activity": [
-            {
-                "id": e.id,
-                "entity_type": e.entity_type,
-                "entity_id": e.entity_id,
-                "entity_name": e.entity_name,
-                "action": e.action.value,
-                "username": e.username,
-                "timestamp": e.timestamp.isoformat(),
-            }
-            for e in recent_audit
-        ],
+        "recent_activity": recent_activity,
     }

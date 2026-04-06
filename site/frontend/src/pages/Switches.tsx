@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { SwitchDiagram } from '../components/SwitchDiagram'
+import { useColorSettings } from '../hooks/useColorSettings'
 import api from '../lib/api'
 
 const STORAGE_KEY = 'switches-order-v1'
@@ -18,8 +19,9 @@ function loadOrder(): number[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') } catch { return [] }
 }
 
-function SortableSwitch({ device }: { device: any }) {
+function SortableSwitch({ device, wanColor, wanConfigs }: { device: any; wanColor: string; wanConfigs: any[] }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: device.id })
+  const deviceWanConfigs = wanConfigs.filter((wc) => wc.device_id === device.id)
   return (
     <div
       ref={setNodeRef}
@@ -34,16 +36,38 @@ function SortableSwitch({ device }: { device: any }) {
       >
         <div className="w-12 h-1 rounded-full bg-white/20" />
       </div>
-      <SwitchDiagram device={device} />
+      <SwitchDiagram device={device} wanColor={wanColor} wanConfigs={deviceWanConfigs} />
     </div>
   )
 }
 
 export default function Switches() {
+  const { wanPortColor } = useColorSettings()
   const { data: switches = [], isLoading } = useQuery({
     queryKey: ['switches'],
     queryFn: async () => { const { data } = await api.get('/switch-ports/switches'); return data },
   })
+  const { data: allWanConfigs = [] } = useQuery({
+    queryKey: ['wan-configs-all'],
+    queryFn: async () => { const { data } = await api.get('/wan-configs'); return data },
+  })
+  const { data: monitoringDevices = [] } = useQuery({
+    queryKey: ['monitoring-devices'],
+    queryFn: async () => { const { data } = await api.get('/monitoring/devices'); return data },
+    refetchInterval: 30_000,
+  })
+  const wanStatusByPortId: Record<number, string> = {}
+  for (const dev of monitoringDevices) {
+    for (const nic of dev.nics ?? []) {
+      if (nic.is_wan_ping && nic.switch_port_id != null) {
+        wanStatusByPortId[nic.switch_port_id] = nic.status
+      }
+    }
+  }
+  const allWanConfigsWithStatus = allWanConfigs.map((wc: any) => ({
+    ...wc,
+    wan_current_status: wanStatusByPortId[wc.switch_port_id] ?? null,
+  }))
 
   const [order, setOrder] = useState<number[]>(loadOrder)
 
@@ -114,7 +138,7 @@ export default function Switches() {
           <SortableContext items={orderedSwitches.map((s: any) => s.id)} strategy={rectSortingStrategy}>
             <div className="flex flex-wrap gap-4 items-start">
               {orderedSwitches.map((sw: any) => (
-                <SortableSwitch key={sw.id} device={sw} />
+                <SortableSwitch key={sw.id} device={sw} wanColor={wanPortColor} wanConfigs={allWanConfigsWithStatus} />
               ))}
             </div>
           </SortableContext>

@@ -11,12 +11,13 @@ import json
 from datetime import datetime, timezone
 from sqlalchemy import DateTime, text
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
 from services.auth import require_admin
+from seed_device_types import seed_device_types
 from models.system_settings import SystemSettings
 from models.network import Network
 from models.device_type import DeviceType
@@ -27,8 +28,8 @@ from models.location import Location
 from models.user import User
 from models.monitoring import MonitoringResult
 from models.pihole import PiHoleCache
-from models.alert import Alert
-from models.audit import AuditLog
+from models.event import Event
+from models.wan_config import WanConfig
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
 
@@ -68,8 +69,14 @@ def export_backup(db: Session = Depends(get_db)):
         "version": "1.4",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "system_settings": {
-            "system_name": sys.system_name if sys else "MyNet",
-            "auth_required": sys.auth_required if sys else True,
+            "system_name":              sys.system_name if sys else "MyNet",
+            "auth_required":            sys.auth_required if sys else True,
+            "pihole_poll_interval_secs": sys.pihole_poll_interval_secs if sys else 300,
+            "dns_domain":               sys.dns_domain if sys else None,
+            "location_type_colors":     sys.location_type_colors if sys else None,
+            "device_category_colors":   sys.device_category_colors if sys else None,
+            "device_status_colors":     sys.device_status_colors if sys else None,
+            "wan_port_color":           sys.wan_port_color if sys else None,
             # encryption fields intentionally excluded — keys never leave the server
         },
         "users":         [_row_to_dict(r, ts) for r in db.query(User).order_by(User.id).all()],
@@ -79,6 +86,7 @@ def export_backup(db: Session = Depends(get_db)):
         "devices":       [_row_to_dict(r, ts) for r in db.query(Device).order_by(Device.id).all()],
         "nics":          [_row_to_dict(r, ts) for r in db.query(Nic).order_by(Nic.id).all()],
         "switch_ports":  [_row_to_dict(r) for r in db.query(SwitchPort).order_by(SwitchPort.id).all()],
+        "wan_configs":   [_row_to_dict(r) for r in db.query(WanConfig).order_by(WanConfig.id).all()],
     }
 
     filename = f"mynet-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
@@ -103,8 +111,8 @@ def _do_restore(db: Session, data: dict) -> dict:
     # Must be deleted before their parent rows to satisfy FK constraints at commit.
     db.query(MonitoringResult).delete(synchronize_session=False)
     db.query(PiHoleCache).delete(synchronize_session=False)
-    db.query(Alert).delete(synchronize_session=False)
-    db.query(AuditLog).delete(synchronize_session=False)
+    db.query(Event).delete(synchronize_session=False)
+    db.query(WanConfig).delete(synchronize_session=False)
     db.query(SwitchPort).delete(synchronize_session=False)
     db.query(Nic).delete(synchronize_session=False)
     db.query(Device).delete(synchronize_session=False)
@@ -141,6 +149,7 @@ def _do_restore(db: Session, data: dict) -> dict:
     _insert_rows(Device,             data.get("devices",       []))
     _insert_rows(Nic,                data.get("nics",          []))
     _insert_rows(SwitchPort,         data.get("switch_ports",  []))
+    _insert_rows(WanConfig,          data.get("wan_configs",   []))
 
     # Restore system settings (non-encryption fields only)
     ss = data.get("system_settings")
@@ -153,6 +162,18 @@ def _do_restore(db: Session, data: dict) -> dict:
             s.system_name = ss["system_name"] or "MyNet"
         if "auth_required" in ss:
             s.auth_required = ss["auth_required"]
+        if "pihole_poll_interval_secs" in ss:
+            s.pihole_poll_interval_secs = ss["pihole_poll_interval_secs"] or 300
+        if "dns_domain" in ss:
+            s.dns_domain = ss["dns_domain"]
+        if "location_type_colors" in ss:
+            s.location_type_colors = ss["location_type_colors"]
+        if "device_category_colors" in ss:
+            s.device_category_colors = ss["device_category_colors"]
+        if "device_status_colors" in ss:
+            s.device_status_colors = ss["device_status_colors"]
+        if "wan_port_color" in ss:
+            s.wan_port_color = ss["wan_port_color"]
 
     db.commit()
 
@@ -164,6 +185,7 @@ def _do_restore(db: Session, data: dict) -> dict:
         "devices":       len(data.get("devices",       [])),
         "nics":          len(data.get("nics",          [])),
         "switch_ports":  len(data.get("switch_ports",  [])),
+        "wan_configs":   len(data.get("wan_configs",   [])),
     }
 
 
@@ -222,3 +244,66 @@ async def import_backup(
         "had_old_encryption_key": had_old_key,
         "restored": counts,
     }
+
+
+# ---------------------------------------------------------------------------
+# Factory Reset
+# ---------------------------------------------------------------------------
+
+@router.post("/factory-reset", dependencies=[Depends(require_admin)])
+def factory_reset(
+    confirm: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+):
+    """
+    Wipe all user data and return the system to a freshly installed state.
+    The caller must supply {"confirm": "RESET"} in the request body.
+    Device types are re-seeded immediately; the setup wizard is shown on next page load.
+    """
+    if confirm != "RESET":
+        raise HTTPException(status_code=400, detail='Send {"confirm": "RESET"} to proceed')
+
+    try:
+        db.execute(text("PRAGMA defer_foreign_keys = ON"))
+
+        # Delete all user/network/device data in FK-safe order
+        db.query(MonitoringResult).delete(synchronize_session=False)
+        db.query(PiHoleCache).delete(synchronize_session=False)
+        db.query(Event).delete(synchronize_session=False)
+        db.query(WanConfig).delete(synchronize_session=False)
+        db.query(SwitchPort).delete(synchronize_session=False)
+        db.query(Nic).delete(synchronize_session=False)
+        db.query(Device).delete(synchronize_session=False)
+        db.query(Location).delete(synchronize_session=False)
+        db.query(Network).delete(synchronize_session=False)
+        db.query(DeviceType).delete(synchronize_session=False)
+        db.query(User).delete(synchronize_session=False)
+        db.flush()
+
+        # Reset system settings to defaults
+        s = db.query(SystemSettings).first()
+        if not s:
+            s = SystemSettings(id=1)
+            db.add(s)
+        s.system_name = "MyNet"
+        s.auth_required = True
+        s.encryption_enabled = False
+        s.encryption_salt = None
+        s.encryption_verification = None
+        s.pihole_poll_interval_secs = 300
+        s.dns_domain = None
+        s.location_type_colors = None
+        s.device_category_colors = None
+        s.device_status_colors = None
+        s.wan_port_color = None
+
+        db.commit()
+
+        # Re-seed the standard device types so they're available immediately
+        seed_device_types(db)
+
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Factory reset failed: {exc}")
+
+    return {"success": True}

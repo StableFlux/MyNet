@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_, func, String
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models.device import Device
@@ -74,7 +74,7 @@ def search(
             .filter(
                 or_(
                     Network.name.ilike(term),
-                    func.cast(Network.vlan_id, String).ilike(term),
+                    Network.vlan_id == int(term) if term.isdigit() else False,
                 )
             )
             .subquery()
@@ -115,7 +115,7 @@ def search(
         ).subquery()
         base = base.filter(Device.id.in_(nt_ids))
 
-    devices = base.order_by(Device.name).limit(limit).all()
+    devices = base.options(joinedload(Device.device_type), joinedload(Device.nics)).order_by(Device.name).limit(limit).all()
 
     results = []
     for d in devices:

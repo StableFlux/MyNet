@@ -31,11 +31,13 @@ export default function UserManagement() {
     mutationFn: ({ id, body }: { id: number; body: Partial<typeof form> & { is_active?: boolean } }) =>
       api.patch(`/auth/users/${id}`, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); setEditingId(null) },
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Failed to update user'),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/auth/users/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Failed to delete user'),
   })
 
   const profileMutation = useMutation({

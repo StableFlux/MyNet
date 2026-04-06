@@ -5,6 +5,8 @@ type MessageHandler = (data: Record<string, unknown>) => void
 export function useWebSocket(onMessage: MessageHandler) {
   const ws = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
+  const onMessageRef = useRef(onMessage)
+  onMessageRef.current = onMessage
 
   const connect = useCallback(() => {
     const wsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`
@@ -13,7 +15,7 @@ export function useWebSocket(onMessage: MessageHandler) {
     ws.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        onMessage(data)
+        onMessageRef.current(data)
       } catch {
         // ignore malformed messages
       }
@@ -26,7 +28,7 @@ export function useWebSocket(onMessage: MessageHandler) {
     ws.current.onerror = () => {
       ws.current?.close()
     }
-  }, [onMessage])
+  }, [])
 
   useEffect(() => {
     connect()

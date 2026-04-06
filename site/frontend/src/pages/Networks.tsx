@@ -27,7 +27,11 @@ export default function Networks() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/networks/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['networks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['networks'] })
+      qc.invalidateQueries({ queryKey: ['subnet-map'] })
+    },
+    onError: (err: any) => alert(`Delete failed: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })
 
   return (
@@ -48,6 +52,11 @@ export default function Networks() {
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="glass-card h-32 animate-pulse" />
         ))}</div>
+      ) : !networks?.length ? (
+        <div className="text-center py-16 text-white/30">
+          <p className="text-sm">No networks configured yet.</p>
+          <p className="text-xs mt-1">Create a network to get started.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {(networks ?? []).map((n: any) => {

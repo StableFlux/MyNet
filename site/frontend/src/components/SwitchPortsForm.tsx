@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Check, Trash2, Zap, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ShieldAlert } from 'lucide-react'
+import { Pencil, Check, Trash2, Zap, ChevronDown, ChevronUp, ArrowUp, ArrowDown, ShieldAlert, Globe, Network } from 'lucide-react'
+import { useColorSettings } from '../hooks/useColorSettings'
 import api from '../lib/api'
 
 export interface PortDraft {
@@ -14,6 +15,7 @@ export interface PortDraft {
   notes: string
   connected_device_name?: string | null
   connected_nic_label?: string | null
+  port_mode: 'lan' | 'wan'
   is_management: boolean
   mgmt_network_id: number | null
   mgmt_ip_address: string
@@ -47,7 +49,7 @@ function portLabel(p: PortDraft): string {
 }
 
 function makePort(n: number, type: PortDraft['port_type'], speed: string, poe: boolean): PortDraft {
-  return { port_number: n, port_name: '', port_type: type, poe_enabled: poe, poe_budget_w: '', speed, notes: '', is_management: false, mgmt_network_id: null, mgmt_ip_address: '' }
+  return { port_number: n, port_name: '', port_type: type, poe_enabled: poe, poe_budget_w: '', speed, notes: '', port_mode: 'lan', is_management: false, mgmt_network_id: null, mgmt_ip_address: '' }
 }
 
 interface Props {
@@ -57,10 +59,12 @@ interface Props {
   portNumbering?: string
   onPortDisplayRowsChange?: (v: string) => void
   onPortNumberingChange?: (v: string) => void
+  isWanCapable?: boolean
 }
 
-export function SwitchPortsForm({ deviceId, uplinkPortId, portDisplayRows = '2', portNumbering = 'alternating', onPortDisplayRowsChange, onPortNumberingChange }: Props) {
+export function SwitchPortsForm({ deviceId, uplinkPortId, portDisplayRows = '2', portNumbering = 'alternating', onPortDisplayRowsChange, onPortNumberingChange, isWanCapable = false }: Props) {
   const qc = useQueryClient()
+  const { wanPortColor } = useColorSettings()
   const [editing, setEditing] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
 
@@ -80,6 +84,7 @@ export function SwitchPortsForm({ deviceId, uplinkPortId, portDisplayRows = '2',
         speed: p.speed ?? '',
         port_name: p.port_name ?? '',
         notes: p.notes ?? '',
+        port_mode: p.port_mode ?? 'lan',
         is_management: p.is_management ?? false,
         mgmt_network_id: p.mgmt_network_id ?? null,
         mgmt_ip_address: p.mgmt_ip_address ?? '',
@@ -106,6 +111,7 @@ useEffect(() => {
         poe_budget_w: p.poe_budget_w ? Number(p.poe_budget_w) : null,
         speed: p.speed || null,
         notes: p.notes || null,
+        port_mode: p.port_mode,
         is_management: p.is_management,
         mgmt_network_id: p.mgmt_network_id || null,
         mgmt_ip_address: p.mgmt_ip_address || null,
@@ -298,9 +304,11 @@ useEffect(() => {
         const isUplink = uplinkPortId != null && port.id === uplinkPortId
         const isMgmt = port.is_management
         const isDownlink = !!port.is_downlink
+        const isWan = port.port_mode === 'wan'
         return (
           <div key={port.id ?? `new-${idx}`}
-            className={`rounded-lg border overflow-hidden ${isUplink ? 'border-indigo-500/40 bg-indigo-500/[0.04]' : isDownlink ? 'border-indigo-500/20 bg-indigo-500/[0.02]' : isMgmt ? 'border-violet-500/40 bg-violet-500/[0.04]' : 'border-glass-border bg-white/[0.02]'}`}>
+            className={`rounded-lg border overflow-hidden ${isUplink ? 'border-indigo-500/40 bg-indigo-500/[0.04]' : isDownlink ? 'border-indigo-500/20 bg-indigo-500/[0.02]' : isMgmt ? 'border-violet-500/40 bg-violet-500/[0.04]' : isWan ? 'border-glass-border' : 'border-glass-border bg-white/[0.02]'}`}
+            style={isWan ? { borderColor: wanPortColor + '66', backgroundColor: wanPortColor + '08' } : {}}>
 
             {/* Collapsed row */}
             <div className="flex items-center gap-3 px-3 py-2">
@@ -311,6 +319,7 @@ useEffect(() => {
               {isUplink && <ArrowUp size={11} className="text-indigo-400 shrink-0" aria-label="Uplink port" />}
               {isDownlink && !isUplink && <ArrowDown size={11} className="text-indigo-300/60 shrink-0" aria-label="Downlink port" />}
               {isMgmt && <ShieldAlert size={11} className="text-violet-400 shrink-0" aria-label="Management port" />}
+              {isWan && <Globe size={11} className="shrink-0" style={{ color: wanPortColor }} aria-label="WAN port" />}
 
               {/* Port name */}
               <span className="text-sm text-white/80 w-40 truncate shrink-0">{portLabel(port)}</span>
@@ -328,6 +337,12 @@ useEffect(() => {
               {/* PoE */}
               {port.poe_enabled && (
                 <Zap size={11} className="text-amber-400 shrink-0" aria-label="PoE" />
+              )}
+
+              {/* WAN badge */}
+              {isWan && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                  style={{ backgroundColor: wanPortColor + '26', color: wanPortColor }}>WAN</span>
               )}
 
               <span className="flex-1" />
@@ -394,13 +409,50 @@ useEffect(() => {
                     ))}
                   </select>
                 </div>
-                <div className="flex items-center gap-3 pt-4">
-                  <input type="checkbox" id={`poe-${idx}`} checked={port.poe_enabled}
-                    onChange={(e) => update(idx, { poe_enabled: e.target.checked })} className="rounded" />
-                  <label htmlFor={`poe-${idx}`} className="text-sm text-white/60 flex items-center gap-1">
-                    <Zap size={11} className={port.poe_enabled ? 'text-amber-400' : 'text-white/30'} /> PoE Enabled
-                  </label>
-                </div>
+                {isWanCapable ? (
+                  <div>
+                    <label className="block text-[10px] text-white/40 mb-1">Port Mode</label>
+                    <div className="flex gap-2 h-[34px] items-center">
+                      {(['lan', 'wan'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => update(idx, { port_mode: mode })}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                            port.port_mode === mode
+                              ? mode === 'wan' ? 'border' : 'bg-white/10 text-white/70 border border-white/20'
+                              : 'bg-transparent text-white/30 border border-white/10 hover:text-white/50'
+                          }`}
+                          style={port.port_mode === mode && mode === 'wan' ? {
+                            backgroundColor: wanPortColor + '33',
+                            color: wanPortColor,
+                            borderColor: wanPortColor + '66',
+                          } : {}}
+                        >
+                          {mode === 'wan' ? <Globe size={11} /> : <Network size={11} />}
+                          {mode.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 pt-4">
+                    <input type="checkbox" id={`poe-${idx}`} checked={port.poe_enabled}
+                      onChange={(e) => update(idx, { poe_enabled: e.target.checked })} className="rounded" />
+                    <label htmlFor={`poe-${idx}`} className="text-sm text-white/60 flex items-center gap-1">
+                      <Zap size={11} className={port.poe_enabled ? 'text-amber-400' : 'text-white/30'} /> PoE Enabled
+                    </label>
+                  </div>
+                )}
+                {isWanCapable && (
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" id={`poe-${idx}`} checked={port.poe_enabled}
+                      onChange={(e) => update(idx, { poe_enabled: e.target.checked })} className="rounded" />
+                    <label htmlFor={`poe-${idx}`} className="text-sm text-white/60 flex items-center gap-1">
+                      <Zap size={11} className={port.poe_enabled ? 'text-amber-400' : 'text-white/30'} /> PoE Enabled
+                    </label>
+                  </div>
+                )}
                 {port.poe_enabled && (
                   <div>
                     <label className="block text-[10px] text-white/40 mb-1">PoE Budget (W)</label>

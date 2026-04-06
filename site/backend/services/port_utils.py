@@ -34,6 +34,7 @@ def resolve_port(p) -> dict:
         "speed":                  p.speed,
         "notes":                  p.notes,
         "label":                  p.label,
+        "port_mode":              p.port_mode if hasattr(p, 'port_mode') else "lan",
         "is_management":          p.is_management,
         "connected_device_id":    None,
         "connected_device_name":  None,

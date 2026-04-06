@@ -41,7 +41,7 @@ export function Layout({ children }: Props) {
   const authRequired = sysSettings?.auth_required ?? true
 
   const handleLogout = async () => {
-    await api.post('/auth/logout')
+    try { await api.post('/auth/logout') } catch { /* best-effort */ }
     setUser(null)
     navigate('/login')
   }

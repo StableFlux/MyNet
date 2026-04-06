@@ -89,8 +89,31 @@ def apply_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE nics ADD COLUMN dns_server_2 VARCHAR"))
             conn.commit()
 
+        if "mac_conflict_suppressed" not in nic_cols:
+            conn.execute(text("ALTER TABLE nics ADD COLUMN mac_conflict_suppressed BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+        if "transceiver_type" not in nic_cols:
+            conn.execute(text("ALTER TABLE nics ADD COLUMN transceiver_type VARCHAR"))
+            conn.commit()
+        if "transceiver_speed" not in nic_cols:
+            conn.execute(text("ALTER TABLE nics ADD COLUMN transceiver_speed VARCHAR"))
+            conn.commit()
+        if "connection_type" not in nic_cols:
+            conn.execute(text("ALTER TABLE nics ADD COLUMN connection_type VARCHAR"))
+            conn.execute(text("UPDATE nics SET connection_type = 'built-in' WHERE nic_type IN ('ETH', 'WIFI')"))
+            conn.commit()
+            log.info("apply_migrations: connection_type added, existing ETH/WIFI NICs set to built-in")
+        if "nic_speed" not in nic_cols:
+            conn.execute(text("ALTER TABLE nics ADD COLUMN nic_speed VARCHAR"))
+            conn.execute(text("UPDATE nics SET nic_speed = '1GbE' WHERE nic_type = 'ETH'"))
+            conn.commit()
+            log.info("apply_migrations: nic_speed added, existing ETH NICs set to 1GbE")
+
         # ── switch_ports ──────────────────────────────────────────────────────
         sp_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(switch_ports)"))}
+        if "port_mode" not in sp_cols:
+            conn.execute(text("ALTER TABLE switch_ports ADD COLUMN port_mode VARCHAR NOT NULL DEFAULT 'lan'"))
+            conn.commit()
         if "is_management" not in sp_cols:
             conn.execute(text("ALTER TABLE switch_ports ADD COLUMN is_management BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
@@ -238,3 +261,173 @@ def apply_migrations(engine) -> None:
         ))
         conn.execute(text("DELETE FROM device_types WHERE name = 'Storage'"))
         conn.commit()
+
+        # ── events table (unified audit + alert system) ───────────────────────
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "events" not in tables:
+            conn.execute(text("""
+                CREATE TABLE events (
+                    id INTEGER PRIMARY KEY,
+                    severity VARCHAR NOT NULL,
+                    category VARCHAR NOT NULL,
+                    event_type VARCHAR NOT NULL,
+                    entity_type VARCHAR,
+                    entity_id INTEGER,
+                    entity_name VARCHAR(255),
+                    message TEXT NOT NULL,
+                    detail JSON,
+                    username VARCHAR(100),
+                    user_id INTEGER,
+                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+                    resolved_at DATETIME,
+                    resolved_by VARCHAR(100),
+                    acknowledged_at DATETIME,
+                    acknowledged_by INTEGER
+                )
+            """))
+            conn.execute(text("CREATE INDEX ix_events_severity ON events (severity)"))
+            conn.execute(text("CREATE INDEX ix_events_category ON events (category)"))
+            conn.execute(text("CREATE INDEX ix_events_event_type ON events (event_type)"))
+            conn.execute(text("CREATE INDEX ix_events_entity_type ON events (entity_type)"))
+            conn.execute(text("CREATE INDEX ix_events_entity_id ON events (entity_id)"))
+            conn.execute(text("CREATE INDEX ix_events_created_at ON events (created_at)"))
+            conn.execute(text("CREATE INDEX ix_events_resolved_at ON events (resolved_at)"))
+            conn.commit()
+            log.info("apply_migrations: events table created")
+
+            # Migrate audit_log → events (info severity, resolved immediately)
+            if "audit_log" in tables:
+                conn.execute(text("""
+                    INSERT INTO events (severity, category, event_type, entity_type, entity_id, entity_name, message, detail, username, user_id, created_at, resolved_at, resolved_by)
+                    SELECT
+                        'info',
+                        CASE entity_type WHEN 'network' THEN 'network' ELSE 'device' END,
+                        CASE action
+                            WHEN 'create' THEN CASE entity_type WHEN 'network' THEN 'network_created' ELSE 'device_created' END
+                            WHEN 'update' THEN CASE entity_type WHEN 'network' THEN 'network_updated' ELSE 'device_updated' END
+                            WHEN 'delete' THEN CASE entity_type WHEN 'network' THEN 'network_deleted' ELSE 'device_deleted' END
+                            WHEN 'deploy' THEN 'device_deployed'
+                            WHEN 'import_csv' THEN 'device_imported'
+                            ELSE 'device_updated'
+                        END,
+                        entity_type,
+                        entity_id,
+                        entity_name,
+                        COALESCE(entity_type, '') || ' ' || COALESCE(action, '') || ': ' || COALESCE(entity_name, ''),
+                        CASE WHEN new_values IS NOT NULL OR old_values IS NOT NULL
+                            THEN json_object('old_values', old_values, 'new_values', new_values, 'changed_fields', changed_fields)
+                            ELSE NULL END,
+                        username,
+                        user_id,
+                        timestamp,
+                        timestamp,
+                        'system'
+                    FROM audit_log
+                """))
+                conn.commit()
+                log.info("apply_migrations: migrated audit_log → events")
+
+            # Migrate alerts → events
+            if "alerts" in tables:
+                conn.execute(text("""
+                    INSERT INTO events (severity, category, event_type, entity_type, entity_id, message, username, created_at, resolved_at, resolved_by, acknowledged_at, acknowledged_by)
+                    SELECT
+                        CASE severity WHEN 'critical' THEN 'critical' WHEN 'warning' THEN 'warning' ELSE 'info' END,
+                        CASE alert_type
+                            WHEN 'ip_conflict' THEN 'conflict'
+                            WHEN 'mac_conflict' THEN 'conflict'
+                            WHEN 'device_offline' THEN 'monitoring'
+                            WHEN 'device_recovered' THEN 'monitoring'
+                            ELSE 'system'
+                        END,
+                        CASE alert_type
+                            WHEN 'ip_conflict' THEN 'ip_conflict'
+                            WHEN 'mac_conflict' THEN 'mac_conflict'
+                            WHEN 'device_offline' THEN 'device_offline'
+                            WHEN 'device_recovered' THEN 'device_recovered'
+                            ELSE 'system_startup'
+                        END,
+                        'device',
+                        device_id,
+                        message,
+                        'system',
+                        created_at,
+                        acknowledged_at,
+                        CASE WHEN acknowledged_at IS NOT NULL THEN 'acknowledged' ELSE NULL END,
+                        acknowledged_at,
+                        acknowledged_by
+                    FROM alerts
+                """))
+                conn.commit()
+                log.info("apply_migrations: migrated alerts → events")
+
+        # ── wan_configs table ─────────────────────────────────────────────────
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "wan_configs" not in tables:
+            conn.execute(text("""
+                CREATE TABLE wan_configs (
+                    id INTEGER PRIMARY KEY,
+                    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                    switch_port_id INTEGER NOT NULL UNIQUE REFERENCES switch_ports(id) ON DELETE CASCADE,
+                    isp_name VARCHAR,
+                    connection_type VARCHAR,
+                    vlan_id INTEGER,
+                    ip_address VARCHAR,
+                    subnet_mask VARCHAR,
+                    gateway VARCHAR,
+                    pppoe_username VARCHAR,
+                    pppoe_password VARCHAR,
+                    mtu INTEGER,
+                    dns_primary VARCHAR,
+                    dns_secondary VARCHAR,
+                    notes TEXT
+                )
+            """))
+            conn.execute(text("CREATE INDEX ix_wan_configs_device_id ON wan_configs (device_id)"))
+            conn.execute(text("CREATE INDEX ix_wan_configs_switch_port_id ON wan_configs (switch_port_id)"))
+            conn.commit()
+            log.info("apply_migrations: wan_configs table created")
+
+        # ── wan_configs: add speed_down / speed_up / wan_ping_target columns ──
+        wan_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(wan_configs)"))}
+        if "speed_down" not in wan_cols:
+            conn.execute(text("ALTER TABLE wan_configs ADD COLUMN speed_down VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: wan_configs.speed_down added")
+        if "speed_up" not in wan_cols:
+            conn.execute(text("ALTER TABLE wan_configs ADD COLUMN speed_up VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: wan_configs.speed_up added")
+        if "wan_ping_target" not in wan_cols:
+            conn.execute(text("ALTER TABLE wan_configs ADD COLUMN wan_ping_target VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: wan_configs.wan_ping_target added")
+        if "wan_monitoring_enabled" not in wan_cols:
+            conn.execute(text("ALTER TABLE wan_configs ADD COLUMN wan_monitoring_enabled BOOLEAN"))
+            conn.commit()
+            log.info("apply_migrations: wan_configs.wan_monitoring_enabled added")
+
+        # ── system_settings: add wan_port_color ──────────────────────────────
+        ss_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(system_settings)"))}
+        if "wan_port_color" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN wan_port_color VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.wan_port_color added")
+
+        # ── system_settings: add dns_domain ──────────────────────────────────
+        ss_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(system_settings)"))}
+        if "dns_domain" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN dns_domain VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.dns_domain added")
+
+        # ── drop old audit_log and alerts tables after migration ──────────────
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "audit_log" in tables:
+            conn.execute(text("DROP TABLE audit_log"))
+            conn.commit()
+            log.info("apply_migrations: dropped audit_log table")
+        if "alerts" in tables:
+            conn.execute(text("DROP TABLE alerts"))
+            conn.commit()
+            log.info("apply_migrations: dropped alerts table")

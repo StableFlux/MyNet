@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from database import get_db
 from models.user import User
@@ -23,8 +23,21 @@ def device_graph(db: Session = Depends(get_db), _: User = Depends(require_viewer
     Only includes in_service devices.
     """
     from models.device import Device, DeviceStatus
+    from models.nic import Nic
+    from models.switch_port import SwitchPort
 
-    devices = db.query(Device).filter(Device.status == DeviceStatus.in_service).all()
+    devices = (
+        db.query(Device)
+        .filter(Device.status == DeviceStatus.in_service)
+        .options(
+            joinedload(Device.device_type),
+            joinedload(Device.upstream_port),
+            selectinload(Device.switch_ports),
+            selectinload(Device.nics).joinedload(Nic.switch_port_rel).joinedload(SwitchPort.device),
+            selectinload(Device.nics).joinedload(Nic.network),
+        )
+        .all()
+    )
 
     nodes = []
     edges = []

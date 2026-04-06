@@ -15,6 +15,63 @@ router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 STATUS_ORDER = {"down": 0, "timeout": 1, "unknown": 2, "up": 3}
 
 
+@router.get("/wan-summary")
+def wan_monitoring_summary(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_viewer),
+):
+    """WAN connection monitoring summary for the dashboard."""
+    from models.wan_config import WanConfig
+    from sqlalchemy import text
+
+    wan_configs = (
+        db.query(WanConfig)
+        .join(WanConfig.device)
+        .filter(
+            Device.monitoring_enabled.is_(True),
+            WanConfig.wan_monitoring_enabled.isnot(False),
+        )
+        .all()
+    )
+
+    if not wan_configs:
+        return {"total": 0, "online": 0, "offline": 0, "connections": []}
+
+    device_ids = list({wc.device_id for wc in wan_configs})
+    id_list = ",".join(str(i) for i in device_ids)
+
+    last_rows = db.execute(text(f"""
+        SELECT mr.device_id, mr.ip_pinged, mr.status
+        FROM monitoring_results mr
+        INNER JOIN (
+            SELECT device_id, ip_pinged, MAX(id) AS max_id
+            FROM monitoring_results
+            WHERE device_id IN ({id_list})
+            GROUP BY device_id, ip_pinged
+        ) latest ON mr.id = latest.max_id
+    """)).fetchall()
+
+    last_by_key = {(r.device_id, r.ip_pinged): r.status for r in last_rows}
+
+    connections = []
+    for wc in wan_configs:
+        wan_ip = wc.wan_ping_target or "1.1.1.1"
+        status = last_by_key.get((wc.device_id, wan_ip), "unknown")
+        connections.append({
+            "switch_port_id": wc.switch_port_id,
+            "isp_name": wc.isp_name,
+            "status": status,
+        })
+
+    online = sum(1 for c in connections if c["status"] == "up")
+    return {
+        "total": len(connections),
+        "online": online,
+        "offline": len(connections) - online,
+        "connections": connections,
+    }
+
+
 @router.get("/summary")
 def monitoring_summary(
     db: Session = Depends(get_db),
@@ -38,57 +95,68 @@ def monitoring_summary(
         return []
 
     monitored_ids = [d.id for d in monitored]
-    latest_ts_sub = (
-        db.query(
-            MonitoringResult.device_id,
-            func.max(MonitoringResult.timestamp).label("max_ts"),
-        )
-        .filter(MonitoringResult.device_id.in_(monitored_ids))
-        .group_by(MonitoringResult.device_id)
-        .subquery()
-    )
-    latest_results = (
-        db.query(MonitoringResult)
-        .join(
-            latest_ts_sub,
-            (MonitoringResult.device_id == latest_ts_sub.c.device_id)
-            & (MonitoringResult.timestamp == latest_ts_sub.c.max_ts),
-        )
-        .all()
-    )
-    last_by_device = {r.device_id: r for r in latest_results}
+
+    # Build WAN IP exclusion set (same pattern as dashboard)
+    from models.wan_config import WanConfig
+    from sqlalchemy import text as _text
+    wan_ips_by_device: dict[int, set] = {}
+    for wc in db.query(WanConfig).filter(WanConfig.device_id.in_(monitored_ids)).all():
+        wan_ips_by_device.setdefault(wc.device_id, set()).add(wc.wan_ping_target or "1.1.1.1")
+
+    # Get latest result per (device_id, ip_pinged)
+    id_list = ",".join(str(i) for i in monitored_ids)
+    last_rows = db.execute(_text(f"""
+        SELECT mr.device_id, mr.ip_pinged, mr.status, mr.timestamp
+        FROM monitoring_results mr
+        INNER JOIN (
+            SELECT device_id, ip_pinged, MAX(id) AS max_id
+            FROM monitoring_results
+            WHERE device_id IN ({id_list})
+            GROUP BY device_id, ip_pinged
+        ) latest ON mr.id = latest.max_id
+    """)).fetchall()
+
+    last_by_nic: dict[tuple, object] = {
+        (r.device_id, r.ip_pinged): r for r in last_rows
+        if r.ip_pinged not in wan_ips_by_device.get(r.device_id, set())
+    }
+
+    # Use same three-tier NIC resolution as the scheduler so counts match what is actually pinged
+    from services.monitoring_scheduler import resolve_monitor_ips
+    nic_by_ip: dict[tuple, object] = {}
+    for device in monitored:
+        for nic in device.nics:
+            if nic.ip_address and nic.ip_address != "DHCP":
+                nic_by_ip[(device.id, nic.ip_address)] = nic
 
     network_stats: dict[int, dict] = {}
 
     for device in monitored:
-        # Determine the device's primary network
-        primary_net = None
-        for nic in device.nics:
-            if nic.network_id:
-                primary_net = nic.network
-                break
+        monitored_ips = resolve_monitor_ips(device)
+        for ip in monitored_ips:
+            nic = nic_by_ip.get((device.id, ip))
+            net = nic.network if nic and nic.network_id else None
 
-        net_id = primary_net.id if primary_net else 0
-        net_name = primary_net.name if primary_net else "Unassigned"
-        net_color = primary_net.color if primary_net else "#64748b"
+            net_id = net.id if net else 0
+            net_name = net.name if net else "Unassigned"
+            net_color = net.color if net else "#64748b"
 
-        if net_id not in network_stats:
-            network_stats[net_id] = {
-                "network_id": net_id,
-                "network_name": net_name,
-                "color": net_color,
-                "total": 0,
-                "online": 0,
-                "offline": 0,
-            }
+            if net_id not in network_stats:
+                network_stats[net_id] = {
+                    "network_id": net_id,
+                    "network_name": net_name,
+                    "color": net_color,
+                    "total": 0,
+                    "online": 0,
+                    "offline": 0,
+                }
 
-        network_stats[net_id]["total"] += 1
-
-        last = last_by_device.get(device.id)
-        if last and last.status == PingStatus.up:
-            network_stats[net_id]["online"] += 1
-        else:
-            network_stats[net_id]["offline"] += 1
+            network_stats[net_id]["total"] += 1
+            row = last_by_nic.get((device.id, ip))
+            if row and str(row.status) == PingStatus.up:
+                network_stats[net_id]["online"] += 1
+            else:
+                network_stats[net_id]["offline"] += 1
 
     return list(network_stats.values())
 
@@ -187,6 +255,12 @@ def monitored_devices(
             "status": row.status,
         })
 
+    # Load WAN configs for all monitored devices
+    from models.wan_config import WanConfig
+    wan_configs_by_device: dict[int, list] = {}
+    for wc in db.query(WanConfig).filter(WanConfig.device_id.in_(device_ids)).all():
+        wan_configs_by_device.setdefault(wc.device_id, []).append(wc)
+
     results = []
     for device in devices:
         # Resolve monitored NICs — same three-tier logic as the scheduler
@@ -209,7 +283,8 @@ def monitored_devices(
                     monitored_nics.append(nic)
                     break
 
-        if not monitored_nics:
+        wan_configs = wan_configs_by_device.get(device.id, [])
+        if not monitored_nics and not wan_configs:
             continue
 
         # Build per-NIC entries from pre-computed lookups
@@ -223,6 +298,7 @@ def monitored_devices(
 
             nic_entries.append({
                 "nic_id": nic.id,
+                "nic_type": nic.nic_type.value if nic.nic_type else None,
                 "nic_label": nic.label or (nic.nic_type.value if nic.nic_type else None),
                 "ip": ip,
                 "network_name": network.name if network else None,
@@ -235,23 +311,67 @@ def monitored_devices(
                 "sparkline": sparklines_by_nic.get(key, []),
             })
 
-        # Overall device stats: aggregate across all monitored NICs
-        dev_total = sum(agg_by_nic[(device.id, n.ip_address)].total for n in monitored_nics if (device.id, n.ip_address) in agg_by_nic)
-        dev_up = sum(agg_by_nic[(device.id, n.ip_address)].up_count for n in monitored_nics if (device.id, n.ip_address) in agg_by_nic)
-        dev_latencies = [agg_by_nic[(device.id, n.ip_address)].avg_latency for n in monitored_nics if (device.id, n.ip_address) in agg_by_nic and agg_by_nic[(device.id, n.ip_address)].avg_latency is not None]
+        # Add WAN ping target entries
+        for wc in wan_configs:
+            if wc.wan_monitoring_enabled is False:
+                continue
+            wan_ip = wc.wan_ping_target or "1.1.1.1"
+            key = (device.id, wan_ip)
+            last = last_by_nic.get(key)
+            agg = agg_by_nic.get(key)
+            nic_entries.append({
+                "nic_id": None,
+                "nic_label": f"WAN{' – ' + wc.isp_name if wc.isp_name else ''}",
+                "ip": wan_ip,
+                "switch_port_id": wc.switch_port_id,
+                "is_wan_ping": True,
+                "network_name": None,
+                "network_color": None,
+                "vlan_id": None,
+                "status": last.status if last else "unknown",
+                "latency_ms": last.latency_ms if last else None,
+                "uptime_pct": round(agg.up_count / agg.total * 100, 1) if agg and agg.total > 0 else None,
+                "avg_latency": round(float(agg.avg_latency), 2) if agg and agg.avg_latency is not None else None,
+                "sparkline": sparklines_by_nic.get(key, []),
+            })
 
-        # Last result overall = most recent across all monitored NICs
+        if not nic_entries:
+            continue
+
+        # Overall device stats: aggregate across LAN NICs
+        lan_keys = [(device.id, n.ip_address) for n in monitored_nics]
+        dev_total = sum(agg_by_nic[k].total for k in lan_keys if k in agg_by_nic)
+        dev_up = sum(agg_by_nic[k].up_count for k in lan_keys if k in agg_by_nic)
+        dev_latencies = [agg_by_nic[k].avg_latency for k in lan_keys if k in agg_by_nic and agg_by_nic[k].avg_latency is not None]
         last_result = max(
-            [last_by_nic[k] for k in [(device.id, n.ip_address) for n in monitored_nics] if k in last_by_nic],
+            [last_by_nic[k] for k in lan_keys if k in last_by_nic],
             key=lambda r: r.timestamp,
             default=None,
         )
-
-        # Combined sparkline: merge all NIC sparklines, keep last 48 by time
         combined_sparkline = sorted(
-            [pt for n in monitored_nics for pt in sparklines_by_nic.get((device.id, n.ip_address), [])],
+            [pt for k in lan_keys for pt in sparklines_by_nic.get(k, [])],
             key=lambda p: p["t"],
         )[-48:]
+
+        # Fall back to WAN ping stats if no LAN NIC data available
+        if dev_total == 0 and not last_result:
+            wan_keys = [
+                (device.id, wc.wan_ping_target or "1.1.1.1")
+                for wc in wan_configs
+                if wc.wan_monitoring_enabled is not False
+            ]
+            dev_total = sum(agg_by_nic[k].total for k in wan_keys if k in agg_by_nic)
+            dev_up = sum(agg_by_nic[k].up_count for k in wan_keys if k in agg_by_nic)
+            dev_latencies = [agg_by_nic[k].avg_latency for k in wan_keys if k in agg_by_nic and agg_by_nic[k].avg_latency is not None]
+            last_result = max(
+                [last_by_nic[k] for k in wan_keys if k in last_by_nic],
+                key=lambda r: r.timestamp,
+                default=None,
+            )
+            combined_sparkline = sorted(
+                [pt for k in wan_keys for pt in sparklines_by_nic.get(k, [])],
+                key=lambda p: p["t"],
+            )[-48:]
 
         results.append({
             "device_id": device.id,
@@ -308,15 +428,36 @@ def device_monitoring(
             if nic.ip_address:
                 nic_by_ip[nic.ip_address] = nic
 
+    # Load WAN configs to label WAN ping targets
+    from models.wan_config import WanConfig
+    wan_by_ip: dict[str, WanConfig] = {}
+    for wc in db.query(WanConfig).filter(WanConfig.device_id == device_id).all():
+        wan_ip = wc.wan_ping_target or "1.1.1.1"
+        wan_by_ip[wan_ip] = wc
+
     nics_list = []
     for ip in sorted(ip_groups.keys()):
         group = ip_groups[ip]
         nic = nic_by_ip.get(ip)
+        wan = wan_by_ip.get(ip)
         group_last = group[-1]
+        if nic:
+            label = nic.label if nic.label else (nic.nic_type.value if nic.nic_type else None)
+            nic_type = nic.nic_type.value if nic.nic_type else None
+            is_wan_ping = False
+        elif wan:
+            label = f"WAN{' – ' + wan.isp_name if wan.isp_name else ''}"
+            nic_type = "wan"
+            is_wan_ping = True
+        else:
+            label = None
+            nic_type = None
+            is_wan_ping = False
         nics_list.append({
             "nic_id": nic.id if nic else None,
-            "nic_label": (nic.label if nic and nic.label else (nic.nic_type.value if nic and nic.nic_type else None)) if nic else None,
-            "nic_type": nic.nic_type.value if nic and nic.nic_type else None,
+            "nic_label": label,
+            "nic_type": nic_type,
+            "is_wan_ping": is_wan_ping,
             "ip": ip,
             "current_status": group_last.status.value,
             "current_latency": group_last.latency_ms,

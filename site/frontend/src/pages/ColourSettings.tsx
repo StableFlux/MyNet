@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Save, RotateCcw, LucideIcon } from 'lucide-react'
+import { ChevronLeft, Save, RotateCcw, LucideIcon, Globe } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { ColorPicker } from '../components/ColorPicker'
 import {
   DEFAULT_LOCATION_TYPE_COLORS,
   DEFAULT_DEVICE_CATEGORY_COLORS,
   DEFAULT_DEVICE_STATUS_COLORS,
+  DEFAULT_WAN_PORT_COLOR,
   categoryFallbackColor,
 } from '../hooks/useColorSettings'
 import api from '../lib/api'
@@ -192,21 +193,41 @@ function NetworkColorSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) 
     queryKey: ['networks'],
     queryFn: async () => { const { data } = await api.get('/networks'); return data },
   })
+  const { data: sysData } = useQuery({
+    queryKey: ['system-settings'],
+    queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
+  })
 
   const [openId, setOpenId] = useState<number | null>(null)
   const [savingId, setSavingId] = useState<number | null>(null)
+  const [wanOpen, setWanOpen] = useState(false)
+  const [savingWan, setSavingWan] = useState(false)
 
-  const saveColor = async (id: number, hex: string) => {
+  const wanColor: string = sysData?.wan_port_color ?? DEFAULT_WAN_PORT_COLOR
+
+  const saveNetworkColor = async (id: number, hex: string) => {
     setSavingId(id)
     try {
       await api.patch(`/networks/${id}/color`, { color: hex })
       qc.invalidateQueries({ queryKey: ['networks'] })
+    } catch (err: any) {
+      alert(err?.response?.data?.detail ?? 'Failed to save colour')
     } finally {
       setSavingId(null)
     }
   }
 
-  if (networks.length === 0) return null
+  const saveWanColor = async (hex: string) => {
+    setSavingWan(true)
+    try {
+      const { data } = await api.patch('/system-settings', { wan_port_color: hex })
+      qc.setQueryData(['system-settings'], (old: any) => ({ ...old, ...data }))
+    } catch (err: any) {
+      alert(err?.response?.data?.detail ?? 'Failed to save colour')
+    } finally {
+      setSavingWan(false)
+    }
+  }
 
   return (
     <GlassCard className="space-y-4">
@@ -217,9 +238,36 @@ function NetworkColorSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) 
           Changes save immediately.
         </p>
       </div>
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30 mb-1.5 px-1">Network</p>
+      <div className="space-y-4">
+
+        {/* WAN group */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30 mb-1.5 px-1">WAN</p>
         <div className="grid grid-cols-1 gap-2">
+        <div className="rounded-lg border border-white/[0.06] overflow-hidden">
+          <button type="button"
+            onClick={() => setWanOpen(o => !o)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.03] transition-colors text-left">
+            <Globe size={16} className="flex-shrink-0" style={{ color: wanColor }} />
+            <span className="text-xs font-medium flex-1" style={{ color: wanColor }}>WAN</span>
+            <span className="text-[10px] font-mono text-white/25 flex-shrink-0">{wanColor}</span>
+            {savingWan && <span className="text-[10px] text-white/30 flex-shrink-0">Saving…</span>}
+          </button>
+          {wanOpen && (
+            <div className="px-3 pb-3 border-t border-white/[0.06] pt-3"
+              style={{ backgroundColor: wanColor + '0a' }}>
+              <ColorPicker value={wanColor} onChange={saveWanColor} />
+            </div>
+          )}
+        </div>
+        </div>
+        </div>
+
+        {/* Networks group */}
+        {networks.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30 mb-1.5 px-1">Network</p>
+          <div className="grid grid-cols-1 gap-2">
         {networks.map((n: any) => {
           const hex: string = n.color ?? '#6366f1'
           const isOpen = openId === n.id
@@ -238,13 +286,16 @@ function NetworkColorSection({ qc }: { qc: ReturnType<typeof useQueryClient> }) 
               {isOpen && (
                 <div className="px-3 pb-3 border-t border-white/[0.06] pt-3"
                   style={{ backgroundColor: hex + '0a' }}>
-                  <ColorPicker value={hex} onChange={(c) => saveColor(n.id, c)} />
+                  <ColorPicker value={hex} onChange={(c) => saveNetworkColor(n.id, c)} />
                 </div>
               )}
             </div>
           )
         })}
+          </div>
         </div>
+        )}
+
       </div>
     </GlassCard>
   )
@@ -295,6 +346,8 @@ export default function ColourSettings() {
       })
       qc.setQueryData(['system-settings'], (old: any) => ({ ...old, ...data }))
       setDirty(false)
+    } catch (err: any) {
+      alert(err?.response?.data?.detail ?? 'Failed to save colours')
     } finally {
       setSaving(false)
     }

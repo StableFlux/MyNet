@@ -9,7 +9,9 @@ from database import get_db
 from models.location import Location
 from models.device import Device, DeviceStatus
 from models.user import User
+from models.event import EventType
 from services.auth import require_viewer, require_editor
+from services.events import log_event
 
 router = APIRouter(prefix="/api/locations", tags=["locations"])
 
@@ -97,12 +99,16 @@ def list_types(db: Session = Depends(get_db), _: User = Depends(require_viewer))
 
 
 @router.post("", status_code=201)
-def create_location(body: LocationIn, db: Session = Depends(get_db), _: User = Depends(require_editor)):
+def create_location(body: LocationIn, db: Session = Depends(get_db), current_user: User = Depends(require_editor)):
     if body.parent_id and not db.get(Location, body.parent_id):
         raise HTTPException(404, "Parent location not found")
     loc = Location(name=body.name, type=body.type or None, parent_id=body.parent_id)
     db.add(loc)
     try:
+        db.flush()
+        log_event(db, EventType.device_updated, f"Location '{loc.name}' created",
+                  entity_type="location", entity_id=loc.id, entity_name=loc.name,
+                  username=current_user.username, user_id=current_user.id)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -112,7 +118,7 @@ def create_location(body: LocationIn, db: Session = Depends(get_db), _: User = D
 
 
 @router.put("/{location_id}")
-def update_location(location_id: int, body: LocationIn, db: Session = Depends(get_db), _: User = Depends(require_editor)):
+def update_location(location_id: int, body: LocationIn, db: Session = Depends(get_db), current_user: User = Depends(require_editor)):
     loc = db.get(Location, location_id)
     if not loc:
         raise HTTPException(404, "Location not found")
@@ -121,16 +127,33 @@ def update_location(location_id: int, body: LocationIn, db: Session = Depends(ge
             raise HTTPException(400, "A location cannot be its own parent")
         if not db.get(Location, body.parent_id):
             raise HTTPException(404, "Parent location not found")
+        # Check for circular hierarchy
+        ancestor_id = body.parent_id
+        visited = set()
+        while ancestor_id:
+            if ancestor_id in visited:
+                break
+            if ancestor_id == location_id:
+                raise HTTPException(400, "This would create a circular location hierarchy")
+            visited.add(ancestor_id)
+            parent = db.get(Location, ancestor_id)
+            ancestor_id = parent.parent_id if parent else None
     old_name = loc.name
     loc.name = body.name
     loc.type = body.type or None
     loc.parent_id = body.parent_id
-    # Cascade rename to all devices linked by location_id
+    # Cascade rename to all devices linked by location_id or storage_location_id
     if old_name != loc.name:
         db.query(Device).filter(Device.location_id == location_id).update(
             {"location": loc.name}, synchronize_session=False
         )
+        db.query(Device).filter(Device.storage_location_id == location_id).update(
+            {"storage_location": loc.name}, synchronize_session=False
+        )
     try:
+        log_event(db, EventType.device_updated, f"Location '{loc.name}' updated",
+                  entity_type="location", entity_id=loc.id, entity_name=loc.name,
+                  username=current_user.username, user_id=current_user.id)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -141,7 +164,7 @@ def update_location(location_id: int, body: LocationIn, db: Session = Depends(ge
 
 
 @router.delete("/{location_id}", status_code=204)
-def delete_location(location_id: int, db: Session = Depends(get_db), _: User = Depends(require_editor)):
+def delete_location(location_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_editor)):
     loc = db.get(Location, location_id)
     if not loc:
         raise HTTPException(404, "Location not found")
@@ -158,5 +181,15 @@ def delete_location(location_id: int, db: Session = Depends(get_db), _: User = D
         return ids
 
     to_delete = collect_descendants(location_id) + [location_id]
+    # Null out device FK references before deleting to avoid dangling references
+    db.query(Device).filter(Device.location_id.in_(to_delete)).update(
+        {"location_id": None}, synchronize_session=False
+    )
+    db.query(Device).filter(Device.storage_location_id.in_(to_delete)).update(
+        {"storage_location_id": None}, synchronize_session=False
+    )
     db.query(Location).filter(Location.id.in_(to_delete)).delete(synchronize_session="fetch")
+    log_event(db, EventType.device_updated, f"Location '{loc.name}' deleted",
+              entity_type="location", entity_id=loc.id, entity_name=loc.name,
+              username=current_user.username, user_id=current_user.id)
     db.commit()

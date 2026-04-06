@@ -5,11 +5,11 @@ from .device import Device
 from .nic import Nic
 from .switch_port import SwitchPort
 from .monitoring import MonitoringResult
-from .audit import AuditLog
-from .alert import Alert
+from .event import Event
 from .pihole import PiHoleCache
 from .location import Location
 from .system_settings import SystemSettings
+from .wan_config import WanConfig
 
 __all__ = [
     "User",
@@ -19,9 +19,9 @@ __all__ = [
     "Nic",
     "SwitchPort",
     "MonitoringResult",
-    "AuditLog",
-    "Alert",
+    "Event",
     "PiHoleCache",
     "Location",
     "SystemSettings",
+    "WanConfig",
 ]

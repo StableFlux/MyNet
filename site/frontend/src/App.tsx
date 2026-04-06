@@ -20,15 +20,15 @@ import NetworkForm from './pages/NetworkForm'
 import SubnetMap from './pages/SubnetMap'
 import PathTracer from './pages/PathTracer'
 import Monitoring from './pages/Monitoring'
-import AuditLog from './pages/AuditLog'
+import Events from './pages/Events'
 import StockTracker from './pages/StockTracker'
-import Alerts from './pages/Alerts'
 import UserManagement from './pages/UserManagement'
 import Backup from './pages/Backup'
 import Settings from './pages/Settings'
 import Locations from './pages/Locations'
 import LabelExport from './pages/LabelExport'
 import ColourSettings from './pages/ColourSettings'
+import PiholeSettings from './pages/PiholeSettings'
 
 function AppInner() {
   const { user, setUser } = useAuthStore()
@@ -42,16 +42,24 @@ function AppInner() {
       qc.invalidateQueries({ queryKey: ['monitoring'] })
     }
     if (msg.type === 'alert') {
-      qc.invalidateQueries({ queryKey: ['alerts'] })
+      qc.invalidateQueries({ queryKey: ['events'] })
+      qc.invalidateQueries({ queryKey: ['events-count'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
     }
   })
 
   useEffect(() => {
     const init = async () => {
-      // Check if first-run setup is needed
-      const { data: setupCheck } = await api.get('/auth/setup-required')
-      if (setupCheck.setup_required) {
-        setSetupRequired(true)
+      try {
+        // Check if first-run setup is needed
+        const { data: setupCheck } = await api.get('/auth/setup-required')
+        if (setupCheck.setup_required) {
+          setSetupRequired(true)
+          setLoading(false)
+          return
+        }
+      } catch {
+        // Server unreachable — fall through to login
         setLoading(false)
         return
       }
@@ -94,12 +102,12 @@ function AppInner() {
         <Route path="/subnet-map" element={<SubnetMap />} />
         <Route path="/path-tracer" element={<PathTracer />} />
         <Route path="/monitoring" element={<Monitoring />} />
-        <Route path="/settings/audit" element={<AdminRoute><AuditLog /></AdminRoute>} />
         <Route path="/stock" element={<StockTracker />} />
-        <Route path="/alerts" element={<Alerts />} />
+        <Route path="/events" element={<Events />} />
         <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
         <Route path="/settings/locations" element={<AdminRoute><Locations /></AdminRoute>} />
         <Route path="/settings/colours" element={<AdminRoute><ColourSettings /></AdminRoute>} />
+        <Route path="/settings/pihole" element={<AdminRoute><PiholeSettings /></AdminRoute>} />
         <Route path="/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
         <Route path="/backup" element={<AdminRoute><Backup /></AdminRoute>} />
         <Route path="/settings/label-export" element={<AdminRoute><LabelExport /></AdminRoute>} />

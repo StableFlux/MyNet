@@ -24,8 +24,14 @@ def pihole_dashboard(
     """
     from models.device import Device
     from models.pihole import PiHoleCache
+    from sqlalchemy.orm import joinedload
 
-    pihole_devices = db.query(Device).filter(Device.pihole_enabled.is_(True)).all()
+    pihole_devices = (
+        db.query(Device)
+        .filter(Device.pihole_enabled.is_(True))
+        .options(joinedload(Device.pihole_cache))
+        .all()
+    )
     if not pihole_devices:
         return {"enabled": False}
 
@@ -37,7 +43,7 @@ def pihole_dashboard(
     any_blocking_disabled = False
 
     for d in pihole_devices:
-        cache = db.query(PiHoleCache).filter(PiHoleCache.device_id == d.id).first()
+        cache = d.pihole_cache
         if not cache:
             continue
         total_queries += cache.queries_today or 0
@@ -103,20 +109,25 @@ def pihole_status(
     """
     from models.device import Device
     from models.pihole import PiHoleCache
+    from models.nic import Nic
+    from sqlalchemy.orm import joinedload
 
     devices = (
         db.query(Device)
         .filter(Device.pihole_enabled.is_(True))
+        .options(
+            joinedload(Device.pihole_cache),
+            joinedload(Device.nics),
+        )
         .all()
     )
     result = []
     for d in devices:
-        cache = db.query(PiHoleCache).filter(PiHoleCache.device_id == d.id).first()
+        cache = d.pihole_cache
         # Resolve which host will be used for polling
-        from models.nic import Nic
         poll_host = None
         if d.pihole_nic_id:
-            nic = db.get(Nic, d.pihole_nic_id)
+            nic = next((n for n in d.nics if n.id == d.pihole_nic_id), None)
             if nic:
                 poll_host = nic.dns_entry or nic.ip_address
         if not poll_host:
@@ -229,6 +240,118 @@ async def pihole_queries(
     """
     from services.pihole_client import fetch_device_queries
     return await fetch_device_queries(db, device_id, limit)
+
+
+@router.post("/dns/push-to-pihole")
+async def dns_push_to_pihole(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Add a MyNet DNS entry (ip + hostname) to all configured Pi-holes."""
+    from services.pihole_client import push_dns_to_piholes
+    await push_dns_to_piholes(db, body["hostname"], body["ip"])
+    return {"ok": True}
+
+
+@router.post("/dns/update-pihole-ip")
+async def dns_update_pihole_ip(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Update the IP for a hostname on all Pi-holes (removes old entry, adds new)."""
+    from services.pihole_client import update_dns_on_piholes
+    await update_dns_on_piholes(db, body["hostname"], body["ip"])
+    return {"ok": True}
+
+
+@router.delete("/dns/remove-from-pihole")
+async def dns_remove_from_pihole(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Remove all entries for a hostname from all Pi-holes."""
+    from services.pihole_client import remove_dns_from_piholes
+    await remove_dns_from_piholes(db, body["hostname"])
+    return {"ok": True}
+
+
+@router.post("/dns/set-mynet-dns")
+async def dns_set_mynet_dns(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Set the dns_entry on a MyNet NIC to match a Pi-hole hostname."""
+    from services.pihole_client import set_mynet_nic_dns_entry
+    found = await set_mynet_nic_dns_entry(db, body["nic_id"], body["hostname"])
+    if not found:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="NIC not found")
+    return {"ok": True}
+
+
+@router.post("/dns/update-mynet-ip")
+async def dns_update_mynet_ip(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Update the MyNet NIC ip_address for the given hostname to match Pi-hole."""
+    from services.pihole_client import update_mynet_nic_ip
+    found = await update_mynet_nic_ip(db, body["hostname"], body["ip"])
+    if not found:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No MyNet NIC found with that dns_entry")
+    return {"ok": True}
+
+
+@router.get("/dns-comparison")
+async def pihole_dns_comparison(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_viewer),
+):
+    """
+    Fetches custom DNS A records from all configured Pi-hole instances and
+    cross-references them against MyNet NIC dns_entry values.
+    Read-only — no data is written to Pi-hole or MyNet devices.
+    """
+    from services.pihole_client import fetch_dns_comparison
+    return await fetch_dns_comparison(db)
+
+
+@router.post("/dns/apply-domain-to-piholes")
+async def dns_apply_domain_to_piholes(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Append dns_domain suffix to all Pi-hole custom DNS entries that lack it."""
+    from services.pihole_client import apply_domain_to_piholes
+    domain = (body.get("domain") or "").strip()
+    if not domain:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="domain is required")
+    count = await apply_domain_to_piholes(db, domain)
+    return {"ok": True, "updated": count}
+
+
+@router.post("/dns/apply-domain-to-mynet")
+async def dns_apply_domain_to_mynet(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Append dns_domain suffix to all MyNet NIC dns_entries that lack it."""
+    from services.pihole_client import apply_domain_to_mynet_nics
+    domain = (body.get("domain") or "").strip()
+    if not domain:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="domain is required")
+    count = await apply_domain_to_mynet_nics(db, domain)
+    return {"ok": True, "updated": count}
 
 
 @router.get("/test")

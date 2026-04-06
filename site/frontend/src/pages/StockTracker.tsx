@@ -147,8 +147,13 @@ export default function StockTracker() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['devices'] })
+      qc.invalidateQueries({ queryKey: ['search'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: ['monitoring'] })
+      qc.invalidateQueries({ queryKey: ['subnet-map'] })
       setDeployingId(null)
     },
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Deploy failed'),
   })
 
   const all: any[] = devices ?? []

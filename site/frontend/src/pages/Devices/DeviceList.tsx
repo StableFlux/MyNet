@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Plus, X, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, CheckSquare, Square, LayoutGrid, List, AlignJustify, Copy, Check, Cable, Wifi, Layers, MapPin } from 'lucide-react'
+import { Plus, X, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Search, CheckSquare, Square, LayoutGrid, List, AlignJustify, Copy, Check, MapPin } from 'lucide-react'
 import { DeviceCard } from '../../components/DeviceCard'
-import { HARDWARE_TYPE_CATEGORY, LOCATION_TYPE_ICON, STATUS_ICON } from '../../components/DeviceTypeIcon'
+import { HARDWARE_TYPE_CATEGORY, LOCATION_TYPE_ICON, NIC_TYPE_ICON, STATUS_ICON } from '../../components/DeviceTypeIcon'
 import { useSearch } from '../../hooks/useSearch'
 import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
@@ -302,8 +302,7 @@ export default function DeviceList() {
     const ip = nic.address_type === 'dhcp' ? 'DHCP' : (nic.ip_address || '—')
     const ipKey = `ip-${device.id}-${nic.id ?? globalIdx}`
     const macKey = `mac-${device.id}-${nic.id ?? globalIdx}`
-    const nicType = (nic.nic_type ?? '').toUpperCase()
-    const NicIcon = nicType === 'WIFI' ? Wifi : nicType === 'VIRT' ? Layers : Cable
+    const NicIcon = NIC_TYPE_ICON[(nic.nic_type ?? '').toUpperCase()] ?? NIC_TYPE_ICON.ETH
     return (
       <>
         <span className="w-5 flex-shrink-0 flex items-center justify-center text-white/20 mr-1">

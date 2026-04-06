@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Download, Upload, AlertTriangle, CheckCircle, Loader } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import api from '../lib/api'
 
 export default function Backup() {
   const fileRef = useRef<HTMLInputElement>(null)
+  const qc = useQueryClient()
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; message: string; detail?: any } | null>(null)
 
@@ -44,6 +46,7 @@ export default function Backup() {
         message: 'Restore complete',
         detail: r,
       })
+      qc.invalidateQueries()
     } catch (err: any) {
       setResult({
         ok: false,

@@ -34,10 +34,12 @@ def _get_pihole_devices(db: Session) -> list[tuple[int, str, str]]:
     from models.device import Device
     from models.nic import Nic
     from services.encryption import decrypt
+    from sqlalchemy.orm import joinedload
 
     devices = (
         db.query(Device)
         .filter(Device.pihole_enabled.is_(True))
+        .options(joinedload(Device.nics))
         .all()
     )
     result = []
@@ -45,7 +47,7 @@ def _get_pihole_devices(db: Session) -> list[tuple[int, str, str]]:
         # Resolve the API base URL from the selected NIC
         base = None
         if d.pihole_nic_id:
-            nic = db.get(Nic, d.pihole_nic_id)
+            nic = next((n for n in d.nics if n.id == d.pihole_nic_id), None)
             if nic:
                 host = nic.dns_entry or nic.ip_address
                 if host:
@@ -331,6 +333,287 @@ async def fetch_device_queries(db: Session, device_id: int, limit: int = 50) -> 
 
     results.sort(key=lambda x: x["time"] or 0, reverse=True)
     return results[:limit]
+
+
+async def _pihole_add_dns_entry(client: httpx.AsyncClient, url: str, sid: str | None, ip: str, hostname: str) -> None:
+    """Add a custom DNS entry to a Pi-hole instance."""
+    from urllib.parse import quote
+    entry = f"{ip} {hostname}"
+    headers = {"X-FTL-SID": sid} if sid else {}
+    await client.put(
+        f"{url}/api/config/dns/hosts/{quote(entry, safe='')}",
+        headers=headers,
+        timeout=10,
+    )
+
+
+async def _pihole_remove_dns_entry(client: httpx.AsyncClient, url: str, sid: str | None, ip: str, hostname: str) -> None:
+    """Remove a custom DNS entry from a Pi-hole instance."""
+    from urllib.parse import quote
+    entry = f"{ip} {hostname}"
+    headers = {"X-FTL-SID": sid} if sid else {}
+    await client.delete(
+        f"{url}/api/config/dns/hosts/{quote(entry, safe='')}",
+        headers=headers,
+        timeout=10,
+    )
+
+
+async def push_dns_to_piholes(db: Session, hostname: str, ip: str) -> None:
+    """Add a DNS entry (ip → hostname) to all configured Pi-hole instances."""
+    for _, url, password in _get_pihole_devices(db):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                async with _pihole_session(client, url, password) as sid:
+                    await _pihole_add_dns_entry(client, url, sid, ip, hostname)
+        except Exception as e:
+            log.warning(f"Pi-hole DNS add failed ({url}): {e}")
+
+
+async def remove_dns_from_piholes(db: Session, hostname: str) -> None:
+    """
+    Remove all custom DNS entries for the given hostname from all Pi-hole instances.
+    Fetches current entries first to find the correct IP(s) to delete.
+    """
+    for _, url, password in _get_pihole_devices(db):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                async with _pihole_session(client, url, password) as sid:
+                    headers = {"X-FTL-SID": sid} if sid else {}
+                    r = await client.get(f"{url}/api/config/dns/hosts", headers=headers, timeout=10)
+                    data = r.json()
+                    hosts = (
+                        data.get("config", {}).get("dns", {}).get("hosts")
+                        or data.get("hosts")
+                        or []
+                    )
+                    for entry in hosts:
+                        parts = entry.strip().split(None, 1)
+                        if len(parts) == 2 and parts[1].strip().lower() == hostname.lower():
+                            await _pihole_remove_dns_entry(client, url, sid, parts[0], parts[1].strip())
+        except Exception as e:
+            log.warning(f"Pi-hole DNS remove failed ({url}): {e}")
+
+
+async def update_dns_on_piholes(db: Session, hostname: str, new_ip: str) -> None:
+    """
+    Update the IP for a hostname on all Pi-hole instances:
+    removes the old entry and adds the new one.
+    """
+    await remove_dns_from_piholes(db, hostname)
+    await push_dns_to_piholes(db, hostname, new_ip)
+
+
+async def set_mynet_nic_dns_entry(db: Session, nic_id: int, hostname: str) -> bool:
+    """Set the dns_entry on a MyNet NIC by NIC id."""
+    from models.nic import Nic
+    nic = db.get(Nic, nic_id)
+    if not nic:
+        return False
+    nic.dns_entry = hostname
+    db.commit()
+    return True
+
+
+async def update_mynet_nic_ip(db: Session, hostname: str, new_ip: str) -> bool:
+    """
+    Update the ip_address of the MyNet NIC whose dns_entry matches hostname.
+    Returns True if a NIC was found and updated.
+    """
+    from models.nic import Nic
+    nic = (
+        db.query(Nic)
+        .filter(Nic.dns_entry.ilike(hostname))
+        .first()
+    )
+    if not nic:
+        return False
+    nic.ip_address = new_ip
+    db.commit()
+    return True
+
+
+async def fetch_dns_comparison(db: Session) -> list[dict]:
+    """
+    Fetches custom DNS (A) records from all pihole_enabled devices and cross-references
+    them against MyNet NIC dns_entry values.
+
+    Returns a list of rows, one per unique hostname, each containing:
+      hostname, mynet_ip, mynet_device_id, mynet_device_name,
+      pihole_entries: [{pihole_device_id, pihole_device_name, ip}],
+      status: 'match' | 'mynet_only' | 'pihole_only' | 'ip_mismatch' | 'pihole_conflict'
+    """
+    from models.nic import Nic
+    from models.device import Device
+
+    instances = _get_pihole_devices(db)
+
+    # ── Collect custom DNS from every Pi-hole ────────────────────────────────
+    # pihole_map: hostname -> list of {pihole_device_id, pihole_device_name, ip}
+    pihole_map: dict[str, list[dict]] = {}
+
+    for device_id, url, password in instances:
+        device = db.get(Device, device_id)
+        device_name = device.name if device else f"Pi-hole {device_id}"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                async with _pihole_session(client, url, password) as sid:
+                    headers = {"X-FTL-SID": sid} if sid else {}
+                    r = await client.get(f"{url}/api/config/dns/hosts", headers=headers, timeout=10)
+                    data = r.json()
+                    # Response: {"config": {"dns": {"hosts": ["ip hostname", ...]}}}
+                    hosts = (
+                        data.get("config", {}).get("dns", {}).get("hosts")
+                        or data.get("hosts")
+                        or []
+                    )
+                    for entry in hosts:
+                        entry = entry.strip()
+                        if not entry:
+                            continue
+                        parts = entry.split(None, 1)
+                        if len(parts) != 2:
+                            continue
+                        ip, hostname = parts[0].strip(), parts[1].strip().lower()
+                        pihole_map.setdefault(hostname, []).append({
+                            "pihole_device_id": device_id,
+                            "pihole_device_name": device_name,
+                            "ip": ip,
+                        })
+        except Exception as e:
+            log.warning(f"Pi-hole DNS hosts fetch failed ({url}): {e}")
+
+    # ── Collect MyNet NIC dns_entry values ───────────────────────────────────
+    # mynet_map: hostname -> {ip, device_id, device_name}
+    mynet_map: dict[str, dict] = {}
+    nics = (
+        db.query(Nic, Device)
+        .join(Device, Nic.device_id == Device.id)
+        .filter(Nic.dns_entry.isnot(None), Nic.dns_entry != "")
+        .all()
+    )
+    for nic, device in nics:
+        hostname = nic.dns_entry.strip().lower()
+        mynet_map[hostname] = {
+            "ip": nic.ip_address or "",
+            "device_id": device.id,
+            "device_name": device.name,
+        }
+
+    # ── Build a lookup of MyNet NICs by IP (for pihole_only matching) ─────────
+    all_nics = (
+        db.query(Nic, Device)
+        .join(Device, Nic.device_id == Device.id)
+        .filter(Nic.ip_address.isnot(None), Nic.ip_address != "")
+        .all()
+    )
+    nic_by_ip: dict[str, dict] = {}
+    for nic, device in all_nics:
+        if nic.ip_address and nic.ip_address not in nic_by_ip:
+            nic_by_ip[nic.ip_address] = {
+                "nic_id": nic.id,
+                "device_id": device.id,
+                "device_name": device.name,
+            }
+
+    # ── Cross-reference ───────────────────────────────────────────────────────
+    total_piholes = len(instances)
+    all_hostnames = sorted(set(pihole_map) | set(mynet_map))
+    rows = []
+    for hostname in all_hostnames:
+        mynet = mynet_map.get(hostname)
+        pihole_entries = pihole_map.get(hostname, [])
+
+        mynet_ip = mynet["ip"] if mynet else None
+        pihole_ips = {e["ip"] for e in pihole_entries}
+
+        if mynet and not mynet_ip:
+            # MyNet has a dns_entry but the NIC has no IP — can't compare
+            status = "no_ip"
+        elif not mynet and pihole_entries:
+            status = "pihole_only"
+        elif mynet and not pihole_entries:
+            status = "mynet_only"
+        elif len(pihole_ips) > 1:
+            # Multiple Pi-holes disagree with each other
+            status = "pihole_conflict"
+        elif mynet_ip and pihole_ips and mynet_ip not in pihole_ips:
+            status = "ip_mismatch"
+        elif pihole_entries and len(pihole_entries) < total_piholes:
+            # IPs agree but entry is missing from one or more Pi-holes
+            status = "partial"
+        else:
+            status = "match"
+
+        # For pihole_only: check if a MyNet NIC exists with the same IP
+        mynet_nic_match = None
+        if status == "pihole_only" and pihole_entries:
+            pi_ip = pihole_entries[0]["ip"]
+            mynet_nic_match = nic_by_ip.get(pi_ip)
+
+        rows.append({
+            "hostname": hostname,
+            "mynet_ip": mynet_ip,
+            "mynet_device_id": mynet["device_id"] if mynet else None,
+            "mynet_device_name": mynet["device_name"] if mynet else None,
+            "pihole_entries": pihole_entries,
+            "status": status,
+            # Populated for pihole_only rows where a NIC with the same IP exists in MyNet
+            "mynet_nic_id": mynet_nic_match["nic_id"] if mynet_nic_match else None,
+            "mynet_nic_device_id": mynet_nic_match["device_id"] if mynet_nic_match else None,
+            "mynet_nic_device_name": mynet_nic_match["device_name"] if mynet_nic_match else None,
+        })
+
+    return rows
+
+
+async def apply_domain_to_piholes(db: Session, domain: str) -> int:
+    """
+    For every custom DNS entry on all Pi-holes that does NOT already end with
+    `domain`, rename it by appending the suffix (removes old entry, adds new one).
+    Returns the number of entries updated.
+    """
+    instances = _get_pihole_devices(db)
+    count = 0
+    for _, url, password in instances:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                async with _pihole_session(client, url, password) as sid:
+                    headers = {"X-FTL-SID": sid} if sid else {}
+                    r = await client.get(f"{url}/api/config/dns/hosts", headers=headers, timeout=10)
+                    hosts = r.json().get("config", {}).get("dns", {}).get("hosts") or []
+                    for entry in hosts:
+                        parts = entry.strip().split(None, 1)
+                        if len(parts) != 2:
+                            continue
+                        ip, hostname = parts
+                        if hostname.endswith(domain):
+                            continue
+                        new_hostname = hostname + domain
+                        await _pihole_remove_dns_entry(client, url, sid, ip, hostname)
+                        await _pihole_add_dns_entry(client, url, sid, ip, new_hostname)
+                        count += 1
+        except Exception:
+            pass
+    return count
+
+
+async def apply_domain_to_mynet_nics(db: Session, domain: str) -> int:
+    """
+    For every NIC in MyNet that has a dns_entry NOT already ending with `domain`,
+    append the suffix in-place.
+    Returns the number of NICs updated.
+    """
+    from models.nic import Nic
+    nics = db.query(Nic).filter(Nic.dns_entry.isnot(None)).all()
+    count = 0
+    for nic in nics:
+        if nic.dns_entry and not nic.dns_entry.endswith(domain):
+            nic.dns_entry = nic.dns_entry + domain
+            count += 1
+    if count:
+        db.commit()
+    return count
 
 
 async def update_pihole_cache(db: Session):

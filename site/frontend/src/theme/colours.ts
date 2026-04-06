@@ -41,8 +41,18 @@ export const STATUS_COLORS = {
   decommissioned: '#ef4444',
 }
 
-export const SEVERITY_COLORS = {
+export const SEVERITY_COLORS: Record<string, string> = {
+  system: '#64748b',
   info: '#3b82f6',
   warning: '#f59e0b',
   critical: '#ef4444',
+}
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  device: 'Device',
+  network: 'Network',
+  monitoring: 'Monitoring',
+  conflict: 'Conflict',
+  security: 'Security',
+  system: 'System',
 }

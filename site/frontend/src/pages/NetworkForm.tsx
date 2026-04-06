@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
-import { GlassCard } from '../components/GlassCard'
 import api from '../lib/api'
 
 // ---------------------------------------------------------------------------
@@ -202,9 +201,11 @@ export default function NetworkForm() {
       isEdit ? api.put(`/networks/${id}`, payload) : api.post('/networks', payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['networks'] })
+      qc.invalidateQueries({ queryKey: ['subnet-map'] })
       if (isEdit) qc.invalidateQueries({ queryKey: ['network', id] })
       navigate('/networks')
     },
+    onError: (err: any) => alert(err?.response?.data?.detail ?? 'Save failed'),
   })
 
   // Validation
@@ -521,22 +522,6 @@ export default function NetworkForm() {
         />
       </Section>
 
-      {/* Preview bar */}
-      <GlassCard className="flex items-center gap-4 py-3">
-        <div
-          className="accent-bar w-1 h-10 rounded-full flex-shrink-0"
-          style={{ '--accent': form.color } as React.CSSProperties}
-        />
-        <div>
-          <p className="text-sm font-semibold text-white">{form.name || 'Network Name'}</p>
-          <p className="text-xs text-white/40 font-mono">
-            {form.vlan_id ? `VLAN ${form.vlan_id}` : 'No VLAN'}{form.cidr ? ` — ${form.cidr}` : ''}
-          </p>
-        </div>
-        <div className="ml-auto">
-          <span className="text-[10px] text-white/30">Preview</span>
-        </div>
-      </GlassCard>
     </form>
   )
 }

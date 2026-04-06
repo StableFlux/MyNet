@@ -3,91 +3,150 @@ import {
   Home, Building2, DoorOpen, Server, Layers, Inbox, Box, Archive, Database,
   Wrench, Car, TreePine, FlaskConical, MapPin, Package,
   CheckCircle, XCircle, Clock,
-  // Hardware type icons
-  CircuitBoard, Monitor, Laptop, MonitorDot,
-  Network, Router, Wifi, Shield, Cable,
+  // Compute
+  CircuitBoard, Monitor, Laptop, MonitorDot, PcCase,
+  // Networking
+  Network, Router, Wifi, Shield, ShieldAlert, Cable, Globe, Signal,
+  // Storage
+  HardDrive,
+  // Mobile / Wearable
   Smartphone, Tablet, Watch,
+  // Smart Home / IoT
   Volume2, Bot, ToggleRight, Plug, Activity, Cpu,
-  Camera, HardDrive, Tv, Projector,
-  Printer, Scan, BatteryCharging,
-  PcCase,
+  Lightbulb, Thermometer, Lock, Droplets, Wind, Sun, Filter,
+  // A/V / Entertainment
+  Camera, Tv, Tv2, Projector, Film, Cast, Music, Headphones, Radio, PlayCircle,
+  // Peripherals
+  Printer, Scan, ScanLine, BatteryCharging, Battery, PenTool, Tag,
+  // Power
+  Zap, ZapOff, Gauge,
+  // Servers & VMs
+  Terminal, GitBranch, Loader,
+  // Security
+  Bell, PhoneCall,
+  // Misc
+  BookOpen, Gamepad2,
 } from 'lucide-react'
 
 // Static lookup replaces `import * as LucideIcons` — enables tree-shaking.
-// Add an entry here whenever a new icon name is used in HARDWARE_TYPE_ICON.
+// Add an entry here whenever a new icon name appears in the backend seed data.
 const HARDWARE_ICON_MAP: Record<string, LucideIcon> = {
-  'circuit-board':    CircuitBoard,
-  'pc-case':          PcCase,
-  'monitor':          Monitor,
-  'laptop':           Laptop,
-  'server':           Server,
-  'monitor-dot':      MonitorDot,
-  'network':          Network,
-  'router':           Router,
-  'wifi':             Wifi,
-  'shield':           Shield,
-  'cable':            Cable,
-  'database':         Database,
-  'archive':          Archive,
-  'smartphone':       Smartphone,
-  'tablet':           Tablet,
-  'watch':            Watch,
-  'volume-2':         Volume2,
-  'bot':              Bot,
-  'toggle-right':     ToggleRight,
-  'plug':             Plug,
-  'activity':         Activity,
-  'cpu':              Cpu,
-  'camera':           Camera,
-  'hard-drive':       HardDrive,
-  'tv':               Tv,
-  'projector':        Projector,
-  'printer':          Printer,
-  'layers':           Layers,
-  'scan':             Scan,
+  // ── Compute ─────────────────────────────────────────────────────────────────
+  'circuit-board':  CircuitBoard,
+  'pc-case':        PcCase,
+  'monitor':        Monitor,
+  'monitor-dot':    MonitorDot,
+  'laptop':         Laptop,
+  'server':         Server,
+  'terminal':       Terminal,
+  'git-branch':     GitBranch,
+  'loader':         Loader,
+  // ── Networking ───────────────────────────────────────────────────────────────
+  'network':        Network,
+  'router':         Router,
+  'wifi':           Wifi,
+  'shield':         Shield,
+  'shield-alert':   ShieldAlert,
+  'cable':          Cable,
+  'signal':         Signal,
+  // ── Storage ───────────────────────────────────────────────────────────────────
+  'database':       Database,
+  'archive':        Archive,
+  'hard-drive':     HardDrive,
+  // ── Mobile / Wearable ─────────────────────────────────────────────────────────
+  'smartphone':     Smartphone,
+  'tablet':         Tablet,
+  'watch':          Watch,
+  // ── Smart Home / IoT ──────────────────────────────────────────────────────────
+  'volume-2':       Volume2,
+  'bot':            Bot,
+  'toggle-right':   ToggleRight,
+  'plug':           Plug,
+  'activity':       Activity,
+  'cpu':            Cpu,
+  'lightbulb':      Lightbulb,
+  'thermometer':    Thermometer,
+  'lock':           Lock,
+  'droplets':       Droplets,
+  'wind':           Wind,
+  'sun':            Sun,
+  'filter':         Filter,
+  // ── A/V / Entertainment ───────────────────────────────────────────────────────
+  'camera':         Camera,
+  'tv':             Tv,
+  'tv-2':           Tv2,
+  'projector':      Projector,
+  'film':           Film,
+  'cast':           Cast,
+  'music':          Music,
+  'headphones':     Headphones,
+  'radio':          Radio,
+  'play-circle':    PlayCircle,
+  // ── Peripherals ───────────────────────────────────────────────────────────────
+  'printer':        Printer,
+  'scan':           Scan,
+  'scan-line':      ScanLine,
+  'layers':         Layers,
   'battery-charging': BatteryCharging,
+  'battery':        Battery,
+  'pen-tool':       PenTool,
+  'tag':            Tag,
+  // ── Power ─────────────────────────────────────────────────────────────────────
+  'zap':            Zap,
+  'zap-off':        ZapOff,
+  'gauge':          Gauge,
+  // ── Security ──────────────────────────────────────────────────────────────────
+  'bell':           Bell,
+  'phone-call':     PhoneCall,
+  // ── Misc ──────────────────────────────────────────────────────────────────────
+  'book-open':      BookOpen,
+  'gamepad-2':      Gamepad2,
+  'box':            Box,
+  'globe':          Globe,
+  'layout':         Layers,   // 'layout' legacy name — map to Layers as closest equivalent
+  'package':        Package,
 }
 
 export const HARDWARE_TYPE_ICON: Record<string, string> = {
   // ── Compute ───────────────────────────────────────────────────────────────
-  'SBC': 'circuit-board',    // matches SBC (Raspberry Pi) sub-type
-  'Mini PC': 'pc-case',       // no sub-type; dedicated PC case icon
-  'Desktop': 'monitor',      // matches Windows/Mac/Linux PC (Desktop) sub-types
-  'Laptop': 'laptop',        // matches all Laptop sub-types
-  'Server': 'server',        // matches Server sub-types
-  'Workstation': 'monitor-dot', // no sub-type; dot distinguishes from plain Desktop
-  'Thin Client': 'monitor',  // no sub-type equivalent
+  'SBC': 'circuit-board',
+  'Mini PC': 'pc-case',
+  'Desktop': 'monitor',
+  'Laptop': 'laptop',
+  'Server': 'server',
+  'Workstation': 'monitor-dot',
+  'Thin Client': 'monitor',
   // ── Networking ────────────────────────────────────────────────────────────
-  'Network Switch': 'network',  // matches Network Switch sub-type
-  'Router': 'router',           // matches Router / Gateway sub-type
-  'Wireless AP': 'wifi',        // matches Access Point sub-type
-  'Firewall': 'shield',         // matches Firewall sub-type
-  'Modem': 'cable',             // no sub-type equivalent
+  'Network Switch': 'network',
+  'Router': 'router',
+  'Wireless AP': 'wifi',
+  'Firewall': 'shield',
+  'Modem': 'cable',
   // ── Storage ───────────────────────────────────────────────────────────────
-  'NAS': 'database',     // matches NAS sub-type
-  'DAS': 'archive',      // no sub-type; archive distinguishes from NAS
+  'NAS': 'database',
+  'DAS': 'archive',
   // ── Mobile / Wearable ─────────────────────────────────────────────────────
-  'Mobile': 'smartphone',  // matches Phone sub-type
-  'Tablet': 'tablet',      // matches Tablet sub-type
-  'Wearable': 'watch',     // matches Watch sub-type
+  'Mobile': 'smartphone',
+  'Tablet': 'tablet',
+  'Wearable': 'watch',
   // ── Smart Home / IoT ──────────────────────────────────────────────────────
-  'Smart Speaker': 'volume-2',    // matches Smart Speaker (IoT) sub-type
-  'Smart Assistant': 'bot',       // no sub-type equivalent
-  'Smart Switch': 'toggle-right', // matches Switch / Plug (IoT) sub-type
-  'Smart Plug': 'plug',           // semantically distinct from switch
-  'Sensor': 'activity',           // matches Sensor (IoT) sub-type
-  'Microcontroller': 'cpu',       // matches Microcontroller sub-type
+  'Smart Speaker': 'volume-2',
+  'Smart Assistant': 'bot',
+  'Smart Switch': 'toggle-right',
+  'Smart Plug': 'plug',
+  'Sensor': 'activity',
+  'Microcontroller': 'cpu',
   // ── A/V ───────────────────────────────────────────────────────────────────
-  'Camera': 'camera',      // matches IP Camera / Camera sub-types
-  'NVR': 'hard-drive',     // matches NVR sub-type
-  'Media Player': 'tv',    // matches Media Player (IoT) sub-type
-  'Display': 'monitor',    // matches Display (IoT) sub-type
-  'Projector': 'projector',// matches Projector sub-type
+  'Camera': 'camera',
+  'NVR': 'hard-drive',
+  'Media Player': 'tv',
+  'Display': 'monitor',
+  'Projector': 'projector',
   // ── Peripherals ───────────────────────────────────────────────────────────
-  'Printer': 'printer',    // matches Printer (Document) sub-type
-  '3D Printer': 'layers',  // matches Printer (3D) sub-type
-  'Scanner': 'scan',       // matches Scanner sub-type
-  'UPS': 'battery-charging', // matches UPS sub-type
+  'Printer': 'printer',
+  '3D Printer': 'layers',
+  'Scanner': 'scan',
+  'UPS': 'battery-charging',
 }
 
 export const HARDWARE_TYPE_CATEGORY: Record<string, string> = {
@@ -154,6 +213,15 @@ export const LOCATION_TYPE_ICON: Record<string, LucideIcon> = {
   'Box':         Box,
   'Bin':         Box,
   'Cupboard':    Package,
+}
+
+export const NIC_TYPE_ICON: Record<string, LucideIcon> = {
+  ETH:  Cable,
+  WIFI: Wifi,
+  VIRT: Layers,
+  SFP:  Cable,
+  QSFP: Cable,
+  WAN:  Globe,
 }
 
 export const STATUS_ICON: Record<string, LucideIcon> = {

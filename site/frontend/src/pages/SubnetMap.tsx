@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Wifi, Cable, Server } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import { NIC_TYPE_ICON } from '../components/DeviceTypeIcon'
 import { DEVICE_TYPE_COLORS } from '../theme/colours'
+import { useSubnetMapStore } from '../store/subnetMapStore'
 import api from '../lib/api'
 
 function StatusPip({ status }: { status: string }) {
@@ -18,11 +20,7 @@ function StatusPip({ status }: { status: string }) {
 export default function SubnetMap() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [selectedNetworkId, setSelectedNetworkId] = useState<number | null>(
-    searchParams.get('network') ? Number(searchParams.get('network')) : null
-  )
-  const [showFree, setShowFree] = useState(false)
-  const [showDhcp, setShowDhcp] = useState(false)
+  const { selectedNetworkId, showFree, showDhcp, setSelectedNetworkId, setShowFree, setShowDhcp } = useSubnetMapStore()
 
   const { data: networks } = useQuery({
     queryKey: ['networks'],
@@ -31,10 +29,13 @@ export default function SubnetMap() {
   })
 
   useEffect(() => {
-    if (!selectedNetworkId && networks?.length) {
+    const paramId = searchParams.get('network') ? Number(searchParams.get('network')) : null
+    if (paramId) {
+      setSelectedNetworkId(paramId)
+    } else if (!selectedNetworkId && networks?.length) {
       setSelectedNetworkId(networks[0].id)
     }
-  }, [networks])
+  }, [networks, searchParams])
 
   const { data: mapData, isLoading, error } = useQuery({
     queryKey: ['subnet-map', selectedNetworkId],
@@ -131,6 +132,9 @@ export default function SubnetMap() {
                   <span className="text-xs text-white/50">{dhcp.length} DHCP range</span>
                 </div>
               )}
+              {mapData?.truncated && (
+                <span className="text-xs text-amber-400/80">Showing first 1,024 of {mapData.total_hosts.toLocaleString()} hosts</span>
+              )}
               {mapData?.cidr && (
                 <span className="text-xs font-mono text-white/30">{mapData.cidr}</span>
               )}
@@ -139,7 +143,7 @@ export default function SubnetMap() {
             {/* Toggles */}
             <div className="ml-auto flex items-center gap-2">
               <button type="button"
-                onClick={() => setShowFree(v => !v)}
+                onClick={() => setShowFree(!showFree)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   showFree
                     ? 'bg-white/10 border-white/20 text-white/70'
@@ -149,7 +153,7 @@ export default function SubnetMap() {
               </button>
               {dhcp.length > 0 && (
                 <button type="button"
-                  onClick={() => setShowDhcp(v => !v)}
+                  onClick={() => setShowDhcp(!showDhcp)}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                     showDhcp
                       ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
@@ -211,7 +215,7 @@ export default function SubnetMap() {
                         </span>
                       </div>
                       <span className="flex items-center gap-1 text-white/25 group-hover:text-white/45 transition-colors">
-                        {entry.nic_type === 'WIFI' ? <Wifi size={12} /> : entry.nic_type === 'VIRT' ? <Server size={12} /> : <Cable size={12} />}
+                        {(() => { const I = NIC_TYPE_ICON[(entry.nic_type ?? '').toUpperCase()] ?? NIC_TYPE_ICON.ETH; return <I size={12} /> })()}
                         <span className="font-mono text-xs truncate">{entry.nic_label ?? ''}</span>
                       </span>
                       <span className="font-mono text-xs text-white/20 truncate group-hover:text-white/40 transition-colors">

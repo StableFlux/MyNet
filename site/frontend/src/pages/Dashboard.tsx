@@ -11,21 +11,43 @@ import {
 } from 'recharts'
 import { GlassCard } from '../components/GlassCard'
 import { DEVICE_TYPE_COLORS } from '../theme/colours'
+
 import api from '../lib/api'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const actionColors: Record<string, string> = {
-  create: 'text-emerald-400',
-  deploy: 'text-sky-400',
-  update: 'text-amber-400',
-  delete: 'text-red-400',
-  import: 'text-purple-400',
+const eventTypeColors: Record<string, string> = {
+  device_created: 'text-emerald-400',
+  device_deployed: 'text-sky-400',
+  device_updated: 'text-amber-400',
+  device_deleted: 'text-red-400',
+  device_imported: 'text-purple-400',
+  device_offline: 'text-red-400',
+  device_recovered: 'text-emerald-400',
+  wan_offline: 'text-red-400',
+  wan_recovered: 'text-emerald-400',
+  network_created: 'text-emerald-400',
+  network_updated: 'text-amber-400',
+  network_deleted: 'text-red-400',
+  ip_conflict: 'text-red-400',
+  ip_conflict_resolved: 'text-emerald-400',
+  mac_conflict: 'text-amber-400',
+  mac_conflict_resolved: 'text-emerald-400',
+  mac_conflict_suppressed: 'text-sky-400',
+  system_startup: 'text-slate-400',
+  backup_created: 'text-slate-400',
+  backup_restored: 'text-purple-400',
 }
-const actionLabels: Record<string, string> = {
-  create: 'Created', update: 'Updated', delete: 'Deleted',
-  import: 'Imported', deploy: 'Deployed',
+const eventTypeLabels: Record<string, string> = {
+  device_created: 'Created', device_updated: 'Updated', device_deleted: 'Deleted',
+  device_deployed: 'Deployed', device_imported: 'Imported',
+  device_offline: 'Offline', device_recovered: 'Recovered',
+  wan_offline: 'WAN Offline', wan_recovered: 'WAN Recovered',
+  network_created: 'Created', network_updated: 'Updated', network_deleted: 'Deleted',
+  ip_conflict: 'IP Conflict', ip_conflict_resolved: 'Resolved',
+  mac_conflict: 'MAC Conflict', mac_conflict_resolved: 'Resolved', mac_conflict_suppressed: 'Suppressed',
+  system_startup: 'Startup', backup_created: 'Backup', backup_restored: 'Restored',
 }
 
 function timeAgo(iso: string) {
@@ -47,8 +69,11 @@ function StatCard({ label, value, sub, icon: Icon, color, to, alert }: {
 }) {
   const navigate = useNavigate()
   return (
-    <GlassCard hover onClick={() => navigate(to)}
-      className={`flex items-center gap-4 ${alert ? 'border-red-500/30' : ''}`}>
+    <div
+      onClick={() => navigate(to)}
+      className={`glass-card glass-card-interactive cursor-pointer p-5 flex items-center gap-4 ${alert ? 'border-red-500/40' : ''}`}
+      style={alert ? { background: 'linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%)' } : undefined}
+    >
       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: `${color}22`, border: `1px solid ${color}44` }}>
         <Icon size={18} style={{ color }} />
@@ -58,7 +83,7 @@ function StatCard({ label, value, sub, icon: Icon, color, to, alert }: {
         <p className="text-xs text-white/40 mt-0.5">{label}</p>
         {sub && <p className="text-[10px] text-white/25 mt-0.5 truncate">{sub}</p>}
       </div>
-    </GlassCard>
+    </div>
   )
 }
 
@@ -88,7 +113,7 @@ export default function Dashboard() {
   const { data: s } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => { const { data } = await api.get('/dashboard'); return data },
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,
   })
   const { data: health = [] } = useQuery({
     queryKey: ['monitoring', 'summary'],
@@ -107,7 +132,9 @@ export default function Dashboard() {
     enabled: !!pihole?.enabled,
   })
 
+
   const networks: any[] = s?.networks ?? []
+  const activeEventList: any[] = s?.active_event_list ?? []
   const byCategory: any[] = s?.by_category ?? []
   const byBrand: any[] = s?.by_brand ?? []
   const offline: any[] = s?.offline_devices ?? []
@@ -120,8 +147,17 @@ export default function Dashboard() {
   const monitoringOk = (s?.monitoring_online ?? 0) === (s?.monitoring_total ?? 0)
   const monitoringColor = offline.length > 0 ? '#ef4444' : '#10b981'
 
+  const wanAnyDown = (s?.wan_summary?.total ?? 0) > 0 && (s?.wan_summary?.online ?? 0) < (s?.wan_summary?.total ?? 0)
+  const hasCritical = offline.length > 0 || (s?.critical_events ?? 0) > 0 || wanAnyDown
+  const hasWarning = !hasCritical && (s?.warning_events ?? 0) > 0
+  const dashBg = hasCritical
+    ? 'linear-gradient(135deg, #2a0e0e 0%, #1a0808 100%)'
+    : hasWarning
+    ? 'linear-gradient(135deg, #252008 0%, #181500 100%)'
+    : undefined
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 -m-6 p-6 min-h-full" style={{ background: dashBg }}>
 
       {/* ── Page header ── */}
       <div className="flex items-center justify-between">
@@ -136,51 +172,83 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ── Offline alert banner ── */}
-      {offline.length > 0 && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/[0.07] px-4 py-3 flex items-center gap-3">
-          <WifiOff size={16} className="text-red-400 flex-shrink-0" />
-          <p className="text-sm text-red-300 flex-1">
-            <span className="font-semibold">{offline.length} device{offline.length !== 1 ? 's' : ''} offline</span>
-            {' — '}{offline.map(d => d.name).join(', ')}
-          </p>
-          <button onClick={() => navigate('/monitoring')}
-            className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 flex-shrink-0 transition-colors">
-            Monitor <ChevronRight size={11} />
-          </button>
-        </div>
-      )}
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <StatCard label="In Service" value={s?.in_service ?? 0}
           sub={`${s?.decommissioned_count ?? 0} decommissioned`}
           icon={Monitor} color="#6366f1" to="/devices" />
+        <StatCard label="Stock" value={(s?.stock_count ?? 0) + (s?.undeployed_count ?? 0)}
+          sub={`${s?.stock_count ?? 0} in stock · ${s?.undeployed_count ?? 0} undeployed`}
+          icon={Package} color="#f59e0b" to="/stock" />
         <StatCard label="Networks" value={networks.length}
           sub={networks.map((n: any) => n.vlan_id ? `VLAN ${n.vlan_id}` : n.name).slice(0, 3).join(' · ')}
           icon={Network} color="#06b6d4" to="/networks" />
+        {/* WAN Monitoring card */}
+        {(() => {
+          const total = s?.wan_summary?.total ?? 0
+          const online = s?.wan_summary?.online ?? 0
+          const allUp = total > 0 && online === total
+          const anyDown = total > 0 && online < total
+          const statusColor = anyDown ? '#ef4444' : total > 0 ? '#10b981' : '#64748b'
+          const isps = (s?.wan_summary?.connections ?? []).map((c: any) => c.isp_name).filter(Boolean)
+          const sub = total === 0 ? 'No WAN configured' : allUp ? 'All connections online' : `${total - online} offline`
+          return (
+            <div
+              onClick={() => navigate('/monitoring')}
+              className={`glass-card glass-card-interactive cursor-pointer p-5 flex items-center gap-4 ${anyDown ? 'border-red-500/40' : ''}`}
+              style={anyDown ? { background: 'linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%)' } : undefined}
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: `${statusColor}22`, border: `1px solid ${statusColor}44` }}>
+                {anyDown ? <WifiOff size={18} style={{ color: statusColor }} /> : <CheckCircle2 size={18} style={{ color: statusColor }} />}
+              </div>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold text-white leading-none">{total === 0 ? '—' : `${online}/${total}`}</p>
+                <p className="text-xs text-white/40 mt-0.5">WAN Monitoring</p>
+                <p className="text-[10px] text-white/25 mt-0.5 truncate">{isps.length > 0 ? isps.slice(0, 3).join(' · ') : sub}</p>
+              </div>
+            </div>
+          )
+        })()}
         <StatCard
-          label="Monitoring"
+          label="LAN Monitoring"
           value={s?.monitoring_total ? `${s.monitoring_online}/${s.monitoring_total}` : '—'}
           sub={monitoringOk ? 'All devices online' : `${offline.length} offline`}
           icon={monitoringOk ? CheckCircle2 : WifiOff}
           color={monitoringColor} to="/monitoring" alert={!monitoringOk} />
-        <StatCard label="Alerts" value={s?.unread_alerts ?? 0}
-          sub={s?.critical_alerts ? `${s.critical_alerts} critical` : s?.warning_alerts ? `${s.warning_alerts} warning` : 'All clear'}
-          icon={s?.critical_alerts ? ShieldAlert : Bell}
-          color={s?.critical_alerts ? '#ef4444' : s?.warning_alerts ? '#f59e0b' : '#6366f1'}
-          to="/alerts" alert={!!s?.critical_alerts} />
-        <StatCard label="Stock" value={(s?.stock_count ?? 0) + (s?.undeployed_count ?? 0)}
-          sub={`${s?.stock_count ?? 0} in stock · ${s?.undeployed_count ?? 0} undeployed`}
-          icon={Package} color="#f59e0b" to="/stock" />
+        {/* Events card */}
+        <div
+          onClick={() => navigate('/events?active_only=true')}
+          className={`glass-card glass-card-interactive cursor-pointer p-5 flex items-center gap-4 ${hasCritical ? 'border-red-500/40' : hasWarning ? 'border-amber-500/40' : ''}`}
+          style={hasCritical ? { background: 'linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%)' } : hasWarning ? { background: 'linear-gradient(135deg, #2a2008 0%, #1a1500 100%)' } : undefined}
+        >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: `${hasCritical ? '#ef4444' : hasWarning ? '#f59e0b' : '#6366f1'}22`, border: `1px solid ${hasCritical ? '#ef4444' : hasWarning ? '#f59e0b' : '#6366f1'}44` }}>
+            {hasCritical ? <ShieldAlert size={18} style={{ color: '#ef4444' }} /> : <Bell size={18} style={{ color: hasWarning ? '#f59e0b' : '#6366f1' }} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-2xl font-bold text-white leading-none">{s?.active_events ?? 0}</p>
+            <p className="text-xs text-white/40 mt-0.5">Active Events</p>
+            {activeEventList.length === 0 && (
+              <p className="text-[10px] text-white/25 mt-0.5">All clear</p>
+            )}
+            {activeEventList.length > 0 && (
+              <p className="text-[10px] text-white/50 mt-0.5 truncate">
+                {activeEventList[0].message}
+                {activeEventList.length > 1 && <span className="text-white/25"> · +{activeEventList.length - 1} more</span>}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* ── Main 4-col grid: 1/4 | 1/2 | 1/4 ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 items-start">
+      {/* ── Main grid: 4-col with Pi-hole, 3-col without ── */}
+      <div className={`grid grid-cols-1 gap-5 items-start ${pihole?.enabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
 
-        {/* ── Col 1 (1/4): Offline + Networks + Monitoring Health ── */}
+        {/* ── Col 1: Networks (always) + Offline + Health (Pi-hole layout only) ── */}
         <div className="space-y-5">
-          {offline.length > 0 && (
+          {pihole?.enabled && offline.length > 0 && (
             <GlassCard className="border-red-500/20">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -205,7 +273,7 @@ export default function Dashboard() {
               </div>
             </GlassCard>
           )}
-          {health.length > 0 && (
+          {pihole?.enabled && health.length > 0 && (
             <GlassCard>
               <SectionHeader title="Monitoring Health" to="/monitoring" />
               <div className="space-y-2">
@@ -260,10 +328,95 @@ export default function Dashboard() {
           </GlassCard>
         </div>
 
-        {/* ── Col 2–3 (1/2): DNS Protection ── */}
+        {/* ── Col 2 (no Pi-hole only): Offline + Monitoring Health + Recently Added ── */}
+        {!pihole?.enabled && (
+          <div className="space-y-5">
+            {offline.length > 0 && (
+              <GlassCard className="border-red-500/20">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <WifiOff size={13} className="text-red-400" />
+                    Offline Devices
+                    <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full tabular-nums">{offline.length}</span>
+                  </h2>
+                  <button onClick={() => navigate('/monitoring')}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">
+                    Monitor <ChevronRight size={12} />
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {offline.map((d: any) => (
+                    <button key={d.id} type="button" onClick={() => navigate(`/devices/${d.id}`)}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-red-500/[0.06] border border-red-500/15 hover:bg-red-500/10 transition-colors text-left">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse flex-shrink-0" />
+                      <span className="text-sm text-white/80 flex-1 truncate">{d.name}</span>
+                      <span className="text-[10px] text-white/30 flex-shrink-0">{timeAgo(d.last_seen)}</span>
+                    </button>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+            {health.length > 0 && (
+              <GlassCard>
+                <SectionHeader title="Monitoring Health" to="/monitoring" />
+                <div className="space-y-2">
+                  {health.map((stat: any) => {
+                    const pct = stat.total > 0 ? Math.round(((stat.total - stat.offline) / stat.total) * 100) : 100
+                    const allOk = stat.offline === 0
+                    return (
+                      <div key={stat.network_id}
+                        className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: stat.color }} />
+                            <span className="text-xs text-white/70 truncate">{stat.network_name}</span>
+                          </div>
+                          <span className={`text-xs font-medium ${allOk ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {allOk ? 'All OK' : `${stat.offline} down`}
+                          </span>
+                        </div>
+                        <div className="h-1 rounded-full bg-white/5 overflow-hidden">
+                          <div className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, backgroundColor: allOk ? '#10b981' : '#ef4444' }} />
+                        </div>
+                        <p className="text-[10px] text-white/25">{stat.total - stat.offline}/{stat.total} online</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </GlassCard>
+            )}
+            {recentDevices.length > 0 && (
+              <GlassCard>
+                <SectionHeader title="Recently Added" to="/devices" label="All devices" />
+                <div className="space-y-1">
+                  {recentDevices.map((d: any) => (
+                    <button key={d.id} type="button" onClick={() => navigate(`/devices/${d.id}`)}
+                      className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/[0.04] transition-colors text-left group">
+                      <div className="w-6 h-6 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                        <Server size={10} className="text-indigo-400/70" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-white/80 truncate group-hover:text-white/95 transition-colors">{d.name}</p>
+                        <p className="text-[10px] text-white/30 truncate">
+                          {[d.brand, d.model].filter(Boolean).join(' ')}
+                          {d.location && <span className="ml-1">· {d.location}</span>}
+                        </p>
+                      </div>
+                      {d.created_at && (
+                        <span className="text-[10px] text-white/25 flex-shrink-0">{timeAgo(d.created_at)}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+          </div>
+        )}
+
+        {/* ── Col 2–3 (1/2): DNS Protection — only rendered when Pi-hole is enabled ── */}
+        {pihole?.enabled && (
         <div className="lg:col-span-2 space-y-5">
-          {pihole?.enabled ? (
-            <>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <Shield size={13} className="text-red-400" />
@@ -417,11 +570,8 @@ export default function Dashboard() {
                 )}
               </GlassCard>
               </div>
-            </>
-          ) : (
-            <div />
-          )}
         </div>
+        )}
 
         {/* ── Col 4 (1/4): Devices by Type + Brand + Recently Added ── */}
         <div className="space-y-5">
@@ -469,7 +619,7 @@ export default function Dashboard() {
           </GlassCard>
 
 
-          {recentDevices.length > 0 && (
+          {pihole?.enabled && recentDevices.length > 0 && (
             <GlassCard>
               <SectionHeader title="Recently Added" to="/devices" label="All devices" />
               <div className="space-y-1">
@@ -512,7 +662,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <button type="button"
-                  onClick={() => { setActivityOpen(false); navigate('/settings/audit') }}
+                  onClick={() => { setActivityOpen(false); navigate('/events') }}
                   className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">
                   View all <ChevronRight size={11} />
                 </button>
@@ -528,20 +678,20 @@ export default function Dashboard() {
               )}
               {activity.map((entry: any) => (
                 <button key={entry.id} type="button"
-                  onClick={() => entry.entity_id && navigate(`/${entry.entity_type}s/${entry.entity_id}`)}
+                  onClick={() => entry.entity_id && navigate(`/${entry.entity_type === 'network' ? 'networks' : 'devices'}/${entry.entity_id}`)}
                   className="w-full flex items-start gap-3 text-left hover:bg-white/[0.04] px-5 py-3 transition-colors group">
                   <div className="w-6 h-6 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:border-white/[0.10] transition-colors">
                     <Clock size={10} className="text-white/25" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-white/80 leading-snug">
-                      <span className={`font-medium mr-1 ${actionColors[entry.action] ?? 'text-white/50'}`}>
-                        {actionLabels[entry.action] ?? entry.action}
+                      <span className={`font-medium mr-1 ${eventTypeColors[entry.event_type] ?? 'text-white/50'}`}>
+                        {eventTypeLabels[entry.event_type] ?? entry.event_type}
                       </span>
-                      {entry.entity_name ?? `${entry.entity_type} #${entry.entity_id}`}
+                      {entry.entity_name ?? entry.message}
                     </p>
                     <p className="text-[10px] text-white/25 mt-0.5">
-                      {entry.username} · {timeAgo(entry.timestamp)}
+                      {entry.username ?? 'system'} · {timeAgo(entry.created_at)}
                     </p>
                   </div>
                 </button>

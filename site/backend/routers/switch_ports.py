@@ -1,14 +1,17 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import Optional
 
 from database import get_db
 from models.device import Device
+from models.nic import Nic
 from models.switch_port import SwitchPort, PortType
 from models.user import User
+from models.event import EventType
 from services.auth import require_editor, require_viewer
+from services.events import log_event
 from services.port_utils import resolve_port
 
 log = logging.getLogger(__name__)
@@ -28,6 +31,7 @@ class SwitchPortIn(BaseModel):
     poe_budget_w: Optional[float] = None
     speed: Optional[str] = None
     notes: Optional[str] = None
+    port_mode: str = "lan"
     is_management: bool = False
     mgmt_network_id: Optional[int] = None
     mgmt_ip_address: Optional[str] = None
@@ -75,6 +79,20 @@ def list_switch_devices(
         .filter(Device.status == DeviceStatus.in_service)
         .distinct()
         .order_by(Device.name)
+        .options(
+            joinedload(Device.upstream_device),
+            joinedload(Device.upstream_port),
+            selectinload(Device.nics).joinedload(Nic.network),
+            selectinload(Device.switch_ports).options(
+                joinedload(SwitchPort.mgmt_network),
+                selectinload(SwitchPort.nics).joinedload(Nic.device),
+                selectinload(SwitchPort.nics).joinedload(Nic.network),
+                selectinload(SwitchPort.downstream_devices).options(
+                    joinedload(Device.uplink_port),
+                    selectinload(Device.nics).joinedload(Nic.network),
+                ),
+            ),
+        )
         .all()
     )
     result = []
@@ -110,13 +128,17 @@ def create_port(
     device_id: int,
     body: SwitchPortIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    current_user: User = Depends(require_editor),
 ):
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(404, "Device not found")
     port = SwitchPort(device_id=device_id, **body.model_dump())
     db.add(port)
+    db.flush()
+    log_event(db, EventType.device_updated, f"Port {port.port_number} added to '{device.name}'",
+              entity_type="device", entity_id=device_id, entity_name=device.name,
+              username=current_user.username, user_id=current_user.id)
     db.commit()
     db.refresh(port)
     return resolve_port(port)
@@ -165,13 +187,16 @@ def update_port(
     port_id: int,
     body: SwitchPortIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    current_user: User = Depends(require_editor),
 ):
     port = db.get(SwitchPort, port_id)
     if not port:
         raise HTTPException(404, "Port not found")
     for k, v in body.model_dump().items():
         setattr(port, k, v)
+    log_event(db, EventType.device_updated, f"Port {port.port_number} updated on device {port.device_id}",
+              entity_type="device", entity_id=port.device_id,
+              username=current_user.username, user_id=current_user.id)
     db.commit()
     db.refresh(port)
     return resolve_port(port)
@@ -181,11 +206,17 @@ def update_port(
 def delete_port(
     port_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_editor),
+    current_user: User = Depends(require_editor),
 ):
     port = db.get(SwitchPort, port_id)
     if not port:
         raise HTTPException(404, "Port not found")
+    log_event(db, EventType.device_updated, f"Port {port.port_number} deleted from device {port.device_id}",
+              entity_type="device", entity_id=port.device_id,
+              username=current_user.username, user_id=current_user.id)
+    # WanConfig has no cascade — delete explicitly before port
+    from models.wan_config import WanConfig
+    db.query(WanConfig).filter(WanConfig.switch_port_id == port_id).delete(synchronize_session=False)
     db.delete(port)
     db.commit()
 

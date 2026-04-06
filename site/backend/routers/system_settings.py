@@ -28,10 +28,12 @@ def _settings_response(s: SystemSettings) -> dict:
         "encryption_enabled": s.encryption_enabled,
         "encryption_locked": enc.is_locked(),
         "pihole_poll_interval_secs": s.pihole_poll_interval_secs or 300,
+        "dns_domain": s.dns_domain or "",
         # Colour settings — merge stored values on top of defaults
         "location_type_colors": {**DEFAULT_LOCATION_TYPE_COLORS, **(s.location_type_colors or {})},
         "device_category_colors": {**DEFAULT_DEVICE_CATEGORY_COLORS, **(s.device_category_colors or {})},
         "device_status_colors": {**DEFAULT_DEVICE_STATUS_COLORS, **(s.device_status_colors or {})},
+        "wan_port_color": s.wan_port_color or "#ef4444",
     }
 
 
@@ -50,9 +52,11 @@ class SystemSettingsIn(BaseModel):
     system_name: Optional[str] = None
     auth_required: Optional[bool] = None
     pihole_poll_interval_secs: Optional[int] = None
+    dns_domain: Optional[str] = None
     location_type_colors: Optional[dict] = None
     device_category_colors: Optional[dict] = None
     device_status_colors: Optional[dict] = None
+    wan_port_color: Optional[str] = None
 
 
 @router.patch("")
@@ -77,12 +81,21 @@ def update_system_settings(
     if body.pihole_poll_interval_secs is not None:
         s.pihole_poll_interval_secs = max(60, body.pihole_poll_interval_secs)
 
+    if body.dns_domain is not None:
+        # Normalise: strip whitespace, ensure leading dot if non-empty
+        domain = body.dns_domain.strip()
+        if domain and not domain.startswith("."):
+            domain = "." + domain
+        s.dns_domain = domain or None
+
     if body.location_type_colors is not None:
         s.location_type_colors = {k: v for k, v in body.location_type_colors.items() if isinstance(v, str)}
     if body.device_category_colors is not None:
         s.device_category_colors = {k: v for k, v in body.device_category_colors.items() if isinstance(v, str)}
     if body.device_status_colors is not None:
         s.device_status_colors = {k: v for k, v in body.device_status_colors.items() if isinstance(v, str)}
+    if body.wan_port_color is not None:
+        s.wan_port_color = body.wan_port_color
 
     db.commit()
     return _settings_response(s)

@@ -1,5 +1,6 @@
+import ipaddress
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -7,8 +8,8 @@ from database import get_db
 from models.network import Network
 from models.user import User
 from services.auth import require_editor, require_viewer
-from services.audit import log as audit_log
-from models.audit import AuditAction
+from services.events import log_event
+from models.event import EventType
 
 router = APIRouter(prefix="/api/networks", tags=["networks"])
 
@@ -17,6 +18,17 @@ class NetworkIn(BaseModel):
     name: str
     vlan_id: Optional[int] = None
     cidr: Optional[str] = None
+
+    @field_validator('cidr', mode='before')
+    @classmethod
+    def validate_cidr(cls, v):
+        if v is None or v == '':
+            return None
+        try:
+            ipaddress.ip_network(v, strict=False)
+        except ValueError:
+            raise ValueError(f'"{v}" is not a valid CIDR notation (e.g. 192.168.1.0/24)')
+        return v
     gateway: Optional[str] = None
     dhcp_range_start: Optional[str] = None
     dhcp_range_end: Optional[str] = None
@@ -60,8 +72,10 @@ def create_network(
     n = Network(**body.model_dump())
     db.add(n)
     db.flush()
-    audit_log(db, "network", n.id, n.name, AuditAction.create,
-              current_user.id, current_user.username, new_values=body.model_dump())
+    log_event(db, EventType.network_created, f"Network '{n.name}' created",
+              entity_type="network", entity_id=n.id, entity_name=n.name,
+              username=current_user.username, user_id=current_user.id,
+              detail=body.model_dump())
     db.commit()
     db.refresh(n)
     return n
@@ -83,8 +97,10 @@ def update_network(
     }
     for k, v in body.model_dump().items():
         setattr(n, k, v)
-    audit_log(db, "network", n.id, n.name, AuditAction.update,
-              current_user.id, current_user.username, old_values=old, new_values=body.model_dump())
+    log_event(db, EventType.network_updated, f"Network '{n.name}' updated",
+              entity_type="network", entity_id=n.id, entity_name=n.name,
+              username=current_user.username, user_id=current_user.id,
+              detail={"old_values": old, "new_values": body.model_dump()})
     db.commit()
     db.refresh(n)
     return n
@@ -106,9 +122,10 @@ def update_network_color(
         raise HTTPException(404, "Network not found")
     old_color = n.color
     n.color = body.color
-    audit_log(db, "network", n.id, n.name, AuditAction.update,
-              current_user.id, current_user.username,
-              old_values={"color": old_color}, new_values={"color": body.color})
+    log_event(db, EventType.network_updated, f"Network '{n.name}' colour updated",
+              entity_type="network", entity_id=n.id, entity_name=n.name,
+              username=current_user.username, user_id=current_user.id,
+              detail={"old_values": {"color": old_color}, "new_values": {"color": body.color}})
     db.commit()
     db.refresh(n)
     return n
@@ -123,8 +140,14 @@ def delete_network(
     n = db.get(Network, network_id)
     if not n:
         raise HTTPException(404, "Network not found")
-    audit_log(db, "network", n.id, n.name, AuditAction.delete,
-              current_user.id, current_user.username)
+    # Null out NIC references before deleting — no cascade on Nic.network_id
+    from models.nic import Nic
+    db.query(Nic).filter(Nic.network_id == network_id).update(
+        {"network_id": None}, synchronize_session=False
+    )
+    log_event(db, EventType.network_deleted, f"Network '{n.name}' deleted",
+              entity_type="network", entity_id=n.id, entity_name=n.name,
+              username=current_user.username, user_id=current_user.id)
     db.delete(n)
     db.commit()
 
@@ -148,6 +171,8 @@ def subnet_map(
 
     from models.nic import Nic
     from models.device import Device
+    from models.switch_port import SwitchPort
+    from sqlalchemy.orm import joinedload
 
     try:
         network = ipaddress.ip_network(n.cidr, strict=False)
@@ -159,6 +184,10 @@ def subnet_map(
         db.query(Nic)
         .join(Device, Nic.device_id == Device.id)
         .filter(Nic.network_id == network_id)
+        .options(
+            joinedload(Nic.device).joinedload(Device.device_type),
+            joinedload(Nic.switch_port_rel).joinedload(SwitchPort.device),
+        )
         .all()
     )
     ip_map = {}
@@ -207,9 +236,12 @@ def subnet_map(
     except ValueError:
         pass
 
+    HOST_LIMIT = 1024
+    all_hosts = list(network.hosts())
+    truncated = len(all_hosts) > HOST_LIMIT
+    hosts = all_hosts[:HOST_LIMIT]
+
     entries = []
-    # Limit to first 254 hosts for /24 or smaller; skip network/broadcast
-    hosts = list(network.hosts())[:256]
     for ip_obj in hosts:
         ip_str = str(ip_obj)
         if ip_str in ip_map:
@@ -222,4 +254,4 @@ def subnet_map(
             entry = {"ip": ip_str, "status": "free"}
         entries.append(entry)
 
-    return {"network_id": network_id, "cidr": n.cidr, "entries": entries}
+    return {"network_id": network_id, "cidr": n.cidr, "entries": entries, "truncated": truncated, "total_hosts": len(all_hosts)}

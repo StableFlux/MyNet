@@ -8,7 +8,7 @@ Returns an ordered list of hops between two devices.
 """
 from collections import deque
 from typing import Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from models.device import Device
 
@@ -30,7 +30,17 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
         "incomplete": bool
       }
     """
-    devices = db.query(Device).all()
+    devices = (
+        db.query(Device)
+        .options(
+            joinedload(Device.device_type),
+            joinedload(Device.uplink_port),
+            joinedload(Device.upstream_port),
+            selectinload(Device.nics).joinedload("switch_port_rel"),
+            selectinload(Device.nics).joinedload("network"),
+        )
+        .all()
+    )
     device_map = {d.id: d for d in devices}
 
     if source_id not in device_map or target_id not in device_map:

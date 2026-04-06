@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Activity, LayoutGrid, List, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import { AreaChart, Area, LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { Activity, LayoutGrid, List, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Globe } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
-import { DeviceTypeIcon, HARDWARE_TYPE_ICON } from '../components/DeviceTypeIcon'
+import { DeviceTypeIcon, HARDWARE_TYPE_ICON, NIC_TYPE_ICON } from '../components/DeviceTypeIcon'
+import { useColorSettings } from '../hooks/useColorSettings'
 import api from '../lib/api'
 
 const CARD_GRID = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'
@@ -31,50 +32,146 @@ function relativeTime(iso: string | null): string {
 
 function NicRow({ nic, deviceId }: { nic: any; deviceId: number }) {
   const color = statusColor(nic.status)
+  const lineColor = nic.network_color ?? color
   const gradId = `nr-${deviceId}-${nic.nic_id}`
+  const NicIcon = NIC_TYPE_ICON[nic.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH
 
   return (
-    <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-center gap-2">
+      {/* Status dot */}
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-      <span className="text-[10px] font-mono text-white/50 w-24 truncate flex-shrink-0">{nic.ip}</span>
-      {nic.nic_label && (
-        <span className="text-[10px] text-white/30 truncate min-w-0">{nic.nic_label}</span>
-      )}
-      {nic.network_name && (
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded flex-shrink-0"
-          style={{ color: nic.network_color, backgroundColor: `${nic.network_color ?? '#64748b'}22` }}
-        >
-          {nic.network_name}
-        </span>
-      )}
-      <span className="text-[10px] font-mono text-white/40 w-14 text-right flex-shrink-0 ml-auto">
+      {/* NIC type icon + IP */}
+      <div className="flex items-center gap-1 w-24 flex-shrink-0 min-w-0">
+        <NicIcon size={10} className="flex-shrink-0 text-white/25" />
+        <span className="text-[10px] font-mono text-white/50 truncate">{nic.ip}</span>
+      </div>
+      {/* NIC label */}
+      <span className="text-[10px] text-white/30 w-24 flex-shrink-0 truncate">{nic.nic_label ?? ''}</span>
+      {/* VLAN badge — always reserves space so column aligns */}
+      <div className="w-16 flex-shrink-0">
+        {nic.network_name && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{ color: nic.network_color, backgroundColor: `${nic.network_color ?? '#64748b'}22` }}>
+            {nic.network_name}
+          </span>
+        )}
+      </div>
+      {/* Uptime */}
+      <span className="text-[10px] font-mono text-white/40 w-10 flex-shrink-0 text-right">
+        {nic.uptime_pct != null ? `${nic.uptime_pct}%` : '—'}
+      </span>
+      {/* Latency */}
+      <span className="text-[10px] font-mono text-white/40 w-12 flex-shrink-0 text-right">
         {nic.status === 'up' && nic.latency_ms != null ? `${nic.latency_ms}ms` : nic.status}
       </span>
-      {nic.sparkline && nic.sparkline.length > 1 && (
-        <div className="h-5 w-16 flex-shrink-0">
+      {/* Sparkline */}
+      <div className="h-5 w-16 flex-shrink-0">
+        {nic.sparkline && nic.sparkline.length > 1 && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={nic.sparkline} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={color} stopOpacity={0.3} />
+                  <stop offset="5%" stopColor={lineColor} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="latency" stroke={lineColor} strokeWidth={1}
+                fill={`url(#${gradId})`} dot={false} isAnimationActive={false} connectNulls={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WanConnectionCard({ wan, wanColor }: { wan: any; wanColor: string }) {
+  const navigate = useNavigate()
+  const color = statusColor(wan.status)
+  const gradId = `wan-${wan.device_id}-${wan.switch_port_id ?? wan.ip.replace(/\./g, '-')}`
+  const ispLabel = wan.nic_label?.replace(/^WAN\s*[–-]\s*/i, '').trim() || null
+
+  return (
+    <div
+      className="glass-card p-4 cursor-pointer glass-card-interactive flex items-center gap-4"
+      onClick={() => navigate(`/devices/${wan.device_id}`)}
+      style={{
+        borderLeftColor: `${color}66`,
+        borderLeftWidth: 2,
+        background: `linear-gradient(160deg, color-mix(in srgb, ${color} 6%, #1d2540) 0%, #151b2e 60%)`,
+      }}
+    >
+      {/* Icon */}
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: `${color}18`, border: `1px solid ${color}33` }}>
+        <Globe size={15} style={{ color: wanColor }} />
+      </div>
+
+      {/* ISP + device + ping target */}
+      <div className="flex-shrink-0 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${wan.status === 'up' ? 'animate-pulse' : ''}`}
+            style={{ backgroundColor: color, boxShadow: wan.status === 'up' ? `0 0 5px ${color}` : undefined }}
+          />
+          <p className="text-sm font-semibold text-white truncate">{ispLabel || wan.ip}</p>
+        </div>
+        <p className="text-[10px] text-white/30 truncate mt-0.5 pl-3">{wan.device_name}</p>
+        <p className="text-[10px] font-mono text-white/25 truncate mt-0.5 pl-3">{wan.ip}</p>
+      </div>
+
+      {/* Sparkline — fills remaining space */}
+      <div className="flex-1 h-14 min-w-0">
+        {wan.sparkline && wan.sparkline.length > 1 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={wan.sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={color} stopOpacity={0.35} />
                   <stop offset="95%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area
-                type="monotone"
-                dataKey="latency"
-                stroke={color}
-                strokeWidth={1}
-                fill={`url(#${gradId})`}
-                dot={false}
-                isAnimationActive={false}
-                connectNulls={false}
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.[0]) return null
+                  const val = payload[0].value
+                  return (
+                    <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 text-white/70">
+                      {val != null ? `${val}ms` : 'offline'}
+                    </div>
+                  )
+                }}
               />
+              <Area type="monotone" dataKey="latency" stroke={color} strokeWidth={1.5}
+                fill={`url(#${gradId})`} dot={false} isAnimationActive={false} connectNulls={false} />
             </AreaChart>
           </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center">
+            <div className="w-full h-px bg-white/5" />
+          </div>
+        )}
+      </div>
+
+      {/* Stats */}
+      <div className="flex items-center gap-6 flex-shrink-0 text-right">
+        <div>
+          <p className="text-sm font-mono text-white">
+            {wan.status === 'up' && wan.latency_ms != null ? `${wan.latency_ms}ms` : '—'}
+          </p>
+          <p className="text-[10px] text-white/30">latency</p>
         </div>
-      )}
+        <div>
+          <p className="text-sm font-mono text-white">{wan.avg_latency != null ? `${wan.avg_latency}ms` : '—'}</p>
+          <p className="text-[10px] text-white/30">avg</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium" style={{ color }}>
+            {wan.uptime_pct != null ? `${wan.uptime_pct}%` : wan.status}
+          </p>
+          <p className="text-[10px] text-white/30">uptime</p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -121,80 +218,108 @@ function DeviceMonitorCard({ d }: { d: any }) {
         </div>
 
         <div className="text-right flex-shrink-0">
-          {d.status === 'up' && d.latency_ms != null ? (
-            <p className="text-sm font-mono text-white">{d.latency_ms}ms</p>
-          ) : (
-            <p className="text-xs capitalize font-medium" style={{ color }}>{d.status}</p>
-          )}
+          <p className="text-xs text-white/60">{relativeTime(d.last_seen)}</p>
+          <p className="text-[10px] text-white/25">last seen</p>
         </div>
+
       </div>
 
-      {/* Main sparkline chart */}
-      {d.sparkline && d.sparkline.length > 1 && (
-        <div className="h-14 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={d.sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={color} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="t" hide />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.[0]) return null
-                  const val = payload[0].value
+      {/* Main sparkline chart — single filled area for one NIC, coloured lines for multiple */}
+      {(() => {
+        const lanNics = (d.nics ?? []).filter((n: any) => !n.is_wan_ping)
+        const multiNic = lanNics.length > 1
+
+        if (!multiNic) {
+          if (!d.sparkline || d.sparkline.length <= 1) return null
+          const lineColor = lanNics[0]?.network_color ?? color
+          return (
+            <div className="h-14 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={d.sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={lineColor} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={lineColor} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="t" hide />
+                  <Tooltip content={({ active, payload }) => {
+                    if (!active || !payload?.[0]) return null
+                    const val = payload[0].value
+                    return <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 text-white/70">{val != null ? `${val}ms` : 'offline'}</div>
+                  }} />
+                  <Area type="monotone" dataKey="latency" stroke={lineColor} strokeWidth={1.5}
+                    fill={`url(#${gradId})`} dot={false} isAnimationActive={false} connectNulls={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )
+        }
+
+        // Merge per-NIC sparklines onto a shared time axis
+        const allTs = new Set<string>()
+        for (const nic of lanNics) for (const pt of (nic.sparkline ?? [])) allTs.add(pt.t)
+        const timestamps = Array.from(allTs).sort()
+        if (timestamps.length <= 1) return null
+
+        const nicMaps = lanNics.map((nic: any) => {
+          const m = new Map<string, number | null>()
+          for (const pt of (nic.sparkline ?? [])) m.set(pt.t, pt.latency)
+          return m
+        })
+        const chartData = timestamps.map(t => {
+          const pt: any = { t }
+          nicMaps.forEach((m, i) => { pt[`l${i}`] = m.get(t) ?? null })
+          return pt
+        })
+
+        return (
+          <div className="h-14 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                <XAxis dataKey="t" hide />
+                <Tooltip content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null
                   return (
-                    <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 text-white/70">
-                      {val != null ? `${val}ms` : 'offline'}
+                    <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 space-y-0.5">
+                      {payload.map((p: any, i: number) => (
+                        <div key={i} style={{ color: p.stroke }}>
+                          {lanNics[i]?.network_name ?? `NIC ${i + 1}`}: {p.value != null ? `${p.value}ms` : 'offline'}
+                        </div>
+                      ))}
                     </div>
                   )
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="latency"
-                stroke={color}
-                strokeWidth={1.5}
-                fill={`url(#${gradId})`}
-                dot={false}
-                isAnimationActive={false}
-                connectNulls={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+                }} />
+                {lanNics.map((nic: any, i: number) => (
+                  <Line key={i} type="monotone" dataKey={`l${i}`}
+                    stroke={nic.network_color ?? color} strokeWidth={1.5}
+                    dot={false} isAnimationActive={false} connectNulls={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      })()}
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div>
-          <p className="text-xs font-medium text-white">
-            {d.uptime_pct != null ? `${d.uptime_pct}%` : '—'}
-          </p>
-          <p className="text-[10px] text-white/30">uptime</p>
-        </div>
-        <div>
-          <p className="text-xs font-mono text-white">
-            {d.avg_latency != null ? `${d.avg_latency}ms` : '—'}
-          </p>
-          <p className="text-[10px] text-white/30">avg latency</p>
-        </div>
-        <div>
-          <p className="text-xs text-white">{relativeTime(d.last_seen)}</p>
-          <p className="text-[10px] text-white/30">last seen</p>
-        </div>
+      <div className="text-center">
+        <p className="text-xs font-mono text-white">
+          {d.avg_latency != null ? `${d.avg_latency}ms` : '—'}
+        </p>
+        <p className="text-[10px] text-white/30">avg latency</p>
       </div>
 
-      {/* Per-NIC rows — only shown when multiple NICs are monitored */}
-      {d.nics && d.nics.length > 1 && (
-        <div className="border-t border-glass-border pt-3 space-y-2">
-          {d.nics.map((nic: any) => (
-            <NicRow key={nic.nic_id ?? nic.ip} nic={nic} deviceId={d.device_id} />
-          ))}
-        </div>
-      )}
+      {/* Per-NIC rows — LAN only */}
+      {(() => {
+        const lanNics = (d.nics ?? []).filter((n: any) => !n.is_wan_ping)
+        return lanNics.length > 0 ? (
+          <div className="border-t border-glass-border pt-3 space-y-2">
+            {lanNics.map((nic: any) => (
+              <NicRow key={nic.nic_id ?? nic.ip} nic={nic} deviceId={d.device_id} />
+            ))}
+          </div>
+        ) : null
+      })()}
     </div>
   )
 }
@@ -217,6 +342,8 @@ export default function Monitoring() {
     sessionStorage.setItem('monitoring-collapsed', JSON.stringify(next))
   }
 
+  const { wanPortColor } = useColorSettings()
+
   const { data: summary } = useQuery({
     queryKey: ['monitoring', 'summary'],
     queryFn: async () => { const { data } = await api.get('/monitoring/summary'); return data },
@@ -232,13 +359,33 @@ export default function Monitoring() {
   const totalOnline = summary?.reduce((n: number, s: any) => n + s.online, 0) ?? 0
   const totalDevices = summary?.reduce((n: number, s: any) => n + s.total, 0) ?? 0
 
-  // Group by primary network (first NIC's network_name)
+  // Extract WAN connections from all device NIC lists
+  const wanConnections = useMemo(() => {
+    if (!devices) return []
+    const result: any[] = []
+    for (const d of devices) {
+      for (const nic of (d.nics ?? [])) {
+        if (nic.is_wan_ping) {
+          result.push({ ...nic, device_id: d.device_id, device_name: d.device_name })
+        }
+      }
+    }
+    return result.sort((a, b) => {
+      // Offline first, then by ISP label
+      const aDown = a.status !== 'up' ? 0 : 1
+      const bDown = b.status !== 'up' ? 0 : 1
+      return aDown - bDown || (a.nic_label ?? '').localeCompare(b.nic_label ?? '')
+    })
+  }, [devices])
+
+  // Group by primary network (first LAN NIC's network_name)
   const groups = useMemo(() => {
     if (!devices) return []
     const map = new Map<string, { color: string | null; devices: any[] }>()
     for (const d of devices) {
-      const net = d.nics?.[0]?.network_name ?? 'Unassigned'
-      const color = d.nics?.[0]?.network_color ?? null
+      const firstLan = d.nics?.find((n: any) => !n.is_wan_ping)
+      const net = firstLan?.network_name ?? 'Unassigned'
+      const color = firstLan?.network_color ?? null
       if (!map.has(net)) map.set(net, { color, devices: [] })
       map.get(net)!.devices.push(d)
     }
@@ -262,9 +409,48 @@ export default function Monitoring() {
       <div>
         <h1 className="text-xl font-bold text-white">Monitoring</h1>
         <p className="text-sm text-white/40 mt-0.5">
-          {totalDevices > 0 ? `${totalOnline} of ${totalDevices} devices online` : 'Ping availability by network'}
+          {(() => {
+            const wanOnline = wanConnections.filter((w: any) => w.status === 'up').length
+            const parts = []
+            if (wanConnections.length > 0) parts.push(`${wanOnline} of ${wanConnections.length} WAN`)
+            if (totalDevices > 0) parts.push(`${totalOnline} of ${totalDevices} LAN`)
+            return parts.length > 0 ? `${parts.join(' · ')} online` : 'Ping availability by network'
+          })()}
         </p>
       </div>
+
+      {/* WAN Connections */}
+      {wanConnections.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Globe size={14} style={{ color: wanPortColor }} />
+            <h2 className="text-sm font-semibold text-white">WAN Connections</h2>
+            <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full">
+              {wanConnections.filter(w => w.status === 'up').length}/{wanConnections.length} online
+            </span>
+          </div>
+          <div className="space-y-2">
+            {wanConnections.map((wan: any) => (
+              <WanConnectionCard
+                key={`${wan.device_id}-${wan.switch_port_id ?? wan.ip}`}
+                wan={wan}
+                wanColor={wanPortColor}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* LAN Monitoring header */}
+      {devices && devices.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Activity size={14} className="text-white/40" />
+          <h2 className="text-sm font-semibold text-white">LAN Monitoring</h2>
+          <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full">
+            {totalOnline}/{totalDevices} online
+          </span>
+        </div>
+      )}
 
       {/* Network summary tiles */}
       {summary && summary.length > 0 && (

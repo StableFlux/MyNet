@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Wifi, Cable, Copy, Check, ArrowLeft, ArrowRight } from 'lucide-react'
-import { DeviceTypeIcon, HARDWARE_TYPE_ICON, STATUS_ICON } from './DeviceTypeIcon'
+import { Copy, Check, ArrowLeft, ArrowRight } from 'lucide-react'
+import { DeviceTypeIcon, HARDWARE_TYPE_ICON, NIC_TYPE_ICON, STATUS_ICON } from './DeviceTypeIcon'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { Device } from '../types'
 import { NetworkBadge } from './NetworkBadge'
@@ -65,9 +65,24 @@ export function DeviceCard({ device }: Props) {
 
   const copyIp = (e: React.MouseEvent, ip: string) => {
     e.stopPropagation()
-    navigator.clipboard.writeText(ip)
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(ip).catch(() => _copyFallback(ip))
+    } else {
+      _copyFallback(ip)
+    }
     setCopiedIp(ip)
     setTimeout(() => setCopiedIp(null), 1500)
+  }
+
+  const _copyFallback = (text: string) => {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
   }
 
   const toggleMonitoring = useMutation({
@@ -79,7 +94,11 @@ export function DeviceCard({ device }: Props) {
     },
     onMutate: (enabled) => setMonitoringEnabled(enabled),
     onError: () => setMonitoringEnabled(device.monitoring_enabled),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['search'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['search'] })
+      queryClient.invalidateQueries({ queryKey: ['monitoring'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
   })
 
   return (
@@ -161,8 +180,7 @@ export function DeviceCard({ device }: Props) {
       {allNicsWithInfo.length > 0 && (
         <div ref={nicContainerRef} className="flex gap-1.5 overflow-x-scroll [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
           {allNicsWithInfo.map((n, i) => {
-            const isWifi = n.nic_type?.toUpperCase() === 'WIFI'
-            const NicIcon = isWifi ? Wifi : Cable
+            const NicIcon = NIC_TYPE_ICON[n.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH
             const inactive = (n as any).is_active === false
             const hasColor = !!n.network_color && !inactive
             const onlineStatus = !inactive && isNicMonitored(n.id) && n.ip_address ? nicOnlineMap[n.ip_address] : undefined

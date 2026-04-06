@@ -1,17 +1,18 @@
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import Optional
 
 from database import get_db
-from models.audit import AuditAction
 from models.device import Device, DeviceStatus
 from models.device_type import DeviceType
 from models.nic import Nic
 from models.switch_port import SwitchPort
 from models.user import User
-from services.audit import log as audit_log
+from services.events import log_event
+from models.event import EventType
 from services.auth import require_editor, require_viewer
 from services.encryption import encrypt, decrypt, is_locked
 from services.monitoring_scheduler import unschedule_device, schedule_device_nics, resolve_monitor_ips
@@ -31,6 +32,18 @@ class NicIn(BaseModel):
     nic_type: str
     mac: Optional[str] = None
     ip_address: Optional[str] = None
+
+    @field_validator('ip_address', mode='before')
+    @classmethod
+    def validate_ip(cls, v):
+        import ipaddress as _ip
+        if v is None or v == '' or v == 'DHCP':
+            return v
+        try:
+            _ip.ip_address(v)
+        except ValueError:
+            raise ValueError(f'"{v}" is not a valid IP address')
+        return v
     dns_entry: Optional[str] = None
     network_id: Optional[int] = None
     address_type: Optional[str] = "reserved"
@@ -43,8 +56,13 @@ class NicIn(BaseModel):
     poe_enabled: Optional[bool] = False
     ssid: Optional[str] = None
     band: Optional[str] = None
+    connection_type: Optional[str] = None
+    nic_speed: Optional[str] = None
+    transceiver_type: Optional[str] = None
+    transceiver_speed: Optional[str] = None
     notes: Optional[str] = None
     is_active: bool = True
+    mac_conflict_suppressed: bool = False
 
 
 class NicOut(NicIn):
@@ -230,6 +248,10 @@ def _nic_to_dict(nic) -> dict:
         "poe_enabled": nic.poe_enabled,
         "ssid": nic.ssid,
         "band": nic.band.value if nic.band else None,
+        "connection_type": nic.connection_type,
+        "nic_speed": nic.nic_speed,
+        "transceiver_type": nic.transceiver_type,
+        "transceiver_speed": nic.transceiver_speed,
         "notes": nic.notes,
         "is_active": nic.is_active,
     }
@@ -364,6 +386,12 @@ def _apply_device(device: Device, body: DeviceIn, db: Session):
 def _sync_nics(device: Device, nic_data: list[NicIn], db: Session):
     # Capture old NIC id → (type, ip) before deletion for monitor_nic_ids remapping
     old_nic_signatures = {n.id: (n.nic_type, n.ip_address) for n in device.nics}
+    # Preserve mac_conflict_suppressed flag — only keep it if MAC is unchanged
+    old_mac_suppressed: dict[str, bool] = {
+        n.mac: n.mac_conflict_suppressed
+        for n in device.nics
+        if n.mac and n.mac_conflict_suppressed
+    }
 
     # Remove all existing NICs and replace (simple approach for PUT)
     for nic in list(device.nics):
@@ -374,9 +402,12 @@ def _sync_nics(device: Device, nic_data: list[NicIn], db: Session):
     for n in nic_data:
         data = n.model_dump()
         # Coerce empty strings to None for enum-backed fields to avoid SAEnum validation errors
-        for field in ('band', 'ssid', 'switch_port', 'mac', 'ip_address', 'dns_entry', 'notes', 'gateway', 'subnet_mask', 'dns_server_1', 'dns_server_2'):
+        for field in ('band', 'ssid', 'switch_port', 'mac', 'ip_address', 'dns_entry', 'notes', 'gateway', 'subnet_mask', 'dns_server_1', 'dns_server_2', 'connection_type', 'nic_speed', 'transceiver_type', 'transceiver_speed'):
             if data.get(field) == '':
                 data[field] = None
+        # Preserve mac_conflict_suppressed only if MAC is unchanged
+        mac = data.get('mac')
+        data['mac_conflict_suppressed'] = bool(mac and old_mac_suppressed.get(mac, False))
         nic = Nic(device_id=device.id, **data)
         db.add(nic)
         new_nics.append((nic, n))
@@ -413,10 +444,11 @@ def _sync_nics(device: Device, nic_data: list[NicIn], db: Session):
 def list_devices(
     status: Optional[str] = Query(None),
     device_type_id: Optional[int] = Query(None),
+    limit: Optional[int] = Query(None, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(require_viewer),
 ):
-    from sqlalchemy.orm import joinedload
     q = db.query(Device).options(
         joinedload(Device.device_type),
         joinedload(Device.nics),
@@ -425,7 +457,12 @@ def list_devices(
         q = q.filter(Device.status == status)
     if device_type_id:
         q = q.filter(Device.device_type_id == device_type_id)
-    devices = q.order_by(Device.name).all()
+    q = q.order_by(Device.name)
+    if offset:
+        q = q.offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
+    devices = q.all()
     results = []
     for d in devices:
         row = DeviceSummary.model_validate(d).model_dump()
@@ -441,7 +478,27 @@ def get_device(
     db: Session = Depends(get_db),
     _: User = Depends(require_viewer),
 ):
-    device = db.get(Device, device_id)
+    from models.nic import Nic as NicModel
+    from models.switch_port import SwitchPort as SP
+    device = (
+        db.query(Device)
+        .options(
+            joinedload(Device.device_type),
+            joinedload(Device.location_rel),
+            joinedload(Device.storage_location_rel),
+            joinedload(Device.hypervisor),
+            joinedload(Device.uplink_port),
+            joinedload(Device.upstream_device).joinedload(Device.device_type),
+            joinedload(Device.upstream_port),
+            joinedload(Device.pihole_cache),
+            selectinload(Device.nics).joinedload(NicModel.switch_port_rel).joinedload(SP.device),
+            selectinload(Device.switch_ports),
+            selectinload(Device.vm_guests).joinedload(Device.device_type),
+            selectinload(Device.vm_guests).selectinload(Device.nics),
+        )
+        .filter(Device.id == device_id)
+        .first()
+    )
     if not device:
         raise HTTPException(404, "Device not found")
     return _device_to_out(device, db)
@@ -468,22 +525,33 @@ def create_device(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_editor),
 ):
-    device = Device()
-    _apply_device(device, body, db)
-    if device.status in (DeviceStatus.stock, DeviceStatus.undeployed, DeviceStatus.decommissioned):
-        device.monitoring_enabled = False
-    db.add(device)
-    db.flush()
-    _sync_nics(device, body.nics, db)
-    audit_log(db, "device", device.id, device.name, AuditAction.create,
-              current_user.id, current_user.username, new_values={"name": body.name})
-    db.commit()
-    db.refresh(device)
+    try:
+        device = Device()
+        _apply_device(device, body, db)
+        if device.status in (DeviceStatus.stock, DeviceStatus.undeployed, DeviceStatus.decommissioned):
+            device.monitoring_enabled = False
+        db.add(device)
+        db.flush()
+        _sync_nics(device, body.nics, db)
+        log_event(db, EventType.device_created, f"Device '{device.name}' created",
+                  entity_type="device", entity_id=device.id, entity_name=device.name,
+                  username=current_user.username, user_id=current_user.id,
+                  detail={"name": body.name})
+        db.commit()
+        db.refresh(device)
+    except Exception:
+        db.rollback()
+        raise
 
     if device.monitoring_enabled:
         _try_schedule(device)
 
-    return _device_to_out(device, db)
+    from services.conflict_checker import check_device_conflicts, run_conflict_scan
+    conflicts = check_device_conflicts(db, device.id)
+    run_conflict_scan(db)
+    result = _device_to_out(device, db)
+    result["conflicts"] = conflicts
+    return result
 
 
 @router.put("/{device_id}")
@@ -496,27 +564,38 @@ def update_device(
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(404, "Device not found")
-    old = {"name": device.name, "status": str(device.status), "location": device.location}
-    _apply_device(device, body, db)
-    # If switching to a non-infra type, clean up all switch/port data
-    new_type = db.get(DeviceType, device.device_type_id) if device.device_type_id else None
-    if not new_type or not new_type.is_infrastructure:
-        _cleanup_infra_data(device, db)
-    if device.status in (DeviceStatus.stock, DeviceStatus.undeployed, DeviceStatus.decommissioned):
-        device.monitoring_enabled = False
-    _sync_nics(device, body.nics, db)
-    new = {"name": device.name, "status": str(device.status), "location": device.location}
-    audit_log(db, "device", device.id, device.name, AuditAction.update,
-              current_user.id, current_user.username, old_values=old, new_values=new)
-    db.commit()
-    db.refresh(device)
+    try:
+        old = {"name": device.name, "status": str(device.status), "location": device.location}
+        _apply_device(device, body, db)
+        # If switching to a non-infra type, clean up all switch/port data
+        new_type = db.get(DeviceType, device.device_type_id) if device.device_type_id else None
+        if not new_type or not new_type.is_infrastructure:
+            _cleanup_infra_data(device, db)
+        if device.status in (DeviceStatus.stock, DeviceStatus.undeployed, DeviceStatus.decommissioned):
+            device.monitoring_enabled = False
+        _sync_nics(device, body.nics, db)
+        new = {"name": device.name, "status": str(device.status), "location": device.location}
+        log_event(db, EventType.device_updated, f"Device '{device.name}' updated",
+                  entity_type="device", entity_id=device.id, entity_name=device.name,
+                  username=current_user.username, user_id=current_user.id,
+                  detail={"old_values": old, "new_values": new})
+        db.commit()
+        db.refresh(device)
+    except Exception:
+        db.rollback()
+        raise
 
     if device.monitoring_enabled:
         _try_schedule(device)
     else:
         unschedule_device(device.id)
 
-    return _device_to_out(device, db)
+    from services.conflict_checker import check_device_conflicts, run_conflict_scan
+    conflicts = check_device_conflicts(db, device.id)
+    run_conflict_scan(db)
+    result = _device_to_out(device, db)
+    result["conflicts"] = conflicts
+    return result
 
 
 @router.delete("/{device_id}", status_code=204)
@@ -530,41 +609,82 @@ def delete_device(
         raise HTTPException(404, "Device not found")
     unschedule_device(device_id)
 
-    # Null out self-referencing FKs on this device before cascade-deleting NICs/ports,
-    # otherwise SQLite's FK checks block the NIC/port deletes.
-    device.monitor_target_nic_id = None
-    device.uplink_port_id = None
-    device.upstream_device_id = None
-    device.upstream_port_id = None
-    db.flush()
+    try:
+        # Null out self-referencing FKs on this device before cascade-deleting NICs/ports,
+        # otherwise SQLite's FK checks block the NIC/port deletes.
+        device.monitor_target_nic_id = None
+        device.uplink_port_id = None
+        device.upstream_device_id = None
+        device.upstream_port_id = None
+        db.flush()
 
-    # Null out references from other devices pointing at this device or its ports
-    port_ids = [p.id for p in device.switch_ports]
-    if port_ids:
-        db.query(Device).filter(Device.uplink_port_id.in_(port_ids)).update(
-            {"uplink_port_id": None}, synchronize_session=False
+        # Null out references from other devices pointing at this device or its ports
+        port_ids = [p.id for p in device.switch_ports]
+        if port_ids:
+            db.query(Device).filter(Device.uplink_port_id.in_(port_ids)).update(
+                {"uplink_port_id": None}, synchronize_session=False
+            )
+            db.query(Device).filter(Device.upstream_port_id.in_(port_ids)).update(
+                {"upstream_port_id": None}, synchronize_session=False
+            )
+            db.query(Nic).filter(Nic.switch_port_id.in_(port_ids)).update(
+                {"switch_port_id": None}, synchronize_session=False
+            )
+        db.query(Device).filter(Device.upstream_device_id == device_id).update(
+            {"upstream_device_id": None, "upstream_port_id": None}, synchronize_session=False
         )
-        db.query(Device).filter(Device.upstream_port_id.in_(port_ids)).update(
-            {"upstream_port_id": None}, synchronize_session=False
+        db.query(Device).filter(Device.hypervisor_device_id == device_id).update(
+            {"hypervisor_device_id": None}, synchronize_session=False
         )
-        db.query(Nic).filter(Nic.switch_port_id.in_(port_ids)).update(
-            {"switch_port_id": None}, synchronize_session=False
+        # Resolve active events for this device before deleting
+        from models.event import Event
+        from datetime import datetime, timezone as _tz
+        _now = datetime.now(_tz.utc)
+        db.query(Event).filter(Event.entity_id == device_id, Event.resolved_at.is_(None)).update(
+            {"resolved_at": _now, "resolved_by": "system"}, synchronize_session=False
         )
-    db.query(Device).filter(Device.upstream_device_id == device_id).update(
-        {"upstream_device_id": None, "upstream_port_id": None}, synchronize_session=False
-    )
-    db.query(Device).filter(Device.hypervisor_device_id == device_id).update(
-        {"hypervisor_device_id": None}, synchronize_session=False
-    )
-    # Delete alerts referencing this device (no cascade relationship defined on Device)
-    from models.alert import Alert
-    db.query(Alert).filter(Alert.device_id == device_id).delete(synchronize_session=False)
-    db.flush()
+        db.flush()
 
-    audit_log(db, "device", device.id, device.name, AuditAction.delete,
-              current_user.id, current_user.username)
-    db.delete(device)
+        log_event(db, EventType.device_deleted, f"Device '{device.name}' deleted",
+                  entity_type="device", entity_id=device.id, entity_name=device.name,
+                  username=current_user.username, user_id=current_user.id)
+        db.delete(device)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    from services.conflict_checker import run_conflict_scan
+    run_conflict_scan(db)
+
+
+@router.post("/{device_id}/nics/{nic_id}/suppress-mac-conflict")
+def suppress_mac_conflict(
+    device_id: int,
+    nic_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_editor),
+):
+    """Mark a MAC conflict as intentional for this NIC. Auto-resets if MAC is changed."""
+    nic = db.get(Nic, nic_id)
+    if not nic or nic.device_id != device_id:
+        raise HTTPException(404, "NIC not found")
+    nic.mac_conflict_suppressed = True
+    # Resolve any open mac_conflict event for this device and log suppression
+    from services.events import resolve_events
+    resolve_events(db, EventType.mac_conflict, device_id, resolved_by=current_user.username)
+    device = db.get(Device, device_id)
+    log_event(db, EventType.mac_conflict_suppressed,
+              f"MAC conflict marked as intentional on '{device.name if device else device_id}'",
+              entity_type="device", entity_id=device_id,
+              entity_name=device.name if device else None,
+              username=current_user.username, user_id=current_user.id,
+              detail={"mac": nic.mac, "nic_id": nic_id})
     db.commit()
+    # Re-run scan so dashboard reflects the change immediately
+    from services.conflict_checker import run_conflict_scan
+    run_conflict_scan(db)
+    return {"suppressed": True}
 
 
 # ---------------------------------------------------------------------------
@@ -590,6 +710,8 @@ def deploy_device(
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(404, "Device not found")
+    if device.status == DeviceStatus.decommissioned:
+        raise HTTPException(400, "Decommissioned devices cannot be deployed. Change the status manually first.")
     old_status = device.status.value
     device.name = req.name
     device.device_type_id = req.device_type_id
@@ -604,12 +726,10 @@ def deploy_device(
             primary_nic.network_id = req.network_id
             primary_nic.ip_address = req.ip_address
 
-    audit_log(
-        db, "device", device.id, device.name, AuditAction.deploy,
-        current_user.id, current_user.username,
-        old_values={"status": old_status},
-        new_values={"status": "in_service", "name": req.name},
-    )
+    log_event(db, EventType.device_deployed, f"Device '{device.name}' deployed to service",
+              entity_type="device", entity_id=device.id, entity_name=device.name,
+              username=current_user.username, user_id=current_user.id,
+              detail={"old_status": old_status, "new_status": "in_service"})
     db.commit()
     db.refresh(device)
     return _device_to_out(device, db)
@@ -656,6 +776,11 @@ def set_monitor_nics(
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(404, "Device not found")
+    if body.nic_ids:
+        device_nic_ids = {n.id for n in device.nics}
+        invalid = [nid for nid in body.nic_ids if nid not in device_nic_ids]
+        if invalid:
+            raise HTTPException(400, f"NIC IDs {invalid} do not belong to this device")
     device.monitor_nic_ids = body.nic_ids if body.nic_ids else None
     db.commit()
     db.refresh(device)

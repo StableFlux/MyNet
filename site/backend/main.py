@@ -25,14 +25,14 @@ import routers.search as search_router
 import routers.topology as topology_router
 import routers.monitoring as monitoring_router
 import routers.qr as qr_router
-import routers.audit as audit_router
-import routers.alerts as alerts_router
+import routers.events as events_router
 import routers.backup as backup_router
 import routers.switch_ports as switch_ports_router
 import routers.locations as locations_router
 import routers.system_settings as system_settings_router
 import routers.dashboard as dashboard_router
 import routers.pihole as pihole_router
+import routers.wan_configs as wan_configs_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -143,6 +143,29 @@ async def lifespan(app: FastAPI):
     # Wire up WebSocket broadcast to monitoring scheduler
     set_broadcast_fn(manager.broadcast)
 
+    # Log startup event
+    from services.events import log_event
+    from models.event import EventType
+    _se_db = SessionLocal()
+    try:
+        log_event(_se_db, EventType.system_startup, "MyNet started",
+                  detail={"version": "1.0.0"})
+        _se_db.commit()
+    except Exception as _e:
+        log.warning(f"Startup event log failed: {_e}")
+    finally:
+        _se_db.close()
+
+    # Startup conflict scan
+    from services.conflict_checker import run_conflict_scan
+    _cs_db = SessionLocal()
+    try:
+        run_conflict_scan(_cs_db)
+    except Exception as _e:
+        log.warning(f"Startup conflict scan failed: {_e}")
+    finally:
+        _cs_db.close()
+
     # Start background scheduler
     load_all_monitored_devices()
 
@@ -166,6 +189,25 @@ async def lifespan(app: FastAPI):
         _poll_pihole,
         trigger=IntervalTrigger(seconds=_pihole_interval),
         id="pihole_poll",
+        replace_existing=True,
+        misfire_grace_time=60,
+    )
+
+    # Schedule conflict scan every 10 minutes
+    async def _run_conflict_scan():
+        from services.conflict_checker import run_conflict_scan
+        _db = SessionLocal()
+        try:
+            run_conflict_scan(_db)
+        except Exception as _e:
+            log.warning(f"Periodic conflict scan failed: {_e}")
+        finally:
+            _db.close()
+
+    scheduler.add_job(
+        _run_conflict_scan,
+        trigger=IntervalTrigger(minutes=10),
+        id="conflict_scan",
         replace_existing=True,
         misfire_grace_time=60,
     )
@@ -207,14 +249,14 @@ app.include_router(search_router.router)
 app.include_router(topology_router.router)
 app.include_router(monitoring_router.router)
 app.include_router(qr_router.router)
-app.include_router(audit_router.router)
-app.include_router(alerts_router.router)
+app.include_router(events_router.router)
 app.include_router(backup_router.router)
 app.include_router(switch_ports_router.router)
 app.include_router(locations_router.router)
 app.include_router(system_settings_router.router, prefix="/api")
 app.include_router(dashboard_router.router)
 app.include_router(pihole_router.router)
+app.include_router(wan_configs_router.router)
 
 
 # ---------------------------------------------------------------------------

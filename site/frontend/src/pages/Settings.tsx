@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Wifi, CheckCircle, XCircle, Clock, Loader, ExternalLink, Palette } from 'lucide-react'
+import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2 } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
+import { useAuthStore } from '../store/authStore'
 import api from '../lib/api'
 
 const SETTINGS_ITEMS = [
@@ -37,10 +38,16 @@ const SETTINGS_ITEMS = [
     description: 'Customise colours for location types, device categories, and statuses.',
   },
   {
-    to: '/settings/audit',
+    to: '/settings/pihole',
+    icon: Wifi,
+    label: 'Pi-hole Integration',
+    description: 'Configure Pi-hole DNS filtering instances and polling interval.',
+  },
+  {
+    to: '/events',
     icon: ScrollText,
-    label: 'Audit Log',
-    description: 'View a history of all changes made within the system.',
+    label: 'Events',
+    description: 'View all system events — activity history, alerts, conflicts, and monitoring.',
   },
 ]
 
@@ -154,43 +161,106 @@ function EncryptionModal({
   )
 }
 
+// ── Factory Reset modal ──────────────────────────────────────────────────────
+
+function FactoryResetModal({ onConfirm, onCancel, loading }: {
+  onConfirm: () => void
+  onCancel: () => void
+  loading: boolean
+}) {
+  const [typed, setTyped] = useState('')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[#1a1f2e] border border-red-500/30 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-red-600/20 flex items-center justify-center flex-shrink-0">
+            <Trash2 size={16} className="text-red-400" />
+          </div>
+          <h2 className="text-base font-semibold text-white">Factory Reset</h2>
+        </div>
+
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 space-y-1">
+          <p className="text-xs font-semibold text-red-400">This will permanently delete:</p>
+          <ul className="text-xs text-red-300/80 list-disc list-inside space-y-0.5">
+            <li>All users and sessions</li>
+            <li>All devices, NICs, and switch ports</li>
+            <li>All networks and locations</li>
+            <li>All WAN configs and monitoring history</li>
+            <li>All events and alerts</li>
+            <li>All custom settings and colours</li>
+          </ul>
+          <p className="text-xs text-red-300/80 pt-1">The setup wizard will appear on next page load. This cannot be undone.</p>
+        </div>
+
+        <div>
+          <label className="block text-xs text-white/40 mb-1">Type <span className="font-mono text-white/70">RESET</span> to confirm</label>
+          <input
+            type="text"
+            autoFocus
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            className="glass-input w-full text-sm font-mono"
+            placeholder="RESET"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-1">
+          <button type="button" onClick={onCancel} disabled={loading} className="btn-ghost text-sm">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={typed !== 'RESET' || loading}
+            onClick={onConfirm}
+            className="text-sm px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Trash2 size={13} />
+            {loading ? 'Resetting…' : 'Factory Reset'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function Settings() {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const { setUser } = useAuthStore()
 
   const { data: sysData } = useQuery({
     queryKey: ['system-settings'],
     queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
   })
 
-  const { data: piholeStatus, refetch: refetchPiholeStatus } = useQuery({
-    queryKey: ['pihole-status'],
-    queryFn: async () => { const { data } = await api.get('/pihole/status'); return data },
-    refetchInterval: 60_000,
-  })
-
-  const pollNowMutation = useMutation({
-    mutationFn: () => api.post('/pihole/poll-now'),
-    onSuccess: () => refetchPiholeStatus(),
-  })
-
   const [systemName, setSystemName] = useState('')
   const [authRequired, setAuthRequired] = useState(true)
   const [authError, setAuthError] = useState('')
-
-  const [piholeInterval, setPiholeInterval] = useState(300)
 
   const [modal, setModal] = useState<ModalMode | null>(null)
   const [modalError, setModalError] = useState('')
   const [modalLoading, setModalLoading] = useState(false)
 
+  const [showResetModal, setShowResetModal] = useState(false)
+  const resetMutation = useMutation({
+    mutationFn: () => api.post('/backup/factory-reset', { confirm: 'RESET' }),
+    onSuccess: () => {
+      setUser(null)
+      qc.clear()
+      window.location.href = '/'
+    },
+    onError: (err: any) => {
+      setShowResetModal(false)
+      alert(err?.response?.data?.detail ?? 'Factory reset failed')
+    },
+  })
+
   useEffect(() => {
     if (sysData) {
       setSystemName(sysData.system_name ?? 'MyNet')
       setAuthRequired(sysData.auth_required ?? true)
-      setPiholeInterval(sysData.pihole_poll_interval_secs ?? 300)
     }
   }, [sysData])
 
@@ -199,7 +269,6 @@ export default function Settings() {
       const { data } = await api.patch('/system-settings', {
         system_name: systemName,
         auth_required: authRequired,
-        pihole_poll_interval_secs: piholeInterval,
       })
       return data
     },
@@ -215,8 +284,7 @@ export default function Settings() {
 
   const dirty = sysData && (
     systemName !== sysData.system_name ||
-    authRequired !== sysData.auth_required ||
-    piholeInterval !== (sysData.pihole_poll_interval_secs ?? 300)
+    authRequired !== sysData.auth_required
   )
 
   const encEnabled = sysData?.encryption_enabled ?? false
@@ -262,6 +330,13 @@ export default function Settings() {
           loading={modalLoading}
         />
       )}
+      {showResetModal && (
+        <FactoryResetModal
+          onConfirm={() => resetMutation.mutate()}
+          onCancel={() => setShowResetModal(false)}
+          loading={resetMutation.isPending}
+        />
+      )}
 
       <div>
         <h1 className="text-xl font-bold text-white">Settings</h1>
@@ -285,9 +360,6 @@ export default function Settings() {
           ))}
         </div>
       </div>
-
-      {/* System + Pi-hole side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
       {/* System settings */}
       <div className="space-y-4">
@@ -414,127 +486,31 @@ export default function Settings() {
         </GlassCard>
       </div>
 
-      {/* Pi-hole */}
+      {/* Danger Zone */}
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-white/60 uppercase tracking-widest">Pi-hole Integration</h2>
-        <GlassCard className="space-y-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              <div className="w-9 h-9 rounded-lg bg-red-600/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Wifi size={16} className="text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-white">Pi-hole DNS Stats</p>
-                <p className="text-xs text-white/40 mt-0.5">
-                  Pi-hole instances are configured as devices. Open a device, enable the <strong className="text-white/60">Pi-hole Instance</strong> toggle,
-                  and ensure its password is set. MyNet will poll it via the device's NIC address automatically.
-                </p>
-              </div>
+        <h2 className="text-sm font-semibold text-red-400/60 uppercase tracking-widest">Danger Zone</h2>
+        <GlassCard className="border-red-500/20">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-lg bg-red-600/15 flex items-center justify-center flex-shrink-0">
+              <Trash2 size={18} className="text-red-400" />
             </div>
-            <div className="w-px bg-white/[0.06] self-stretch flex-shrink-0" />
-            <div className="flex-shrink-0 text-center">
-              <label className="block text-xs text-white/40 mb-1.5">Poll interval (s)</label>
-              <input
-                type="number"
-                min={60}
-                max={3600}
-                value={piholeInterval}
-                onChange={(e) => setPiholeInterval(Number(e.target.value))}
-                className="glass-input text-sm w-32 text-center"
-              />
-              <p className="text-xs text-white/30 mt-1.5 text-center">Min 60s · default 300s</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">Factory Reset</p>
+              <p className="text-xs text-white/40 mt-0.5">
+                Wipe all users, devices, networks, and settings. Returns the system to a
+                freshly installed state and launches the setup wizard.
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowResetModal(true)}
+              className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              Reset…
+            </button>
           </div>
-
-          <div className="h-px bg-white/[0.06]" />
-
-          {/* Configured Pi-hole devices */}
-          {piholeStatus && piholeStatus.length === 0 && (
-            <p className="text-xs text-white/30 italic">No Pi-hole devices configured. Enable the Pi-hole toggle on a device to get started.</p>
-          )}
-          {piholeStatus && piholeStatus.length > 0 && (
-            <div className="space-y-2">
-              {piholeStatus.map((ph: any) => {
-                const ok = ph.url_configured
-                const unreachable = ph.reachable === false
-                const lastPolled = ph.last_polled ? new Date(ph.last_polled) : null
-                const age = lastPolled ? Math.floor((Date.now() - lastPolled.getTime()) / 1000) : null
-                const ageStr = age === null ? 'Never polled'
-                  : age < 60 ? 'Just now'
-                  : age < 3600 ? `${Math.floor(age / 60)}m ago`
-                  : `${Math.floor(age / 3600)}h ago`
-                return (
-                  <div key={ph.device_id} className={`p-3 rounded-lg border ${unreachable ? 'bg-red-500/[0.05] border-red-500/20' : 'bg-white/[0.03] border-white/[0.06]'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-shrink-0">
-                        {unreachable
-                          ? <XCircle size={14} className="text-red-400" />
-                          : ok
-                            ? <CheckCircle size={14} className="text-emerald-400" />
-                            : <XCircle size={14} className="text-amber-400" />
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-white truncate">{ph.device_name}</p>
-                          {ph.version && (
-                            <span className="text-[10px] text-white/20 font-mono flex-shrink-0">{ph.version}</span>
-                          )}
-                          {ph.url && (
-                            <a href={ph.url} target="_blank" rel="noopener noreferrer"
-                              className="flex-shrink-0 text-white/25 hover:text-indigo-400 transition-colors">
-                              <ExternalLink size={11} />
-                            </a>
-                          )}
-                        </div>
-                        <p className="text-xs text-white/40 truncate">{ph.poll_host ? `Polling: ${ph.poll_host}` : 'No NIC address available'}</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        {unreachable && (
-                          <p className="text-xs text-red-400 font-medium">{ph.last_error ?? 'Unreachable'}</p>
-                        )}
-                        {!unreachable && !ok && (
-                          <p className="text-xs text-amber-400">No NIC address</p>
-                        )}
-                        {!unreachable && ok && !ph.password_set && (
-                          <p className="text-xs text-white/30">No password</p>
-                        )}
-                        {ok && lastPolled && (
-                          <div className="flex items-center gap-1 text-xs text-white/40">
-                            <Clock size={11} />
-                            <span>{ageStr}</span>
-                          </div>
-                        )}
-                        {!unreachable && ph.queries_today !== null && ph.queries_today !== undefined && (
-                          <p className="text-xs text-white/30">{ph.queries_today.toLocaleString()} queries today</p>
-                        )}
-                      </div>
-                    </div>
-                    {!unreachable && ph.blocking_enabled !== null && ph.blocking_enabled !== undefined && (
-                      <div className="mt-2 pt-2 border-t border-white/[0.05] flex items-center justify-between">
-                        <span className="text-xs text-white/30">Blocking</span>
-                        <span className={`text-xs font-medium ${ph.blocking_enabled ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {ph.blocking_enabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-              <button
-                type="button"
-                disabled={pollNowMutation.isPending}
-                onClick={() => pollNowMutation.mutate()}
-                className="text-xs text-white/30 hover:text-white/60 transition-colors flex items-center gap-1.5 disabled:opacity-40"
-              >
-                {pollNowMutation.isPending ? <><Loader size={11} className="animate-spin" /> Polling…</> : 'Poll now'}
-              </button>
-            </div>
-          )}
         </GlassCard>
       </div>
-
-      </div>{/* end grid */}
     </div>
   )
 }

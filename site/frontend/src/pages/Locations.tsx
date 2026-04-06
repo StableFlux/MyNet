@@ -4,6 +4,7 @@ import { MapPin, Plus, Pencil, Trash2, Check, X, ChevronDown, ChevronRight, Lock
 import api from '../lib/api'
 import { useColorSettings } from '../hooks/useColorSettings'
 import { LOCATION_TYPE_ICON } from '../components/DeviceTypeIcon'
+import { useAuthStore } from '../store/authStore'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -131,7 +132,7 @@ function InlineForm({ form, onChange, knownTypes, listId, onSave, onCancel, savi
 // Tree node (recursive)
 // ---------------------------------------------------------------------------
 function TreeNode({ node, allItems, byId, knownTypes, editMode, setEditMode, form, setForm,
-  onSave, onDelete, saving, saveError, collapsed, toggleCollapse, locationTypeColors }: {
+  onSave, onDelete, saving, saveError, collapsed, toggleCollapse, locationTypeColors, canEdit }: {
   node: LocationNode; allItems: FlatItem[]; byId: Record<number, FlatItem>; knownTypes: string[]
   editMode: EditMode; setEditMode: (m: EditMode) => void
   form: NodeForm; setForm: (f: NodeForm) => void
@@ -139,6 +140,7 @@ function TreeNode({ node, allItems, byId, knownTypes, editMode, setEditMode, for
   saving: boolean; saveError: string | null
   collapsed: Set<number>; toggleCollapse: (id: number) => void
   locationTypeColors: Record<string, string>
+  canEdit: boolean
 }) {
   const isEditing = editMode?.kind === 'edit' && editMode.id === node.id
   const isAddingChild = editMode?.kind === 'new' && editMode.parentId === node.id
@@ -195,21 +197,23 @@ function TreeNode({ node, allItems, byId, knownTypes, editMode, setEditMode, for
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-0.5 overflow-hidden max-w-0 group-hover:max-w-[68px] opacity-0 group-hover:opacity-100 transition-all duration-200 ease-out">
-                <button type="button" aria-label="Add child"
-                  onClick={() => { setForm({ name: '', type: '', parent_id: node.id }); setEditMode({ kind: 'new', parentId: node.id }) }}
-                  className="btn-ghost p-1 text-white/20 hover:text-indigo-300 flex-shrink-0"><Plus size={11} /></button>
-                {!node.is_permanent && (
-                  <button type="button" aria-label={`Edit ${node.name}`}
-                    onClick={() => { setForm({ name: node.name, type: node.type ?? '', parent_id: node.parent_id }); setEditMode({ kind: 'edit', id: node.id }) }}
-                    className="btn-ghost p-1 text-white/20 hover:text-white flex-shrink-0"><Pencil size={11} /></button>
-                )}
-                {!node.is_permanent && (
-                  <button type="button" aria-label={`Delete ${node.name}`}
-                    onClick={() => onDelete(node.id)}
-                    className="btn-ghost p-1 text-white/20 hover:text-red-400 flex-shrink-0"><Trash2 size={11} /></button>
-                )}
-              </div>
+              {canEdit && (
+                <div className="flex items-center gap-0.5 overflow-hidden max-w-0 group-hover:max-w-[68px] opacity-0 group-hover:opacity-100 transition-all duration-200 ease-out">
+                  <button type="button" aria-label="Add child"
+                    onClick={() => { setForm({ name: '', type: '', parent_id: node.id }); setEditMode({ kind: 'new', parentId: node.id }) }}
+                    className="btn-ghost p-1 text-white/20 hover:text-indigo-300 flex-shrink-0"><Plus size={11} /></button>
+                  {!node.is_permanent && (
+                    <button type="button" aria-label={`Edit ${node.name}`}
+                      onClick={() => { setForm({ name: node.name, type: node.type ?? '', parent_id: node.parent_id }); setEditMode({ kind: 'edit', id: node.id }) }}
+                      className="btn-ghost p-1 text-white/20 hover:text-white flex-shrink-0"><Pencil size={11} /></button>
+                  )}
+                  {!node.is_permanent && (
+                    <button type="button" aria-label={`Delete ${node.name}`}
+                      onClick={() => onDelete(node.id)}
+                      className="btn-ghost p-1 text-white/20 hover:text-red-400 flex-shrink-0"><Trash2 size={11} /></button>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -233,7 +237,7 @@ function TreeNode({ node, allItems, byId, knownTypes, editMode, setEditMode, for
               onSave={onSave} onDelete={onDelete}
               saving={saving} saveError={saveError}
               collapsed={collapsed} toggleCollapse={toggleCollapse}
-              locationTypeColors={locationTypeColors} />
+              locationTypeColors={locationTypeColors} canEdit={canEdit} />
           ))}
         </div>
       )}
@@ -246,6 +250,8 @@ function TreeNode({ node, allItems, byId, knownTypes, editMode, setEditMode, for
 // ---------------------------------------------------------------------------
 export default function Locations() {
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const canEdit = user?.role === 'admin' || user?.role === 'editor'
   const { locationTypeColors } = useColorSettings()
   const [editMode, setEditMode] = useState<EditMode>(null)
   const [form, setForm] = useState<NodeForm>({ name: '', type: '', parent_id: null })
@@ -283,6 +289,7 @@ export default function Locations() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/locations/${id}`),
     onSuccess: invalidate,
+    onError: (err: any) => setSaveError(err?.response?.data?.detail ?? err?.message ?? 'Delete failed'),
   })
 
   const toggleCollapse = (id: number) =>
@@ -294,7 +301,7 @@ export default function Locations() {
     onSave: (mode: EditMode) => saveMutation.mutate(mode),
     onDelete: (id: number) => deleteMutation.mutate(id),
     saving: saveMutation.isPending, saveError, collapsed, toggleCollapse,
-    locationTypeColors,
+    locationTypeColors, canEdit,
   }
 
   return (
@@ -305,11 +312,13 @@ export default function Locations() {
           <h1 className="text-xl font-bold text-white">Locations</h1>
           <p className="text-sm text-white/40 mt-0.5">{totalCount} location{totalCount !== 1 ? 's' : ''}</p>
         </div>
-        <button type="button"
-          onClick={() => { setSaveError(null); setForm({ name: '', type: '', parent_id: null }); setEditMode({ kind: 'new', parentId: null }) }}
-          className="btn-primary flex items-center gap-2">
-          <Plus size={15} /> Add Location
-        </button>
+        {canEdit && (
+          <button type="button"
+            onClick={() => { setSaveError(null); setForm({ name: '', type: '', parent_id: null }); setEditMode({ kind: 'new', parentId: null }) }}
+            className="btn-primary flex items-center gap-2">
+            <Plus size={15} /> Add Location
+          </button>
+        )}
       </div>
 
       {/* Root new-location form */}
@@ -443,7 +452,7 @@ export default function Locations() {
                     </div>
 
                     {/* Actions */}
-                    {confirmDeleteId === node.id ? (
+                    {canEdit && (confirmDeleteId === node.id ? (
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <span className="text-[11px] text-white/40">Delete?</span>
                         <button type="button"
@@ -470,7 +479,7 @@ export default function Locations() {
                             className="btn-ghost p-1 text-white/25 hover:text-red-400 flex-shrink-0"><Trash2 size={11} /></button>
                         )}
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               )}

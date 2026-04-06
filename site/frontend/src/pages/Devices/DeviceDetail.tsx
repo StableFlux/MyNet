@@ -1217,7 +1217,7 @@ function DeviceDetailInner({
                           onClick={() => blockingMutation.mutate(!piholeStatus.blocking_enabled)}
                           className={`relative w-7 h-4 rounded-full transition-colors disabled:opacity-40 ${piholeStatus.blocking_enabled ? 'bg-emerald-600' : 'bg-white/15 hover:bg-white/20'}`}
                         >
-                          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${piholeStatus.blocking_enabled ? 'left-3.5' : 'left-0.5'}`} />
+                          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-[#ffffff] shadow transition-all ${piholeStatus.blocking_enabled ? 'left-3.5' : 'left-0.5'}`} />
                         </button>
                       )}
                     </div>
@@ -1326,7 +1326,7 @@ function DeviceDetailInner({
                     })}
                     className={`relative w-7 h-4 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${device.monitoring_enabled ? 'bg-indigo-600' : 'bg-white/15 hover:bg-white/20'}`}
                   >
-                    <span className={`absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${device.monitoring_enabled ? 'translate-x-3' : 'translate-x-0'}`} />
+                    <span className={`absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-[#ffffff] shadow-sm transition-transform ${device.monitoring_enabled ? 'translate-x-3' : 'translate-x-0'}`} />
                   </button>
                 )}
               </div>
@@ -1485,7 +1485,7 @@ function DeviceDetailInner({
       {showHistory && (
         <div className="fixed inset-0 z-40 flex justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowHistory(false)} />
-          <div className="relative z-10 w-[520px] max-w-full h-full bg-[#0f1117] border-l border-glass-border flex flex-col shadow-2xl">
+          <div className="relative z-10 w-[520px] max-w-full h-full bg-surface border-l border-glass-border flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-glass-border flex-shrink-0">
               <div>
                 <h2 className="text-sm font-semibold text-white">Device History</h2>
@@ -1572,7 +1572,7 @@ function DeviceDetailInner({
       {showQrPanel && (
         <div className="fixed inset-0 z-40 flex justify-end">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowQrPanel(false)} />
-          <div className="relative z-10 w-[280px] max-w-full h-full bg-[#0f1117] border-l border-glass-border flex flex-col shadow-2xl">
+          <div className="relative z-10 w-[280px] max-w-full h-full bg-surface border-l border-glass-border flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-glass-border flex-shrink-0">
               <h2 className="text-sm font-semibold text-white">QR Codes</h2>
               <button type="button" onClick={() => setShowQrPanel(false)}
@@ -1586,7 +1586,7 @@ function DeviceDetailInner({
               {/* MyNet device QR */}
               <div className="flex flex-col items-center gap-3">
                 <p className="text-xs font-semibold text-white/50 uppercase tracking-wider text-center">MyNet Device Link</p>
-                <div className="p-4 bg-white rounded-xl">
+                <div className="p-4 bg-[#ffffff] rounded-xl">
                   <QRCodeSVG value={mynetUrl} size={160} />
                 </div>
                 <a
@@ -1605,7 +1605,7 @@ function DeviceDetailInner({
                   <p className="text-xs font-semibold text-white/50 uppercase tracking-wider text-center">
                     {svc.name || `Service ${i + 1}`}
                   </p>
-                  <a href={svc.url} target="_blank" rel="noreferrer" aria-label={`Open ${svc.name || `Service ${i + 1}`}`} className="p-4 bg-white rounded-xl hover:opacity-80 transition-opacity">
+                  <a href={svc.url} target="_blank" rel="noreferrer" aria-label={`Open ${svc.name || `Service ${i + 1}`}`} className="p-4 bg-[#ffffff] rounded-xl hover:opacity-80 transition-opacity">
                     <QRCodeSVG value={svc.url} size={160} />
                   </a>
                   <a

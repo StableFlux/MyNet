@@ -2,6 +2,201 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Theme tokens
+   All visual values live here. Components use CSS variables — switching
+   between .dark and .light on <html> swaps the entire palette.
+───────────────────────────────────────────────────────────────────────────── */
+
+html.dark {
+  --color-white: 255 255 255;           /* drives text-white, bg-white/XX etc. */
+
+  /* Surfaces */
+  --surface:          #0d1117;
+  --surface-raised:   #111827;
+  --surface-overlay:  #1a2236;
+
+  /* Glass */
+  --glass-bg:         rgba(255,255,255,0.055);
+  --glass-border:     rgba(255,255,255,0.09);
+  --glass-hover:      rgba(255,255,255,0.09);
+  --shadow-glass:     0 4px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12);
+
+  /* Cards */
+  --card-bg:          linear-gradient(160deg, #1d2540 0%, #151b2e 100%);
+  --card-shadow:      0 1px 0 rgba(255,255,255,0.08) inset,
+                      0 6px 32px rgba(0,0,0,0.55),
+                      0 1px 3px rgba(0,0,0,0.3);
+  --card-hover-bg:    linear-gradient(160deg, #243058 0%, #1a2240 100%);
+  --card-hover-border: rgba(255,255,255,0.16);
+  --card-hover-shadow: 0 1px 0 rgba(255,255,255,0.11) inset,
+                       0 8px 40px rgba(0,0,0,0.65),
+                       0 1px 4px rgba(0,0,0,0.35);
+
+  /* Inputs */
+  --input-bg:           rgba(255,255,255,0.04);
+  --input-border:       rgba(255,255,255,0.10);
+  --input-focus-bg:     rgba(255,255,255,0.07);
+  --input-focus-border: rgba(99,102,241,0.55);
+  --input-focus-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+  --input-option-bg:    #1a2236;
+  --input-option-color: rgba(255,255,255,0.85);
+
+  /* Scrollbars */
+  --scrollbar-track:       rgba(0,0,0,0.25);
+  --scrollbar-thumb:       rgba(255,255,255,0.18);
+  --scrollbar-thumb-hover: rgba(255,255,255,0.32);
+
+  /* Misc */
+  --body-gradient:    radial-gradient(ellipse 90% 55% at 50% 0%, rgba(99,102,241,0.13) 0%, transparent 100%);
+  --logo-blend-mode:  screen;
+
+  /* Specific components */
+  --nic-slot-bg:      rgba(0,0,0,0.22);
+  --nic-slot-border:  rgba(255,255,255,0.10);
+  --nic-slot-shadow:  inset 0 1px 0 rgba(255,255,255,0.05);
+
+  --switch-chassis-bg:     #1a2138;
+  --switch-chassis-border: rgba(255,255,255,0.12);
+  --switch-chassis-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.10);
+  --switch-port-bg:        rgba(0,0,0,0.28);
+  --switch-port-border:    rgba(255,255,255,0.14);
+  --switch-port-shadow:    inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.2);
+  --switch-mgmt-bg:        rgba(124,58,237,0.12);
+  --switch-mgmt-border:    rgba(124,58,237,0.27);
+
+  --badge-bg:    #1d2540;
+  --modal-bg:    #1a1f2e;
+  --panel-bg:    #0f1117;
+  --tooltip-bg:  #1a1f2e;
+
+  /* Card gradient base colors — used in inline color-mix() gradients */
+  --card-base-mid:      #1d2540;
+  --card-base-deep:     #151b2e;
+  --card-base-deepest:  #0e1520;
+
+  /* Status/alert background gradients for Dashboard cards */
+  --bg-status-error:    linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%);
+  --bg-status-warning:  linear-gradient(135deg, #252008 0%, #181500 100%);
+  --bg-status-critical: linear-gradient(135deg, #2a0e0e 0%, #1a0808 100%);
+
+  /* Chart / data-vis colours */
+  --chart-grid:         rgba(255,255,255,0.04);
+  --chart-tick:         rgba(255,255,255,0.25);
+  --chart-tooltip-bg:   #0e1520;
+  --chart-tooltip-border: rgba(255,255,255,0.08);
+  --chart-tooltip-text: rgba(255,255,255,0.7);
+  --chart-tooltip-muted: rgba(255,255,255,0.4);
+
+  /* Misc inline-style whites */
+  --inline-subtle-bg:   rgba(255,255,255,0.04);
+  --inline-subtle-border: rgba(255,255,255,0.08);
+  --inline-subtle-text: rgba(255,255,255,0.5);
+  --inline-inactive-bg: rgba(255,255,255,0.02);
+  --inline-inactive-text: rgba(255,255,255,0.3);
+  --inline-inactive-border: rgba(255,255,255,0.06);
+
+  /* Light nav text overrides: these just stay at default Tailwind in dark mode */
+  --nav-active-color: #a5b4fc;    /* indigo-300 */
+  --nav-inactive-color: rgba(255,255,255,0.5);
+}
+
+html.light {
+  --color-white: 15 23 42;              /* slate-900 — all text-white/XX → dark */
+
+  /* Surfaces */
+  --surface:          #f1f5f9;
+  --surface-raised:   #ffffff;
+  --surface-overlay:  #e8edf5;
+
+  /* Glass */
+  --glass-bg:         rgba(255,255,255,0.75);
+  --glass-border:     rgba(0,0,0,0.08);
+  --glass-hover:      rgba(0,0,0,0.04);
+  --shadow-glass:     0 4px 32px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9);
+
+  /* Cards */
+  --card-bg:          linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  --card-shadow:      0 1px 0 rgba(255,255,255,0.9) inset,
+                      0 4px 16px rgba(0,0,0,0.07),
+                      0 1px 3px rgba(0,0,0,0.04);
+  --card-hover-bg:    linear-gradient(160deg, #eef2ff 0%, #e8efff 100%);
+  --card-hover-border: rgba(99,102,241,0.25);
+  --card-hover-shadow: 0 1px 0 rgba(255,255,255,0.9) inset,
+                       0 6px 24px rgba(0,0,0,0.1),
+                       0 1px 4px rgba(0,0,0,0.06);
+
+  /* Inputs */
+  --input-bg:           rgba(255,255,255,0.9);
+  --input-border:       rgba(0,0,0,0.12);
+  --input-focus-bg:     #ffffff;
+  --input-focus-border: rgba(99,102,241,0.55);
+  --input-focus-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+  --input-option-bg:    #ffffff;
+  --input-option-color: rgba(15,23,42,0.85);
+
+  /* Scrollbars */
+  --scrollbar-track:       rgba(0,0,0,0.06);
+  --scrollbar-thumb:       rgba(0,0,0,0.18);
+  --scrollbar-thumb-hover: rgba(0,0,0,0.28);
+
+  /* Misc */
+  --body-gradient:    radial-gradient(ellipse 90% 55% at 50% 0%, rgba(99,102,241,0.07) 0%, transparent 100%);
+  --logo-blend-mode:  multiply;
+
+  /* Specific components */
+  --nic-slot-bg:      rgba(0,0,0,0.04);
+  --nic-slot-border:  rgba(0,0,0,0.10);
+  --nic-slot-shadow:  inset 0 1px 0 rgba(255,255,255,0.8);
+
+  --switch-chassis-bg:     #dde3ed;
+  --switch-chassis-border: rgba(0,0,0,0.12);
+  --switch-chassis-shadow: 0 4px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9);
+  --switch-port-bg:        rgba(0,0,0,0.05);
+  --switch-port-border:    rgba(0,0,0,0.12);
+  --switch-port-shadow:    inset 0 1px 0 rgba(255,255,255,0.8), inset 0 -1px 0 rgba(0,0,0,0.04);
+  --switch-mgmt-bg:        rgba(124,58,237,0.08);
+  --switch-mgmt-border:    rgba(124,58,237,0.20);
+
+  --badge-bg:    #e8edf5;
+  --modal-bg:    #ffffff;
+  --panel-bg:    #f8fafc;
+  --tooltip-bg:  #ffffff;
+
+  /* Card gradient base colors — light equivalents */
+  --card-base-mid:      #e8edf5;
+  --card-base-deep:     #ffffff;
+  --card-base-deepest:  #f1f5f9;
+
+  /* Status/alert backgrounds — light tints */
+  --bg-status-error:    linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.04) 100%);
+  --bg-status-warning:  linear-gradient(135deg, rgba(245,158,11,0.07) 0%, rgba(245,158,11,0.03) 100%);
+  --bg-status-critical: linear-gradient(135deg, rgba(239,68,68,0.10) 0%, rgba(239,68,68,0.05) 100%);
+
+  /* Chart / data-vis colours */
+  --chart-grid:         rgba(0,0,0,0.06);
+  --chart-tick:         rgba(15,23,42,0.35);
+  --chart-tooltip-bg:   #ffffff;
+  --chart-tooltip-border: rgba(0,0,0,0.08);
+  --chart-tooltip-text: rgba(15,23,42,0.7);
+  --chart-tooltip-muted: rgba(15,23,42,0.4);
+
+  /* Misc inline-style replacements */
+  --inline-subtle-bg:   rgba(0,0,0,0.03);
+  --inline-subtle-border: rgba(0,0,0,0.07);
+  --inline-subtle-text: rgba(15,23,42,0.45);
+  --inline-inactive-bg: rgba(0,0,0,0.02);
+  --inline-inactive-text: rgba(15,23,42,0.25);
+  --inline-inactive-border: rgba(0,0,0,0.06);
+
+  --nav-active-color: #4f46e5;    /* indigo-600 — readable on white */
+  --nav-inactive-color: rgba(15,23,42,0.45);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Base
+───────────────────────────────────────────────────────────────────────────── */
+
 @layer base {
   * {
     @apply border-glass-border;
@@ -9,45 +204,43 @@
 
   body {
     @apply bg-surface text-white;
-    background-image:
-      radial-gradient(ellipse 90% 55% at 50% 0%, rgba(99,102,241,0.13) 0%, transparent 100%);
+    background-image: var(--body-gradient);
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: rgba(0,0,0,0.25); }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 9999px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.32); }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Components
+───────────────────────────────────────────────────────────────────────────── */
 
 @layer components {
 
   /* ── Cards ────────────────────────────────────────────────────────── */
   .glass-card {
-    @apply border border-glass-border rounded-xl;
-    background: linear-gradient(160deg, #1d2540 0%, #151b2e 100%);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.08) inset,
-      0 6px 32px rgba(0,0,0,0.55),
-      0 1px 3px rgba(0,0,0,0.3);
+    border: 1px solid var(--glass-border);
+    @apply rounded-xl;
+    background: var(--card-bg);
+    box-shadow: var(--card-shadow);
   }
 
   .glass-card-interactive {
     transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
   .glass-card-interactive:hover {
-    background: linear-gradient(160deg, #243058 0%, #1a2240 100%);
-    border-color: rgba(255,255,255,0.16);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.11) inset,
-      0 8px 40px rgba(0,0,0,0.65),
-      0 1px 4px rgba(0,0,0,0.35);
+    background: var(--card-hover-bg);
+    border-color: var(--card-hover-border);
+    box-shadow: var(--card-hover-shadow);
   }
 
   /* ── NIC slots (device cards) ────────────────────────────────────── */
   .nic-slot {
-    background: rgba(0,0,0,0.22);
-    border: 1px solid rgba(255,255,255,0.10);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    background: var(--nic-slot-bg);
+    border: 1px solid var(--nic-slot-border);
+    box-shadow: var(--nic-slot-shadow);
     @apply rounded-lg px-2 py-1;
   }
   .nic-slot-connected {
@@ -66,17 +259,17 @@
 
   /* ── Switch port diagram ──────────────────────────────────────────── */
   .switch-chassis {
-    background: #1a2138;
-    border: 1px solid rgba(255,255,255,0.12);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.10);
+    background: var(--switch-chassis-bg);
+    border: 1px solid var(--switch-chassis-border);
+    box-shadow: var(--switch-chassis-shadow);
     @apply inline-flex flex-col gap-2 rounded-xl px-5 py-3;
   }
 
   .switch-port {
     width: 36px; height: 28px;
-    background: rgba(0,0,0,0.28);
-    border: 1px solid rgba(255,255,255,0.14);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.2);
+    background: var(--switch-port-bg);
+    border: 1px solid var(--switch-port-border);
+    box-shadow: var(--switch-port-shadow);
     @apply relative flex items-center justify-center rounded transition-all;
   }
 
@@ -89,8 +282,8 @@
   }
 
   .switch-port-mgmt {
-    background: rgba(124,58,237,0.12);
-    border-color: rgba(124,58,237,0.27);
+    background: var(--switch-mgmt-bg);
+    border-color: var(--switch-mgmt-border);
   }
 
   .switch-port-led {
@@ -102,23 +295,25 @@
   /* ── Inputs ───────────────────────────────────────────────────────── */
   .glass-input {
     @apply border rounded-lg px-3 py-2 text-white placeholder-white/25 focus:outline-none transition-all;
-    background: rgba(255,255,255,0.04);
-    border-color: rgba(255,255,255,0.10);
+    background: var(--input-bg);
+    border-color: var(--input-border);
   }
   .glass-input:focus {
-    background: rgba(255,255,255,0.07);
-    border-color: rgba(99,102,241,0.55);
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
+    background: var(--input-focus-bg);
+    border-color: var(--input-focus-border);
+    box-shadow: var(--input-focus-shadow);
   }
   .glass-input option,
   .glass-input optgroup {
-    background-color: #1a2236;
-    color: rgba(255,255,255,0.85);
+    background-color: var(--input-option-bg);
+    color: var(--input-option-color);
   }
 
   /* ── Buttons ──────────────────────────────────────────────────────── */
   .btn-primary {
-    @apply text-white px-4 py-2 rounded-lg font-medium text-sm transition-all
+    /* color is hardcoded #fff — must stay white on indigo regardless of theme */
+    color: #ffffff;
+    @apply px-4 py-2 rounded-lg font-medium text-sm transition-all
            focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed;
     background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
     box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 2px 12px rgba(79,70,229,0.4);
@@ -140,8 +335,8 @@
     background: transparent;
   }
   .btn-ghost:hover {
-    background: rgba(255,255,255,0.06);
-    border-color: rgba(255,255,255,0.10);
+    background: rgba(var(--color-white), 0.06);
+    border-color: rgba(var(--color-white), 0.10);
   }
 
   .btn-danger {
@@ -188,10 +383,20 @@
   /* ── Topology ─────────────────────────────────────────────────────── */
   .topology-canvas   { height: 600px; }
   .topology-viewport { height: 70vh; }
-  .legend-dash       { border-bottom: 1px dashed rgba(255,255,255,0.3); }
+  .legend-dash       { border-bottom: 1px dashed rgba(var(--color-white), 0.3); }
   .topology-node {
     width: 260px; height: 110px;
-    background: linear-gradient(var(--nc-bg), var(--nc-bg)), #1e2535;
-    border: 1px solid var(--nc-border);
+    background: linear-gradient(var(--nc-bg, var(--card-base-mid)), var(--nc-bg, var(--card-base-mid))), var(--card-base-mid);
+    border: 1px solid var(--nc-border, var(--glass-border));
   }
+
+  /* ── Nav sidebar ──────────────────────────────────────────────────── */
+  /* Active nav item text adapts per theme (indigo-300 in dark, indigo-600 in light) */
+  .nav-item-active  { color: var(--nav-active-color); }
+  .nav-item-inactive { color: var(--nav-inactive-color); }
+
+  /* ── Light-mode specific: readable indigo variants ────────────────── */
+  /* indigo-300 is too light on white backgrounds */
+  html.light .text-indigo-300 { color: #4f46e5; }  /* → indigo-600 */
+  html.light .text-indigo-400 { color: #4338ca; }  /* → indigo-700 */
 }

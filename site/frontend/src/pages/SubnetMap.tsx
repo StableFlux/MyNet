@@ -81,9 +81,9 @@ export default function SubnetMap() {
               border: `1px solid ${n.color}55`,
               color: n.color,
             } : {
-              backgroundColor: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: 'rgba(255,255,255,0.5)',
+              backgroundColor: 'var(--inline-subtle-bg)',
+              border: '1px solid var(--inline-subtle-border)',
+              color: 'var(--inline-subtle-text)',
             }}
           >
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: n.color }} />
@@ -195,7 +195,7 @@ export default function SubnetMap() {
                       key={entry.ip}
                       onClick={() => navigate(`/devices/${entry.device_id}`)}
                       className={`${gridClass} ${isInactive ? 'opacity-40' : ''}`}
-                      style={{ ...gridStyle, backgroundColor: isInactive ? 'rgba(255,255,255,0.02)' : `${color}0d`, borderColor: isInactive ? 'rgba(255,255,255,0.06)' : `${color}33` }}
+                      style={{ ...gridStyle, backgroundColor: isInactive ? 'var(--inline-inactive-bg)' : `${color}0d`, borderColor: isInactive ? 'var(--inline-inactive-border)' : `${color}33` }}
                     >
                       <span className="flex items-center gap-1.5 min-w-0">
                         <span className={`font-mono text-sm transition-colors truncate ${isInactive ? 'text-white/40' : 'text-white/80 group-hover:text-white'}`}>

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react'
+import React, { ReactNode, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Monitor, Network, Map,
@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { SearchBar } from './SearchBar'
 import { AlertBell } from './AlertBell'
 import { useAuthStore } from '../store/authStore'
+import { useThemeStore, applyTheme } from '../store/themeStore'
 import api from '../lib/api'
 
 const NAV_ITEMS = [
@@ -30,6 +31,7 @@ interface Props {
 export function Layout({ children }: Props) {
   const { user, setUser } = useAuthStore()
   const navigate = useNavigate()
+  const { mode } = useThemeStore()
 
   const { data: sysSettings } = useQuery({
     queryKey: ['system-settings'],
@@ -43,6 +45,16 @@ export function Layout({ children }: Props) {
   useEffect(() => {
     document.title = systemName === 'MyNet' ? 'MyNet' : `MyNet — ${systemName}`
   }, [systemName])
+
+  // Apply theme and subscribe to system preference changes
+  useEffect(() => {
+    applyTheme(mode)
+    if (mode !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: light)')
+    const handler = () => applyTheme(mode)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [mode])
 
   const handleLogout = async () => {
     try { await api.post('/auth/logout') } catch { /* best-effort */ }
@@ -64,7 +76,7 @@ export function Layout({ children }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 py-3 overflow-y-auto relative"
-          style={{ backgroundImage: 'url(/logo.png)', backgroundSize: '100% auto', backgroundPosition: 'bottom center', backgroundRepeat: 'no-repeat', backgroundBlendMode: 'screen' }}>
+          style={{ backgroundImage: 'url(/logo.png)', backgroundSize: '100% auto', backgroundPosition: 'bottom center', backgroundRepeat: 'no-repeat', backgroundBlendMode: 'var(--logo-blend-mode)' as React.CSSProperties['backgroundBlendMode'] }}>
           {/* Clickable overlay sized to the rendered logo (884×346 at full nav width ≈ 88px tall) */}
           <a href="https://github.com/StableFlux/MyNet" target="_blank" rel="noopener noreferrer"
             className="absolute bottom-0 left-0 right-0 h-[88px]" title="View on GitHub" />
@@ -75,10 +87,10 @@ export function Layout({ children }: Props) {
               end={to === '/'}
               className={({ isActive }) =>
                 clsx(
-                  'flex items-center gap-3 mx-2 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+                  'flex items-center gap-3 mx-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border',
                   isActive
-                    ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]'
-                    : 'text-white/50 hover:text-white/90 hover:bg-white/[0.05] border border-transparent'
+                    ? 'bg-indigo-600/20 nav-item-active border-indigo-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]'
+                    : 'nav-item-inactive hover:text-white/90 hover:bg-white/[0.05] border-transparent'
                 )
               }
             >
@@ -87,7 +99,6 @@ export function Layout({ children }: Props) {
             </NavLink>
           ))}
         </nav>
-
 
         {/* Bottom: user + admin */}
         <div className="border-t border-glass-border p-3 space-y-1">
@@ -98,7 +109,7 @@ export function Layout({ children }: Props) {
                 clsx(
                   'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all w-full',
                   isActive
-                    ? 'bg-indigo-600/20 text-indigo-300'
+                    ? 'bg-indigo-600/20 nav-item-active'
                     : 'text-white/40 hover:text-white hover:bg-white/5'
                 )
               }

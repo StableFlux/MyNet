@@ -312,9 +312,9 @@ export default function DeviceList() {
           {(nic.network_name || nic.vlan_id) && (
             <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full truncate max-w-full"
               style={{
-                backgroundColor: nic.network_color ? nic.network_color + '22' : 'rgba(255,255,255,0.06)',
-                border: `1px solid ${nic.network_color ? nic.network_color + '55' : 'rgba(255,255,255,0.1)'}`,
-                color: nic.network_color || 'rgba(255,255,255,0.4)',
+                backgroundColor: nic.network_color ? nic.network_color + '22' : 'var(--inline-subtle-bg)',
+                border: `1px solid ${nic.network_color ? nic.network_color + '55' : 'var(--inline-subtle-border)'}`,
+                color: nic.network_color || 'var(--inline-subtle-text)',
               }}>
               {nic.vlan_id ? `VLAN ${nic.vlan_id}` : nic.network_name}
             </span>

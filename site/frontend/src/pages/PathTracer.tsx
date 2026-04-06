@@ -161,7 +161,7 @@ export default function PathTracer() {
               </div>
             </div>
           ) : (
-            <div className="glass-card p-5 space-y-4" style={{ background: 'linear-gradient(160deg, #0e1520 0%, #090e18 100%)' }}>
+            <div className="glass-card p-5 space-y-4" style={{ background: 'linear-gradient(160deg, var(--card-base-deepest) 0%, var(--card-base-deepest) 100%)' }}>
               <div className="flex items-center gap-4 flex-wrap">
                 <p className="text-xs text-white/40">{hops.length} hops</p>
                 {hops.some((h: any) => h.connection_type === 'wifi') && (
@@ -210,7 +210,7 @@ export default function PathTracer() {
                                          transition-colors group overflow-hidden"
                               style={hop.current_vlan_color ? {
                                 borderTopColor: `${hop.current_vlan_color}55`,
-                                background: `linear-gradient(160deg, color-mix(in srgb, ${hop.current_vlan_color} 8%, #1d2540) 0%, #151b2e 60%)`,
+                                background: `linear-gradient(160deg, color-mix(in srgb, ${hop.current_vlan_color} 8%, var(--card-base-mid)) 0%, var(--card-base-deep) 60%)`,
                               } : undefined}
                             >
                               <div className="self-start text-[10px] font-bold text-white/20

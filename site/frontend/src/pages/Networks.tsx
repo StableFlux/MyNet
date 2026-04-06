@@ -74,10 +74,10 @@ export default function Networks() {
                 style={{
                   borderTopColor: n.color ? n.color + '66' : undefined,
                   background: n.color
-                    ? `linear-gradient(160deg, color-mix(in srgb, ${n.color} 10%, #1d2540) 0%, #151b2e 55%)`
+                    ? `linear-gradient(160deg, color-mix(in srgb, ${n.color} 10%, var(--card-base-mid)) 0%, var(--card-base-deep) 55%)`
                     : undefined,
                   boxShadow: n.color
-                    ? `0 -1px 0 ${n.color}33 inset, 0 1px 0 rgba(255,255,255,0.08) inset, 0 6px 32px rgba(0,0,0,0.55), 0 1px 3px rgba(0,0,0,0.3)`
+                    ? `0 -1px 0 ${n.color}33 inset, var(--card-shadow)`
                     : undefined,
                 }}
               >

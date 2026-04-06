@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useResolvedTheme } from '../store/themeStore'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -72,7 +73,7 @@ function StatCard({ label, value, sub, icon: Icon, color, to, alert }: {
     <div
       onClick={() => navigate(to)}
       className={`glass-card glass-card-interactive cursor-pointer p-5 flex items-center gap-4 ${alert ? 'border-red-500/40' : ''}`}
-      style={alert ? { background: 'linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%)' } : undefined}
+      style={alert ? { background: 'var(--bg-status-error)' } : undefined}
     >
       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
         style={{ backgroundColor: `${color}22`, border: `1px solid ${color}44` }}>
@@ -109,6 +110,7 @@ function SectionHeader({ title, to, label = 'View all' }: { title: string; to: s
 export default function Dashboard() {
   const navigate = useNavigate()
   const [activityOpen, setActivityOpen] = useState(false)
+  const isDark = useResolvedTheme() === 'dark'
 
   const { data: s } = useQuery({
     queryKey: ['dashboard'],
@@ -151,9 +153,9 @@ export default function Dashboard() {
   const hasCritical = offline.length > 0 || (s?.critical_events ?? 0) > 0 || wanAnyDown
   const hasWarning = !hasCritical && (s?.warning_events ?? 0) > 0
   const dashBg = hasCritical
-    ? 'linear-gradient(135deg, #2a0e0e 0%, #1a0808 100%)'
+    ? 'var(--bg-status-critical)'
     : hasWarning
-    ? 'linear-gradient(135deg, #252008 0%, #181500 100%)'
+    ? 'var(--bg-status-warning)'
     : undefined
 
   return (
@@ -221,7 +223,7 @@ export default function Dashboard() {
         <div
           onClick={() => navigate('/events?active_only=true')}
           className={`glass-card glass-card-interactive cursor-pointer p-5 flex items-center gap-4 ${hasCritical ? 'border-red-500/40' : hasWarning ? 'border-amber-500/40' : ''}`}
-          style={hasCritical ? { background: 'linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%)' } : hasWarning ? { background: 'linear-gradient(135deg, #2a2008 0%, #1a1500 100%)' } : undefined}
+          style={hasCritical ? { background: 'var(--bg-status-error)' } : hasWarning ? { background: 'var(--bg-status-warning)' } : undefined}
         >
           <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: `${hasCritical ? '#ef4444' : hasWarning ? '#f59e0b' : '#6366f1'}22`, border: `1px solid ${hasCritical ? '#ef4444' : hasWarning ? '#f59e0b' : '#6366f1'}44` }}>
@@ -473,7 +475,7 @@ export default function Dashboard() {
                           <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                       <XAxis
                         dataKey="timestamp"
                         tickFormatter={(ts) => {
@@ -482,16 +484,16 @@ export default function Dashboard() {
                             ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                             : ''
                         }}
-                        tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 9 }}
+                        tick={{ fill: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.35)', fontSize: 9 }}
                         axisLine={false} tickLine={false}
                       />
-                      <YAxis tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.35)', fontSize: 9 }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        contentStyle={{ background: '#0e1520', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 11 }}
+                        contentStyle={{ background: isDark ? '#0e1520' : '#ffffff', border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`, borderRadius: 8, fontSize: 11 }}
                         labelFormatter={(ts) => new Date((ts as number) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         formatter={(val: any, name: string) => [val.toLocaleString(), name]}
-                        itemStyle={{ color: 'rgba(255,255,255,0.7)' }}
-                        labelStyle={{ color: 'rgba(255,255,255,0.4)' }}
+                        itemStyle={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.7)' }}
+                        labelStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)' }}
                       />
                       <Area type="monotone" dataKey="total" name="Total" stroke="#3b82f6" strokeWidth={1.5} fill="url(#gradTotal)" dot={false} />
                       <Area type="monotone" dataKey="blocked" name="Blocked" stroke="#ef4444" strokeWidth={1.5} fill="url(#gradBlocked)" dot={false} />
@@ -651,8 +653,8 @@ export default function Dashboard() {
       {activityOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActivityOpen(false)} />
-          <div className="relative w-full max-w-sm h-full flex flex-col border-l border-white/[0.08]"
-            style={{ background: 'linear-gradient(180deg, #0e1520 0%, #0a0f1a 100%)' }}>
+          <div className="relative w-full max-w-sm h-full flex flex-col border-l border-white/[0.08] bg-surface"
+            style={{ background: 'linear-gradient(180deg, var(--card-base-deepest) 0%, var(--card-base-deepest) 100%)' }}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] flex-shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">

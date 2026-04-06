@@ -40,7 +40,7 @@ function DeployForm({
 
   return (
     <div className="mx-4 mb-3 p-4 rounded-xl border border-indigo-500/30 space-y-3"
-      style={{ background: 'linear-gradient(160deg, color-mix(in srgb, #6366f1 6%, #151b2e) 0%, #0e1520 100%)' }}>
+      style={{ background: 'linear-gradient(160deg, color-mix(in srgb, #6366f1 6%, var(--card-base-deep)) 0%, var(--card-base-deepest) 100%)' }}>
       <p className="text-xs font-semibold text-indigo-300">Deploy {device.name}</p>
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -259,7 +259,7 @@ export default function StockTracker() {
 
                           {/* Model header — click to collapse */}
                           <div className="flex"
-                            style={{ borderBottom: isCollapsed ? 'none' : '1px solid rgba(255,255,255,0.06)' }}>
+                            style={{ borderBottom: isCollapsed ? 'none' : '1px solid var(--glass-border)' }}>
                             {/* Chevron handle — left edge toggle */}
                             <button type="button" onClick={() => toggleModel(collapseKey)}
                               className="flex items-center justify-center w-9 flex-shrink-0 border-r border-white/[0.06] hover:bg-white/[0.04] transition-colors">

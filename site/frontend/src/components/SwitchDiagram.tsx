@@ -186,7 +186,7 @@ export function SwitchDiagram({ device, wanConfigs = [], wanColor = '#f59e0b' }:
           className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-full"
           style={{ left: hoveredPort.x, top: hoveredPort.y - 8 }}
         >
-          <div className="bg-[#1a1f2e] border border-white/10 rounded-lg p-2.5 shadow-2xl text-xs space-y-1.5 min-w-[160px]">
+          <div className="bg-surface-raised border border-glass-border rounded-lg p-2.5 shadow-2xl text-xs space-y-1.5 min-w-[160px]">
             {/* Port number / name */}
             <p className="font-semibold text-white/80">
               {hoveredPort.port.port_name

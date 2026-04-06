@@ -106,8 +106,8 @@ function InlineForm({ form, onChange, knownTypes, listId, onSave, onCancel, savi
                   onClick={() => onChange({ ...form, type: isSelected ? '' : type })}
                   className="text-[10px] px-1.5 py-0.5 rounded border transition-all"
                   style={isSelected
-                    ? { color: hex, backgroundColor: hex + '1a', borderColor: hex + '40', outline: '1px solid rgba(255,255,255,0.15)', outlineOffset: '1px' }
-                    : { color: 'rgba(255,255,255,0.3)', backgroundColor: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)' }}>
+                    ? { color: hex, backgroundColor: hex + '1a', borderColor: hex + '40', outline: `1px solid ${hex}60`, outlineOffset: '1px' }
+                    : { color: 'var(--inline-inactive-text)', backgroundColor: 'var(--inline-inactive-bg)', borderColor: 'var(--inline-inactive-border)' }}>
                   {type}
                 </button>
               )
@@ -324,7 +324,7 @@ export default function Locations() {
       {/* Root new-location form */}
       {editMode?.kind === 'new' && editMode.parentId === null && (
         <div className="rounded-xl border border-indigo-500/30 p-4 space-y-3"
-          style={{ background: 'linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, #151b2e) 0%, #0e1520 100%)' }}>
+          style={{ background: 'linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, var(--card-base-deep)) 0%, var(--card-base-deepest) 100%)' }}>
           <p className="text-xs font-semibold text-indigo-300">New Top-Level Location</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -414,7 +414,7 @@ export default function Locations() {
                 </div>
               ) : (
                 <div className="flex group"
-                  style={{ borderBottom: isTopExpanded ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                  style={{ borderBottom: isTopExpanded ? '1px solid var(--glass-border)' : 'none' }}>
 
                   {/* Chevron handle */}
                   <button type="button" onClick={() => toggleTopExpanded(node.id)}

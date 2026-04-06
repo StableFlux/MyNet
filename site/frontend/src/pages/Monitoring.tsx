@@ -98,7 +98,7 @@ function WanConnectionCard({ wan, wanColor }: { wan: any; wanColor: string }) {
       style={{
         borderLeftColor: `${color}66`,
         borderLeftWidth: 2,
-        background: `linear-gradient(160deg, color-mix(in srgb, ${color} 6%, #1d2540) 0%, #151b2e 60%)`,
+        background: `linear-gradient(160deg, color-mix(in srgb, ${color} 6%, var(--card-base-mid)) 0%, var(--card-base-deep) 60%)`,
       }}
     >
       {/* Icon */}
@@ -136,7 +136,7 @@ function WanConnectionCard({ wan, wanColor }: { wan: any; wanColor: string }) {
                   if (!active || !payload?.[0]) return null
                   const val = payload[0].value
                   return (
-                    <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 text-white/70">
+                    <div className="text-[10px] bg-surface-overlay border border-white/10 rounded px-2 py-1 text-white/70">
                       {val != null ? `${val}ms` : 'offline'}
                     </div>
                   )
@@ -187,7 +187,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
       onClick={() => navigate(`/devices/${d.device_id}`)}
       style={{
         borderTopColor: `${color}66`,
-        background: `linear-gradient(160deg, color-mix(in srgb, ${color} 8%, #1d2540) 0%, #151b2e 55%)`,
+        background: `linear-gradient(160deg, color-mix(in srgb, ${color} 8%, var(--card-base-mid)) 0%, var(--card-base-deep) 55%)`,
       }}
     >
       {/* Header */}
@@ -246,7 +246,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.[0]) return null
                     const val = payload[0].value
-                    return <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 text-white/70">{val != null ? `${val}ms` : 'offline'}</div>
+                    return <div className="text-[10px] bg-surface-overlay border border-white/10 rounded px-2 py-1 text-white/70">{val != null ? `${val}ms` : 'offline'}</div>
                   }} />
                   <Area type="monotone" dataKey="latency" stroke={lineColor} strokeWidth={1.5}
                     fill={`url(#${gradId})`} dot={false} isAnimationActive={false} connectNulls={false} />
@@ -281,7 +281,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
                 <Tooltip content={({ active, payload }) => {
                   if (!active || !payload?.length) return null
                   return (
-                    <div className="text-[10px] bg-[#1d2540] border border-white/10 rounded px-2 py-1 space-y-0.5">
+                    <div className="text-[10px] bg-surface-overlay border border-white/10 rounded px-2 py-1 space-y-0.5">
                       {payload.map((p: any, i: number) => (
                         <div key={i} style={{ color: p.stroke }}>
                           {lanNics[i]?.network_name ?? `NIC ${i + 1}`}: {p.value != null ? `${p.value}ms` : 'offline'}
@@ -464,7 +464,7 @@ export default function Monitoring() {
                 className="glass-card px-4 py-2.5 flex items-center gap-4 flex-shrink-0 transition-all"
                 style={hasOffline ? {
                   borderColor: '#ef444455',
-                  background: 'linear-gradient(160deg, color-mix(in srgb, #ef4444 8%, #1d2540) 0%, #151b2e 60%)',
+                  background: 'linear-gradient(160deg, color-mix(in srgb, #ef4444 8%, var(--card-base-mid)) 0%, var(--card-base-deep) 60%)',
                 } : undefined}
               >
                 <div className="flex items-center gap-2">

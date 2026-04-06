@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2 } from 'lucide-react'
+import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { useAuthStore } from '../store/authStore'
+import { useThemeStore, type ThemeMode } from '../store/themeStore'
 import api from '../lib/api'
 
 const SETTINGS_ITEMS = [
@@ -81,7 +82,7 @@ function EncryptionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#1a1f2e] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-5">
+      <div className="bg-surface-raised border border-glass-border rounded-xl p-6 w-full max-w-md shadow-2xl space-y-5">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
             <KeyRound size={16} className="text-indigo-300" />
@@ -167,7 +168,7 @@ function FactoryResetModal({ onConfirm, onCancel, loading }: {
   const [typed, setTyped] = useState('')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#1a1f2e] border border-red-500/30 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-5">
+      <div className="bg-surface-raised border border-red-500/30 rounded-xl p-6 w-full max-w-md shadow-2xl space-y-5">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-red-600/20 flex items-center justify-center flex-shrink-0">
             <Trash2 size={16} className="text-red-400" />
@@ -225,6 +226,7 @@ export default function Settings() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { setUser } = useAuthStore()
+  const { mode: themeMode, setMode: setThemeMode } = useThemeStore()
 
   const { data: sysData } = useQuery({
     queryKey: ['system-settings'],
@@ -394,7 +396,7 @@ export default function Settings() {
       {/* System settings */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-white/60 uppercase tracking-widest">System</h2>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
 
           {/* System name */}
           <GlassCard className="space-y-4">
@@ -439,7 +441,7 @@ export default function Settings() {
                 aria-label={authRequired ? 'Disable login requirement' : 'Enable login requirement'}
               >
                 <div className={`relative w-10 h-6 rounded-full transition-colors ${authRequired ? 'bg-indigo-600' : 'bg-amber-500/70'}`}>
-                  <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${authRequired ? 'translate-x-4' : 'translate-x-0'}`} />
+                  <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-[#ffffff] shadow transition-transform ${authRequired ? 'translate-x-4' : 'translate-x-0'}`} />
                 </div>
               </button>
             </div>
@@ -501,6 +503,35 @@ export default function Settings() {
                   <LockOpen size={12} /> Disable
                 </button>
               )}
+            </div>
+          </GlassCard>
+
+          {/* Appearance */}
+          <GlassCard className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-white">Appearance</p>
+              <p className="text-xs text-white/40 mt-0.5">Choose the display theme.</p>
+            </div>
+            <div className="flex gap-1 p-1 rounded-lg bg-white/[0.04] border border-white/[0.08]">
+              {([
+                { value: 'light',  Icon: Sun,     label: 'Light'  },
+                { value: 'dark',   Icon: Moon,    label: 'Dark'   },
+                { value: 'system', Icon: Monitor, label: 'System' },
+              ] as { value: ThemeMode; Icon: typeof Sun; label: string }[]).map(({ value, Icon, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setThemeMode(value)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-md transition-all ${
+                    themeMode === value
+                      ? 'bg-indigo-600 text-[#ffffff]'
+                      : 'text-white/50 hover:text-white/80'
+                  }`}
+                >
+                  <Icon size={11} />
+                  {label}
+                </button>
+              ))}
             </div>
           </GlassCard>
 

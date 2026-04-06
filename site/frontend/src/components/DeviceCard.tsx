@@ -138,7 +138,7 @@ export function DeviceCard({ device }: Props) {
             >
               <span className="text-[10px] text-white/25 group-hover:text-white/40 transition-colors">ping</span>
               <div className={`relative w-7 h-4 rounded-full transition-colors ${monitoringEnabled ? 'bg-indigo-600' : 'bg-white/15 group-hover:bg-white/20'}`}>
-                <span className={`absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${monitoringEnabled ? 'translate-x-3' : 'translate-x-0'}`} />
+                <span className={`absolute left-0.5 top-0.5 w-3 h-3 rounded-full bg-[#ffffff] shadow-sm transition-transform ${monitoringEnabled ? 'translate-x-3' : 'translate-x-0'}`} />
               </div>
             </button>
           )}

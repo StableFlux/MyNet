@@ -1,25 +1,29 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
+        // Redefine white to use a CSS variable so all text-white/XX, bg-white/XX,
+        // border-white/XX variants automatically adapt to the active theme.
+        white: 'rgb(var(--color-white) / <alpha-value>)',
         glass: {
-          DEFAULT: 'rgba(255,255,255,0.055)',
-          border: 'rgba(255,255,255,0.09)',
-          hover: 'rgba(255,255,255,0.09)',
+          DEFAULT: 'var(--glass-bg)',
+          border: 'var(--glass-border)',
+          hover: 'var(--glass-hover)',
         },
         surface: {
-          DEFAULT: '#0d1117',
-          raised: '#111827',
-          overlay: '#1a2236',
+          DEFAULT: 'var(--surface)',
+          raised: 'var(--surface-raised)',
+          overlay: 'var(--surface-overlay)',
         },
       },
       backdropBlur: {
         glass: '16px',
       },
       boxShadow: {
-        glass: '0 4px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.12)',
+        glass: 'var(--shadow-glass)',
         glow: '0 0 20px rgba(99,102,241,0.35)',
         'glow-sm': '0 0 12px rgba(99,102,241,0.25)',
       },

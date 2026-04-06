@@ -282,7 +282,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
         onClick={() => onChange(!checked)}
         className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-white/10'}`}
       >
-        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-[#ffffff] transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </div>
       <span className="text-sm text-white/70">{label}</span>
     </label>

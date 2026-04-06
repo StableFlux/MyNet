@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useResolvedTheme } from '../store/themeStore'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import ReactFlow, {
@@ -269,6 +270,7 @@ function persistPositions(nodes: Node[]) {
 export default function Topology() {
   const navigate   = useNavigate()
   const [showWifi, setShowWifi] = useState(false)
+  const isDark = useResolvedTheme() === 'dark'
 
   const { data: graphData, isLoading } = useQuery({
     queryKey: ['topology', 'device-graph'],
@@ -386,7 +388,7 @@ export default function Topology() {
           minZoom={0.05}
           maxZoom={2}
         >
-          <Background variant={BackgroundVariant.Dots} color="#ffffff0d" gap={24} />
+          <Background variant={BackgroundVariant.Dots} color={isDark ? '#ffffff0d' : '#00000012'} gap={24} />
           <Controls className="bg-surface-raised border-glass-border" />
           <MiniMap
             nodeColor={(n) => n.data?.network_color ?? '#64748b'}

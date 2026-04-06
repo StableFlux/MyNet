@@ -7,29 +7,12 @@ import { useAuthStore } from '../store/authStore'
 import api from '../lib/api'
 
 const SETTINGS_ITEMS = [
-  {
-    to: '/users',
-    icon: Users,
-    label: 'User Management',
-    description: 'Manage user accounts, roles, and access.',
-  },
+  // Row 1
   {
     to: '/settings/locations',
     icon: MapPin,
     label: 'Locations',
     description: 'Define locations that can be assigned to devices.',
-  },
-  {
-    to: '/backup',
-    icon: HardDriveDownload,
-    label: 'Backup',
-    description: 'Download a backup of the database.',
-  },
-  {
-    to: '/settings/label-export',
-    icon: QrCode,
-    label: 'Label CSV Export',
-    description: 'Export device names and URLs for label printer import.',
   },
   {
     to: '/settings/colours',
@@ -38,16 +21,29 @@ const SETTINGS_ITEMS = [
     description: 'Customise colours for location types, device categories, and statuses.',
   },
   {
+    to: '/backup',
+    icon: HardDriveDownload,
+    label: 'Backup',
+    description: 'Download a backup of the database.',
+  },
+  // Row 2
+  {
+    to: '/users',
+    icon: Users,
+    label: 'User Management',
+    description: 'Manage user accounts, roles, and access.',
+  },
+  {
     to: '/settings/pihole',
     icon: Wifi,
     label: 'Pi-hole Integration',
     description: 'Configure Pi-hole DNS filtering instances and polling interval.',
   },
   {
-    to: '/events',
-    icon: ScrollText,
-    label: 'Events',
-    description: 'View all system events — activity history, alerts, conflicts, and monitoring.',
+    to: '/settings/label-export',
+    icon: QrCode,
+    label: 'Label CSV Export',
+    description: 'Export device names and URLs for label printer import.',
   },
 ]
 
@@ -342,8 +338,19 @@ export default function Settings() {
         <div>
           <h1 className="text-xl font-bold text-white">Settings</h1>
         </div>
-        <div className="w-1/4 flex-shrink-0">
-          <GlassCard className="border-red-500/20 p-3">
+        <div className="flex items-stretch gap-3 w-1/2 flex-shrink-0">
+          <GlassCard hover onClick={() => navigate('/events')} className="flex-1 p-3 cursor-pointer">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
+                <ScrollText size={14} className="text-indigo-300" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-white">Events</p>
+                <p className="text-[10px] text-white/35 leading-tight">Activity, alerts &amp; conflicts</p>
+              </div>
+            </div>
+          </GlassCard>
+          <GlassCard className="border-red-500/20 p-3 flex-1">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-7 h-7 rounded-lg bg-red-600/15 flex items-center justify-center flex-shrink-0">

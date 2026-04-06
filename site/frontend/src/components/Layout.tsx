@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Monitor, Network, Map,
@@ -39,6 +39,10 @@ export function Layout({ children }: Props) {
 
   const systemName = sysSettings?.system_name ?? 'MyNet'
   const authRequired = sysSettings?.auth_required ?? true
+
+  useEffect(() => {
+    document.title = systemName === 'MyNet' ? 'MyNet' : `MyNet — ${systemName}`
+  }, [systemName])
 
   const handleLogout = async () => {
     try { await api.post('/auth/logout') } catch { /* best-effort */ }

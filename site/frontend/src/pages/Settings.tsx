@@ -394,11 +394,11 @@ export default function Settings() {
       {/* System settings */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-white/60 uppercase tracking-widest">System</h2>
-        <GlassCard className="space-y-5">
+        <div className="grid grid-cols-3 gap-4">
 
           {/* System name */}
-          <div className="flex items-center gap-6">
-            <div className="flex-1 min-w-0">
+          <GlassCard className="space-y-4">
+            <div>
               <p className="text-sm font-medium text-white">System Name</p>
               <p className="text-xs text-white/40 mt-0.5">Displayed in the top-left of the sidebar.</p>
             </div>
@@ -406,68 +406,72 @@ export default function Settings() {
               type="text"
               value={systemName}
               onChange={(e) => setSystemName(e.target.value)}
-              className="glass-input text-sm w-48"
+              className="glass-input text-sm w-full"
               placeholder="MyNet"
             />
-          </div>
+            {dirty && (
+              <button
+                type="button"
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                <Save size={14} />
+                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+            )}
+          </GlassCard>
 
-          <div className="h-px bg-white/[0.06]" />
-
-          {/* Require login toggle */}
-          <div className="flex items-start gap-6">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white">Require Login</p>
-              <p className="text-xs text-white/40 mt-0.5">
-                When disabled, anyone on the network can access the system without a username or password.
-                Only turn this off on a trusted private LAN.
-              </p>
-              {!authRequired && (
-                <div className="flex items-center gap-1.5 mt-2 text-amber-400/80 text-xs">
-                  <ShieldOff size={12} />
-                  <span>Authentication is currently disabled — all access is open.</span>
-                </div>
-              )}
-              {authError && (
-                <p className="mt-2 text-xs text-red-400">{authError}</p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={handleAuthToggle}
-              className="flex-shrink-0 mt-0.5"
-              aria-label={authRequired ? 'Disable login requirement' : 'Enable login requirement'}
-            >
-              <div className={`relative w-10 h-6 rounded-full transition-colors ${authRequired ? 'bg-indigo-600' : 'bg-amber-500/70'}`}>
-                <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${authRequired ? 'translate-x-4' : 'translate-x-0'}`} />
+          {/* Require login */}
+          <GlassCard className="space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-white">Require Login</p>
+                <p className="text-xs text-white/40 mt-0.5">
+                  When disabled, anyone on the network can access without a password.
+                  Only disable on a trusted private LAN.
+                </p>
               </div>
-            </button>
-          </div>
-
-          <div className="h-px bg-white/[0.06]" />
+              <button
+                type="button"
+                onClick={handleAuthToggle}
+                className="flex-shrink-0 mt-0.5"
+                aria-label={authRequired ? 'Disable login requirement' : 'Enable login requirement'}
+              >
+                <div className={`relative w-10 h-6 rounded-full transition-colors ${authRequired ? 'bg-indigo-600' : 'bg-amber-500/70'}`}>
+                  <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${authRequired ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+              </button>
+            </div>
+            {!authRequired && (
+              <div className="flex items-center gap-1.5 text-amber-400/80 text-xs">
+                <ShieldOff size={12} />
+                <span>Authentication disabled — all access is open.</span>
+              </div>
+            )}
+            {authError && <p className="text-xs text-red-400">{authError}</p>}
+          </GlassCard>
 
           {/* Encryption */}
-          <div className="flex items-start gap-6">
-            <div className="flex-1 min-w-0">
+          <GlassCard className="space-y-3">
+            <div>
               <p className="text-sm font-medium text-white">Database Encryption</p>
               <p className="text-xs text-white/40 mt-0.5">
-                Encrypts stored device credentials at rest. Requires a passphrase — keys are never
-                included in backups.
+                Encrypts stored device credentials at rest. Passphrase required — keys are never included in backups.
               </p>
-              <div className="mt-2 flex items-center gap-2">
-                {!encEnabled ? (
-                  <span className="text-xs text-white/30">Off</span>
-                ) : encLocked ? (
-                  <span className="flex items-center gap-1.5 text-xs text-amber-400">
-                    <Lock size={11} /> Enabled — locked (unlock to access credentials)
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                    <LockOpen size={11} /> Enabled — unlocked
-                  </span>
-                )}
-              </div>
             </div>
-            <div className="flex flex-col items-end gap-2 flex-shrink-0 mt-0.5">
+            <div className="flex items-center justify-between gap-2">
+              {!encEnabled ? (
+                <span className="text-xs text-white/30">Off</span>
+              ) : encLocked ? (
+                <span className="flex items-center gap-1.5 text-xs text-amber-400">
+                  <Lock size={11} /> Enabled — locked
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                  <LockOpen size={11} /> Enabled — unlocked
+                </span>
+              )}
               {!encEnabled && (
                 <button
                   type="button"
@@ -498,22 +502,9 @@ export default function Settings() {
                 </button>
               )}
             </div>
-          </div>
+          </GlassCard>
 
-          {dirty && (
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending}
-                className="btn-primary flex items-center gap-2"
-              >
-                <Save size={14} />
-                {saveMutation.isPending ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
-          )}
-        </GlassCard>
+        </div>
       </div>
 
     </div>

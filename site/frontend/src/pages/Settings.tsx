@@ -341,7 +341,6 @@ export default function Settings() {
       <div className="flex items-start justify-between gap-6">
         <div>
           <h1 className="text-xl font-bold text-white">Settings</h1>
-          <p className="text-sm text-white/40 mt-0.5">Administration</p>
         </div>
         <div className="w-1/4 flex-shrink-0">
           <GlassCard className="border-red-500/20 p-3">

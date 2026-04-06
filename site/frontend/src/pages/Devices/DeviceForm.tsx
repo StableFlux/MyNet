@@ -341,11 +341,13 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
     pppoe_username: '', pppoe_password: '',
     mtu: '', dns_primary: '', dns_secondary: '', notes: '',
     speed_down: '', speed_up: '',
-    ...(existing ?? {}),
-    vlan_id: existing?.vlan_id != null ? String(existing.vlan_id) : '',
-    mtu: existing?.mtu != null ? String(existing.mtu) : '',
-    speed_down: existing?.speed_down ?? '',
-    speed_up: existing?.speed_up ?? '',
+    ...(existing ? {
+      ...existing,
+      vlan_id: existing.vlan_id != null ? String(existing.vlan_id) : '',
+      mtu: existing.mtu != null ? String(existing.mtu) : '',
+      speed_down: existing.speed_down ?? '',
+      speed_up: existing.speed_up ?? '',
+    } : {}),
   })
 
   const saveMut = useMutation({

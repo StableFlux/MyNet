@@ -269,7 +269,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
         })
         const chartData = timestamps.map(t => {
           const pt: any = { t }
-          nicMaps.forEach((m, i) => { pt[`l${i}`] = m.get(t) ?? null })
+          nicMaps.forEach((m: Map<string, number | null>, i: number) => { pt[`l${i}`] = m.get(t) ?? null })
           return pt
         })
 

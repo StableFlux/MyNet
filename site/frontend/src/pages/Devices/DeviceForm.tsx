@@ -282,7 +282,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
         onClick={() => onChange(!checked)}
         className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-white/10'}`}
       >
-        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-[#ffffff] transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-[#ffffff] shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </div>
       <span className="text-sm text-white/70">{label}</span>
     </label>
@@ -864,7 +864,7 @@ export default function DeviceForm() {
         <Section title="Identity">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Device Name *" col={2}>
-              <TextInput value={form.name} onChange={(v) => set({ name: v })} placeholder="NZXT PC" />
+              <TextInput value={form.name} onChange={(v) => set({ name: v })} placeholder="My Desktop" />
             </Field>
             <Field label="Description / Use">
               <TextInput value={form.use} onChange={(v) => set({ use: v })} placeholder="Main Workstation" />
@@ -940,19 +940,19 @@ export default function DeviceForm() {
         <Section title="Hardware">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Brand">
-              <TextInput value={form.brand} onChange={(v) => set({ brand: v })} placeholder="Beelink" />
+              <TextInput value={form.brand} onChange={(v) => set({ brand: v })} placeholder="Acme" />
             </Field>
             <Field label="Model">
-              <TextInput value={form.model} onChange={(v) => set({ model: v })} placeholder="SER6 Max" />
+              <TextInput value={form.model} onChange={(v) => set({ model: v })} placeholder="Model X" />
             </Field>
             <Field label="CPU">
-              <TextInput value={form.cpu} onChange={(v) => set({ cpu: v })} placeholder="Ryzen 7 7735HS" />
+              <TextInput value={form.cpu} onChange={(v) => set({ cpu: v })} placeholder="Intel Core i5" />
             </Field>
             <Field label="RAM">
               <TextInput value={form.ram} onChange={(v) => set({ ram: v })} placeholder="64GB" />
             </Field>
             <Field label="GPU">
-              <TextInput value={form.gpu} onChange={(v) => set({ gpu: v })} placeholder="AMD Radeon 680M" />
+              <TextInput value={form.gpu} onChange={(v) => set({ gpu: v })} placeholder="Intel UHD Graphics" />
             </Field>
             <Field label="Hardware Type">
               <select className="glass-input w-full text-sm" value={form.hardware_type}
@@ -1164,7 +1164,7 @@ export default function DeviceForm() {
                 <TextInput value={form.bed_size} onChange={(v) => set({ bed_size: v })} placeholder="250x250x250" />
               </Field>
               <Field label="MCU Board">
-                <TextInput value={form.mcu_board} onChange={(v) => set({ mcu_board: v })} placeholder="BTT Pi V1.2" />
+                <TextInput value={form.mcu_board} onChange={(v) => set({ mcu_board: v })} placeholder="SKR Mini E3" />
               </Field>
             </div>
           </Section>
@@ -1427,7 +1427,7 @@ export default function DeviceForm() {
         <Section title="Home Assistant">
           <Field label="HA Entity ID">
             <TextInput value={form.ha_entity_id} onChange={(v) => set({ ha_entity_id: v })}
-              placeholder="switch.shelly_plug_1" mono />
+              placeholder="switch.plug_living_room" mono />
           </Field>
         </Section>
 

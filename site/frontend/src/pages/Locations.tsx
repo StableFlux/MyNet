@@ -86,7 +86,7 @@ function InlineForm({ form, onChange, knownTypes, listId, onSave, onCancel, savi
 }) {
   return (
     <div className="mx-3 mb-2 mt-1 p-3 rounded-xl border border-indigo-500/20 space-y-2.5"
-      style={{ background: 'linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, #0c111c) 0%, #0a0f1a 100%)' }}>
+      style={{ background: 'linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, var(--card-base-deepest)) 0%, var(--card-base-deepest) 100%)' }}>
       <p className="text-[10px] font-semibold text-indigo-300/60 uppercase tracking-widest">{label}</p>
       <div className="grid grid-cols-2 gap-2">
         <div>

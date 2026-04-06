@@ -207,34 +207,9 @@ success "Python dependencies installed"
 step "Configuring environment"
 
 if [ -f "$ENV_FILE" ]; then
-    warn ".env already exists at $ENV_FILE — skipping interactive setup"
+    warn ".env already exists at $ENV_FILE — skipping generation"
     warn "Edit it manually if you need to change settings, then restart: systemctl restart mynet"
 else
-    echo ""
-    echo -e "${BOLD}MyNet configuration${RESET}"
-    echo "Press Enter to accept the default shown in [brackets]."
-    echo ""
-
-    # APP_URL
-    DEFAULT_URL="http://$(hostname -I | awk '{print $1}' | tr -d '[:space:]')"
-    read -rp "  App URL (used for QR codes and CORS) [$DEFAULT_URL]: " APP_URL_INPUT
-    APP_URL="${APP_URL_INPUT:-$DEFAULT_URL}"
-
-    # PORT
-    read -rp "  Port to listen on [80]: " PORT_INPUT
-    APP_PORT="${PORT_INPUT:-80}"
-
-    # PiHole (optional)
-    read -rp "  Pi-hole 1 URL (leave blank to skip) []: " PIHOLE1_INPUT
-    PIHOLE1="${PIHOLE1_INPUT:-}"
-    if [ -n "$PIHOLE1" ]; then
-        read -rp "  Pi-hole 2 URL (leave blank to skip) []: " PIHOLE2_INPUT
-        PIHOLE2="${PIHOLE2_INPUT:-}"
-    else
-        PIHOLE2=""
-    fi
-
-    # Generate JWT secret using openssl (no Python needed at this stage)
     JWT_SECRET=$(openssl rand -hex 32)
 
     cat > "$ENV_FILE" << EOF
@@ -244,18 +219,11 @@ else
 # REQUIRED — do not share this key
 JWT_SECRET_KEY=$JWT_SECRET
 
-# The URL your instance is reachable at (used for CORS and QR codes)
-APP_URL=$APP_URL
-
 # SQLite database location
 DB_PATH=$DATA_DIR/mynet.db
 
-# Port nginx listens on
-APP_PORT=$APP_PORT
-
-# Optional Pi-hole integration
-PIHOLE1_URL=$PIHOLE1
-PIHOLE2_URL=$PIHOLE2
+# Port nginx listens on (default 80)
+APP_PORT=80
 EOF
 
     chmod 600 "$ENV_FILE"
@@ -265,7 +233,7 @@ fi
 # Read port from .env for nginx config
 APP_PORT=$(grep '^APP_PORT=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]')
 APP_PORT="${APP_PORT:-80}"
-APP_URL=$(grep '^APP_URL=' "$ENV_FILE" | cut -d= -f2 | tr -d '[:space:]')
+APP_URL="http://$(hostname -I | awk '{print $1}' | tr -d '[:space:]'):${APP_PORT}"
 
 # ── nginx configuration ───────────────────────────────────────────────────────
 step "Configuring nginx"
@@ -443,7 +411,6 @@ echo -e "${GREEN}${BOLD}  MyNet is installed and running!${RESET}"
 echo -e "${GREEN}${BOLD}════════════════════════════════════════${RESET}"
 echo ""
 echo -e "  ${BOLD}App:${RESET}      ${APP_URL}"
-echo -e "  ${BOLD}API docs:${RESET} ${APP_URL%/}:8000/docs"
 echo ""
 echo -e "  ${BOLD}Logs:${RESET}     journalctl -u mynet -f"
 echo -e "  ${BOLD}Restart:${RESET}  systemctl restart mynet"

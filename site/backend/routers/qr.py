@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.device import Device
+from models.system_settings import SystemSettings
 from models.user import User
 from services.auth import require_viewer
 from services.qr_generator import (
@@ -25,7 +26,10 @@ def mynet_qr(
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(404, "Device not found")
-    png = generate_mynet_qr_png(device_id)
+    ss = db.query(SystemSettings).first()
+    if not ss or not ss.mynet_url:
+        raise HTTPException(400, "MyNet URL is not configured. Set it in Settings before downloading QR codes.")
+    png = generate_mynet_qr_png(device_id, base_url=ss.mynet_url)
     return Response(content=png, media_type="image/png")
 
 
@@ -55,7 +59,10 @@ def label_qr(
         (n.ip_address for n in device.nics if n.ip_address and n.ip_address != "DHCP"),
         None,
     )
-    png = generate_label_png(device_id, device.name, primary_ip)
+    ss = db.query(SystemSettings).first()
+    if not ss or not ss.mynet_url:
+        raise HTTPException(400, "MyNet URL is not configured. Set it in Settings before downloading labels.")
+    png = generate_label_png(device_id, device.name, primary_ip, base_url=ss.mynet_url)
     return Response(
         content=png,
         media_type="image/png",

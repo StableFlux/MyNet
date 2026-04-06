@@ -63,11 +63,11 @@ export function Layout({ children }: Props) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface">
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--surface)' }}>
       {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 flex flex-col border-r border-glass-border bg-surface-raised">
+      <aside className="w-56 flex-shrink-0 flex flex-col border-r" style={{ backgroundColor: 'var(--sidebar-bg)', borderColor: 'var(--sidebar-border)' }}>
         {/* Logo */}
-        <div className="h-14 flex items-center px-5 border-b border-glass-border">
+        <div className="h-14 flex items-center px-5 border-b" style={{ borderBottomColor: 'var(--sidebar-border)' }}>
           <div className="flex items-center gap-2.5">
             <img src="/logo_square.png" alt="MyNet" className="w-7 h-7 rounded-lg object-cover shadow-[0_0_14px_rgba(99,102,241,0.5)]" />
             <span className="font-bold text-white tracking-wide">{systemName}</span>
@@ -101,7 +101,7 @@ export function Layout({ children }: Props) {
         </nav>
 
         {/* Bottom: user + admin */}
-        <div className="border-t border-glass-border p-3 space-y-1">
+        <div className="border-t p-3 space-y-1" style={{ borderTopColor: 'var(--sidebar-border)' }}>
           {user?.role === 'admin' && (
             <NavLink
               to="/settings"
@@ -143,7 +143,7 @@ export function Layout({ children }: Props) {
       {/* Main area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="h-14 flex items-center gap-4 px-6 border-b border-glass-border bg-surface-raised flex-shrink-0">
+        <header className="h-14 flex items-center gap-4 px-6 border-b flex-shrink-0" style={{ backgroundColor: 'var(--surface-raised)', borderBottomColor: 'var(--glass-border)' }}>
           <div className="flex-1">
             <SearchBar />
           </div>
@@ -151,7 +151,7 @@ export function Layout({ children }: Props) {
         </header>
 
         {/* Content */}
-        <main id="main-scroll" className="flex-1 overflow-y-auto p-6">
+        <main id="main-scroll" className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: 'var(--surface)', backgroundImage: 'var(--body-gradient)' }}>
           {children}
         </main>
       </div>

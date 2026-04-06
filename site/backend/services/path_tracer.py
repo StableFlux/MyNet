@@ -11,6 +11,7 @@ from typing import Optional
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from models.device import Device
+from models.nic import Nic
 
 
 def trace_path(db: Session, source_id: int, target_id: int) -> dict:
@@ -36,8 +37,8 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
             joinedload(Device.device_type),
             joinedload(Device.uplink_port),
             joinedload(Device.upstream_port),
-            selectinload(Device.nics).joinedload("switch_port_rel"),
-            selectinload(Device.nics).joinedload("network"),
+            selectinload(Device.nics).joinedload(Nic.switch_port_rel),
+            selectinload(Device.nics).joinedload(Nic.network),
         )
         .all()
     )

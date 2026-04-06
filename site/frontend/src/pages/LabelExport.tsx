@@ -8,6 +8,7 @@ import api from '../lib/api'
 const EXTRA_COLS = [
   { key: 'mynet_url',    label: 'MyNet URL'   },
   { key: 'ip',          label: 'IP Address'  },
+  { key: 'vlan',        label: 'VLAN'        },
   { key: 'hostname',    label: 'Hostname'    },
   { key: 'location',    label: 'Location'    },
   { key: 'brand',       label: 'Brand/Model' },
@@ -33,15 +34,33 @@ export default function LabelExport() {
     queryFn: async () => { const { data } = await api.get('/device-types'); return data },
   })
 
+  const { data: sysSettings } = useQuery<any>({
+    queryKey: ['system-settings'],
+    queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
+  })
+
   const grouped = useMemo(() => {
     if (!devices.length || !deviceTypes.length) return []
     const typeMap = Object.fromEntries((deviceTypes as any[]).map((dt: any) => [dt.id, dt]))
+    const STATUS_LABELS: Record<string, string> = {
+      in_service: 'In Service',
+      stock: 'Stock',
+      undeployed: 'Undeployed',
+      decommissioned: 'Decommissioned',
+    }
+    const GROUP_ORDER: Record<string, number> = {
+      'Stock': 0,
+      'Undeployed': 1,
+      'Decommissioned': 999,
+    }
     const enriched = (devices as any[])
       .filter((d: any) => includeStatuses.has(d.status))
       .map((d: any) => ({
         ...d,
-        category: typeMap[d.device_type_id]?.category ?? 'Uncategorised',
-        primaryIp: d.nics?.find((n: any) => n.ip_address)?.ip_address ?? '',
+        category: d.status !== 'in_service'
+          ? STATUS_LABELS[d.status]
+          : (typeMap[d.device_type_id]?.category ?? 'In Service'),
+        primaryIp: d.nics?.find((n: any) => n.ip_address && n.ip_address !== 'DHCP')?.ip_address ?? '',
       }))
     enriched.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name))
     const groups: Record<string, any[]> = {}
@@ -49,7 +68,12 @@ export default function LabelExport() {
       if (!groups[d.category]) groups[d.category] = []
       groups[d.category].push(d)
     }
-    return Object.entries(groups)
+    return Object.entries(groups).sort(([a], [b]) => {
+      const oa = GROUP_ORDER[a] ?? 100
+      const ob = GROUP_ORDER[b] ?? 100
+      if (oa !== ob) return oa - ob
+      return a.localeCompare(b)
+    })
   }, [devices, deviceTypes, includeStatuses])
 
   const allIds = useMemo(() => grouped.flatMap(([, devs]) => devs.map((d: any) => d.id)), [grouped])
@@ -75,9 +99,12 @@ export default function LabelExport() {
     setCollapsed(prev => { const next = new Set(prev); next.has(category) ? next.delete(category) : next.add(category); return next })
   }
 
+  const mynetBase = sysSettings?.mynet_url || window.location.origin
+
   const getExtra = (d: any, col: ExtraCol) => {
-    if (col === 'mynet_url')    return `${window.location.origin}/devices/${d.id}`
-    if (col === 'ip')           return (d.nics ?? []).map((n: any) => n.ip_address).filter(Boolean).join(', ')
+    if (col === 'mynet_url')    return `${mynetBase}/devices/${d.id}`
+    if (col === 'ip')           return (d.nics ?? []).map((n: any) => n.ip_address).filter((ip: string) => ip && ip !== 'DHCP').join(', ')
+    if (col === 'vlan')         return [...new Set((d.nics ?? []).map((n: any) => n.vlan_id).filter(Boolean))].join(', ')
     if (col === 'hostname')     return d.hostname ?? ''
     if (col === 'location')     return d.location ?? ''
     if (col === 'brand')        return [d.brand, d.model].filter(Boolean).join(' ')

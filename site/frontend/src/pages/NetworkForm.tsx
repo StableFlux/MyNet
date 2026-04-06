@@ -425,7 +425,7 @@ export default function NetworkForm() {
                   <TextInput
                     value={entry.ssid}
                     onChange={(v) => updateSsid(i, { ssid: v })}
-                    placeholder="HomeNet-20"
+                    placeholder="MyWiFi-20"
                   />
                 </Field>
                 <Field label="Password">

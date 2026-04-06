@@ -34,6 +34,7 @@ def _settings_response(s: SystemSettings) -> dict:
         "device_category_colors": {**DEFAULT_DEVICE_CATEGORY_COLORS, **(s.device_category_colors or {})},
         "device_status_colors": {**DEFAULT_DEVICE_STATUS_COLORS, **(s.device_status_colors or {})},
         "wan_port_color": s.wan_port_color or "#ef4444",
+        "mynet_url": s.mynet_url or "",
     }
 
 
@@ -57,6 +58,7 @@ class SystemSettingsIn(BaseModel):
     device_category_colors: Optional[dict] = None
     device_status_colors: Optional[dict] = None
     wan_port_color: Optional[str] = None
+    mynet_url: Optional[str] = None
 
 
 @router.patch("")
@@ -96,6 +98,10 @@ def update_system_settings(
         s.device_status_colors = {k: v for k, v in body.device_status_colors.items() if isinstance(v, str)}
     if body.wan_port_color is not None:
         s.wan_port_color = body.wan_port_color
+
+    if body.mynet_url is not None:
+        url = body.mynet_url.strip().rstrip('/')
+        s.mynet_url = url or None
 
     db.commit()
     return _settings_response(s)

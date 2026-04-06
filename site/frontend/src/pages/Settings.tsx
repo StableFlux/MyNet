@@ -236,6 +236,7 @@ export default function Settings() {
   const [systemName, setSystemName] = useState('')
   const [authRequired, setAuthRequired] = useState(true)
   const [authError, setAuthError] = useState('')
+  const [mynetUrl, setMynetUrl] = useState('')
 
   const [modal, setModal] = useState<ModalMode | null>(null)
   const [modalError, setModalError] = useState('')
@@ -259,6 +260,7 @@ export default function Settings() {
     if (sysData) {
       setSystemName(sysData.system_name ?? 'MyNet')
       setAuthRequired(sysData.auth_required ?? true)
+      setMynetUrl(sysData.mynet_url ?? '')
     }
   }, [sysData])
 
@@ -421,6 +423,38 @@ export default function Settings() {
                 <Save size={14} />
                 {saveMutation.isPending ? 'Saving…' : 'Save'}
               </button>
+            )}
+          </GlassCard>
+
+          {/* MyNet URL for label QR codes */}
+          <GlassCard className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-white">MyNet URL</p>
+              <p className="text-xs text-white/40 mt-0.5">
+                Base URL used for printable label QR codes. Must be reachable by devices scanning the label.
+              </p>
+            </div>
+            <input
+              type="url"
+              value={mynetUrl}
+              onChange={(e) => setMynetUrl(e.target.value)}
+              className="glass-input text-sm w-full font-mono"
+              placeholder="http://192.168.1.x"
+            />
+            {mynetUrl !== (sysData?.mynet_url ?? '') && (
+              <button
+                type="button"
+                onClick={() => api.patch('/system-settings', { mynet_url: mynetUrl }).then(() => qc.invalidateQueries({ queryKey: ['system-settings'] }))}
+                className="btn-primary w-full flex items-center justify-center gap-2"
+              >
+                <Save size={14} />
+                Save
+              </button>
+            )}
+            {!sysData?.mynet_url && (
+              <p className="text-xs text-amber-400/80 flex items-center gap-1.5">
+                <span>⚠</span> Label downloads are disabled until this is set.
+              </p>
             )}
           </GlassCard>
 

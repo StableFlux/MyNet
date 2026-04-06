@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<string, { label: string; pill: string }> = {
 
 function StatPill({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-glass-border bg-white/[0.03]">
+    <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-glass-border bg-white/[0.06]">
       <span className="text-2xl font-bold leading-none" style={{ color: color ?? 'white' }}>{value}</span>
       <span className="text-xs text-white/40 leading-tight">{label}</span>
     </div>
@@ -220,11 +220,10 @@ export default function StockTracker() {
             {brandGroups.filter((_, i) => i % 3 === col).map(({ brand, categories }) => {
               const brandTotal = categories.reduce((n, c) => n + c.models.reduce((m, [, items]) => m + items.length, 0), 0)
               return (
-                <div key={brand} className="rounded-xl border border-glass-border overflow-hidden"
-                  style={{ background: 'linear-gradient(160deg, #1a2035 0%, #111827 100%)' }}>
+                <div key={brand} className="glass-card overflow-hidden">
 
                   {/* Brand header */}
-                  <div className="px-4 py-3 border-b border-white/[0.06] flex items-center gap-3">
+                  <div className="px-4 py-3 border-b border-glass-border flex items-center gap-3">
                     <p className="text-sm font-bold text-white">{brand}</p>
                     <span className="text-xs text-white/30">{brandTotal} unit{brandTotal !== 1 ? 's' : ''}</span>
                   </div>
@@ -235,7 +234,7 @@ export default function StockTracker() {
                         {/* Category divider */}
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">{category}</span>
-                          <div className="flex-1 h-px bg-white/[0.06]" />
+                          <div className="flex-1 h-px" style={{ backgroundColor: 'var(--glass-border)' }} />
                         </div>
                         <div className="flex flex-col gap-2">
                     {models.map(([modelKey, items]) => {
@@ -251,10 +250,10 @@ export default function StockTracker() {
 
                       return (
                         <div key={collapseKey}
-                          className="rounded-lg border border-white/[0.08] overflow-hidden"
+                          className="rounded-lg border border-glass-border overflow-hidden"
                           style={{
                             borderTopColor: `${accentColor}55`,
-                            background: `linear-gradient(160deg, color-mix(in srgb, ${accentColor} 6%, #0f1623) 0%, #0c111c 100%)`,
+                            background: `linear-gradient(160deg, color-mix(in srgb, ${accentColor} 10%, var(--card-base-deep)) 0%, var(--card-base-deepest) 100%)`,
                           }}>
 
                           {/* Model header — click to collapse */}
@@ -262,7 +261,7 @@ export default function StockTracker() {
                             style={{ borderBottom: isCollapsed ? 'none' : '1px solid var(--glass-border)' }}>
                             {/* Chevron handle — left edge toggle */}
                             <button type="button" onClick={() => toggleModel(collapseKey)}
-                              className="flex items-center justify-center w-9 flex-shrink-0 border-r border-white/[0.06] hover:bg-white/[0.04] transition-colors">
+                              className="flex items-center justify-center w-9 flex-shrink-0 border-r border-glass-border hover:bg-white/[0.04] transition-colors">
                               {isCollapsed
                                 ? <ChevronRight size={13} className="text-white/25" />
                                 : <ChevronDown size={13} className="text-white/25" />}
@@ -270,7 +269,7 @@ export default function StockTracker() {
                             {/* Main content */}
                             <button type="button" onClick={() => toggleModel(collapseKey)}
                               className="flex-1 px-4 py-3 flex items-center gap-3 text-left hover:bg-white/[0.02] transition-colors min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+                              <div className="w-8 h-8 rounded-lg bg-white/[0.12] flex items-center justify-center flex-shrink-0">
                                 <Package size={15} className="text-white/40" />
                               </div>
                               <div className="flex-1 min-w-0">
@@ -303,7 +302,7 @@ export default function StockTracker() {
 
                           {/* Device rows */}
                           {!isCollapsed && (
-                            <div className="divide-y divide-white/[0.04]">
+                            <div className="divide-y divide-glass-border">
                               {items.map((device: any) => {
                                 const cfg = STATUS_CONFIG[device.status] ?? STATUS_CONFIG.stock
                                 const statusHex = colors.statusColor(device.status)

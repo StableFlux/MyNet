@@ -275,6 +275,12 @@ const { data: auditHistory, isLoading: auditLoading } = useQuery({
     queryFn: async () => { const { data } = await api.get('/pihole/dashboard'); return data },
     staleTime: 300_000,
   })
+
+  const { data: sysSettings } = useQuery({
+    queryKey: ['system-settings'],
+    queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
+    staleTime: 60_000,
+  })
   const piholeConfigured = piholeGlobal?.enabled === true
 
   const deleteMutation = useMutation({
@@ -310,6 +316,7 @@ const { data: auditHistory, isLoading: auditLoading } = useQuery({
   const primaryIp = device.nics?.find((n: any) => n.ip_address && n.ip_address !== 'DHCP')?.ip_address
   const primaryDns = device.nics?.find((n: any) => n.dns_entry)?.dns_entry
   const mynetUrl = `${window.location.origin}/devices/${device.id}`
+  const labelEnabled = !!(sysSettings?.mynet_url)
 
 const profile: LayoutProfile = device.switch_ports?.length > 0 ? 'switch' : 'general'
 
@@ -323,6 +330,7 @@ const profile: LayoutProfile = device.switch_ports?.length > 0 ? 'switch' : 'gen
       primaryIp={primaryIp}
       primaryDns={primaryDns}
       mynetUrl={mynetUrl}
+      labelEnabled={labelEnabled}
       profile={profile}
       copiedKey={copiedKey}
       copiedSsh={copiedSsh}
@@ -354,7 +362,7 @@ const profile: LayoutProfile = device.switch_ports?.length > 0 ? 'switch' : 'gen
 }
 
 function DeviceDetailInner({
-  device, id, navigate, canEdit, statusClass, primaryIp, primaryDns, mynetUrl,
+  device, id, navigate, canEdit, statusClass, primaryIp, primaryDns, mynetUrl, labelEnabled,
   profile, copiedKey, copiedSsh, setCopiedSsh, copyKeyed,
   wolMutation, showPassword, password, fetchPassword,
   showHistory, setShowHistory, historyPage,
@@ -591,8 +599,8 @@ function DeviceDetailInner({
         const connectedPorts = device.switch_ports.filter((p: any) => p.connected_device_name || (device.uplink_port_id && p.id === device.uplink_port_id)).length
         const typeLabel: Record<string, string> = { eth: 'ETH', dac: 'DAC', sfp: 'SFP', 'sfp+': 'SFP+', qsfp: 'QSFP' }
         const typeColor: Record<string, string> = {
-          eth: 'text-blue-400/50', dac: 'text-amber-400/50', sfp: 'text-indigo-400/50',
-          'sfp+': 'text-purple-400/50', qsfp: 'text-emerald-400/50',
+          eth: 'text-blue-400/70', dac: 'text-amber-400/70', sfp: 'text-indigo-400/70',
+          'sfp+': 'text-purple-400/70', qsfp: 'text-emerald-400/70',
         }
         return (
           <GlassCard>
@@ -605,16 +613,16 @@ function DeviceDetailInner({
               <button type="button"
                 onClick={() => navigate(`/devices/${device.upstream_device_id}`)}
                 className="w-full flex items-center gap-3 mb-4 px-3 py-2.5 rounded-lg bg-indigo-500/[0.08] border border-indigo-500/20 hover:bg-indigo-500/[0.13] transition-colors text-left">
-                <ArrowUp size={13} className="text-indigo-400 shrink-0" />
+                <ArrowUp size={13} className="text-indigo-500 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-indigo-300 truncate">{device.upstream_device_name}</p>
+                  <p className="text-sm font-medium text-indigo-400 truncate">{device.upstream_device_name}</p>
                   {(device.uplink_port_label || device.upstream_port_label) && (
-                    <p className="text-[10px] text-indigo-400/50 truncate">
+                    <p className="text-[10px] text-indigo-400/70 truncate">
                       {[device.uplink_port_label, device.upstream_port_label].filter(Boolean).join(' → ')}
                     </p>
                   )}
                 </div>
-                <ExternalLink size={11} className="text-indigo-400/40 shrink-0" />
+                <ExternalLink size={11} className="text-indigo-400/60 shrink-0" />
               </button>
             )}
 
@@ -1589,14 +1597,20 @@ function DeviceDetailInner({
                 <div className="p-4 bg-[#ffffff] rounded-xl">
                   <QRCodeSVG value={mynetUrl} size={160} />
                 </div>
-                <a
-                  href={`${window.location.origin}/api/qr/devices/${device.id}/label`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 text-xs text-white/30 hover:text-white/60 transition-colors"
-                >
-                  <Tag size={11} /> Print label
-                </a>
+                {labelEnabled ? (
+                  <a
+                    href={`${window.location.origin}/api/qr/devices/${device.id}/label`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-xs text-white/30 hover:text-white/60 transition-colors"
+                  >
+                    <Tag size={11} /> Print label
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs text-amber-400/60 cursor-default" title="Set MyNet URL in Settings to enable label downloads">
+                    <Tag size={11} /> Print label (URL not set)
+                  </span>
+                )}
               </div>
 
               {/* Service QR codes */}
@@ -1608,14 +1622,20 @@ function DeviceDetailInner({
                   <a href={svc.url} target="_blank" rel="noreferrer" aria-label={`Open ${svc.name || `Service ${i + 1}`}`} className="p-4 bg-[#ffffff] rounded-xl hover:opacity-80 transition-opacity">
                     <QRCodeSVG value={svc.url} size={160} />
                   </a>
-                  <a
-                    href={`${window.location.origin}/api/qr/label?url=${encodeURIComponent(svc.url)}&name=${encodeURIComponent(svc.name || `Service ${i + 1}`)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 text-xs text-white/30 hover:text-white/60 transition-colors"
-                  >
-                    <Tag size={11} /> Print label
-                  </a>
+                  {labelEnabled ? (
+                    <a
+                      href={`${window.location.origin}/api/qr/label?url=${encodeURIComponent(svc.url)}&name=${encodeURIComponent(svc.name || `Service ${i + 1}`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs text-white/30 hover:text-white/60 transition-colors"
+                    >
+                      <Tag size={11} /> Print label
+                    </a>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-amber-400/60 cursor-default" title="Set MyNet URL in Settings to enable label downloads">
+                      <Tag size={11} /> Print label (URL not set)
+                    </span>
+                  )}
                 </div>
               ))}
 

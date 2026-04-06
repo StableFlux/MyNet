@@ -54,3 +54,4 @@ class SystemSettings(Base):
     device_category_colors = Column(JSON, nullable=True)
     device_status_colors = Column(JSON, nullable=True)
     wan_port_color = Column(String, nullable=True)  # hex — applied to all WAN ports
+    mynet_url = Column(String, nullable=True)        # base URL for printable label QR codes

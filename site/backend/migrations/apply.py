@@ -421,6 +421,13 @@ def apply_migrations(engine) -> None:
             conn.commit()
             log.info("apply_migrations: system_settings.dns_domain added")
 
+        # ── system_settings: add mynet_url (base URL for printable label QR codes) ──
+        ss_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(system_settings)"))}
+        if "mynet_url" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN mynet_url VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.mynet_url added")
+
         # ── drop old audit_log and alerts tables after migration ──────────────
         tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
         if "audit_log" in tables:

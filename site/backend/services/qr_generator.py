@@ -6,8 +6,6 @@ import io
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
-from config import settings
-
 
 def _make_qr(url: str, box_size: int = 8, border: int = 2) -> Image.Image:
     qr = qrcode.QRCode(
@@ -21,9 +19,9 @@ def _make_qr(url: str, box_size: int = 8, border: int = 2) -> Image.Image:
     return qr.make_image(fill_color="black", back_color="white").get_image()
 
 
-def generate_mynet_qr_png(device_id: int) -> bytes:
+def generate_mynet_qr_png(device_id: int, base_url: str) -> bytes:
     """QR linking to the MyNet device detail page."""
-    url = f"{settings.app_url}/devices/{device_id}"
+    url = f"{base_url}/devices/{device_id}"
     img = _make_qr(url)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -124,6 +122,7 @@ def generate_label_png(
     device_id: int,
     device_name: str,
     ip_address: Optional[str] = None,  # kept for call-site compat, not used
+    base_url: Optional[str] = None,  # kept optional for call-site compat; router enforces presence
 ) -> bytes:
-    url = f"{settings.app_url}/devices/{device_id}"
+    url = f"{(base_url or '')}/devices/{device_id}"
     return _make_label(url, device_name)

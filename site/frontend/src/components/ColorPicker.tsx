@@ -41,7 +41,7 @@ export function ColorPicker({ value, onChange }: ColorPickerProps) {
             className="w-5 h-5 rounded-full transition-transform hover:scale-110 flex-shrink-0"
             style={{
               backgroundColor: c,
-              outline: value === c ? `2px solid white` : '2px solid transparent',
+              outline: value === c ? `2px solid var(--outline-selected, #6366f1)` : '2px solid transparent',
               outlineOffset: '1px',
             }}
           />

@@ -199,7 +199,7 @@ export default function Dashboard() {
             <div
               onClick={() => navigate('/monitoring')}
               className={`glass-card glass-card-interactive cursor-pointer p-5 flex items-center gap-4 ${anyDown ? 'border-red-500/40' : ''}`}
-              style={anyDown ? { background: 'linear-gradient(135deg, #2d1a1a 0%, #1f1215 100%)' } : undefined}
+              style={anyDown ? { background: 'var(--bg-status-error)' } : undefined}
             >
               <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                 style={{ backgroundColor: `${statusColor}22`, border: `1px solid ${statusColor}44` }}>
@@ -611,7 +611,7 @@ export default function Dashboard() {
                       <span className="text-xs text-white/40 tabular-nums">{b.count}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                      <div className="h-full rounded-full bg-indigo-500/60 transition-all" style={{ width: `${pct}%` }} />
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#6366f1' }} />
                     </div>
                   </div>
                 )

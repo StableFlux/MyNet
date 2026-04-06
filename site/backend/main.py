@@ -234,7 +234,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", settings.app_url],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -275,11 +275,5 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # ---------------------------------------------------------------------------
-# Public config endpoint — exposes non-sensitive settings to the frontend
-# ---------------------------------------------------------------------------
-
-@app.get("/api/config")
-def public_config():
-    return {"app_url": settings.app_url}
 
 

@@ -8,7 +8,6 @@ class Settings(BaseSettings):
 
     # App
     app_host: str = "localhost"
-    app_url: str = "http://localhost"
     app_port: int = 8000
 
     # PiHole (optional — leave blank to disable)

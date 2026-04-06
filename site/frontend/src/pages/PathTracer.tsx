@@ -49,6 +49,7 @@ export default function PathTracer() {
   const [targetId, setTargetId] = useState<string>('')
   const [trace, setTrace] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const { data: devices } = useQuery({
     queryKey: ['devices', 'all'],
@@ -58,9 +59,13 @@ export default function PathTracer() {
   const handleTrace = async () => {
     if (!sourceId || !targetId) return
     setLoading(true)
+    setError(null)
+    setTrace(null)
     try {
       const { data } = await api.get(`/topology/path?source_id=${sourceId}&target_id=${targetId}`)
       setTrace(data)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail ?? err?.message ?? 'Request failed')
     } finally {
       setLoading(false)
     }
@@ -141,7 +146,19 @@ export default function PathTracer() {
         </div>
       </GlassCard>
 
-      {!trace && (
+      {error && (
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-3 text-red-400">
+            <AlertTriangle size={18} />
+            <div>
+              <p className="text-sm font-medium">Trace failed</p>
+              <p className="text-xs text-white/40 mt-0.5 font-mono">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!trace && !error && (
         <div className="text-center py-16 text-white/30">
           <GitBranch size={32} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">Select a source and destination, then click Trace</p>

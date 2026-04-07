@@ -9,6 +9,7 @@ import asyncio
 import ipaddress
 import logging
 import socket
+import subprocess
 from typing import Optional
 
 import icmplib
@@ -27,16 +28,15 @@ log = logging.getLogger(__name__)
 
 def _read_arp_table() -> dict[str, str]:
     """
-    Return {ip: mac} for all known neighbours.
-    Tries `ip neigh show` first (covers all interfaces and STALE entries),
+    Return {ip: mac} for all known neighbours (IPv4 only).
+    Tries `ip neigh show` first (covers REACHABLE, STALE, DELAY, PROBE),
     then falls back to /proc/net/arp.
     MAC is normalised to lowercase colon-separated (aa:bb:cc:dd:ee:ff).
     """
     result: dict[str, str] = {}
 
-    # Primary: `ip neigh show` — includes REACHABLE, STALE, DELAY, PROBE states
+    # Primary: `ip neigh show`
     try:
-        import subprocess
         out = subprocess.check_output(
             ["ip", "neigh", "show"],
             text=True, timeout=5, stderr=subprocess.DEVNULL,
@@ -44,19 +44,21 @@ def _read_arp_table() -> dict[str, str]:
         for line in out.splitlines():
             # Format: IP dev IFACE [lladdr MAC] state STATE
             parts = line.split()
-            if len(parts) < 4:
+            if len(parts) < 4 or "lladdr" not in parts:
                 continue
             ip = parts[0]
-            if "lladdr" not in parts:
+            # Skip IPv6 addresses — only want IPv4 for scanner cross-reference
+            if ":" in ip:
                 continue
             idx = parts.index("lladdr")
             mac = parts[idx + 1].lower()
             if mac and mac != "00:00:00:00:00:00":
                 result[ip] = mac
+        log.info(f"ARP table (ip neigh): {len(result)} IPv4 entries")
         if result:
             return result
     except Exception as e:
-        log.debug(f"ip neigh show failed: {e}")
+        log.warning(f"ip neigh show failed: {e}")
 
     # Fallback: /proc/net/arp
     try:
@@ -70,8 +72,9 @@ def _read_arp_table() -> dict[str, str]:
                 if flags == "0x0" or mac in ("00:00:00:00:00:00", ""):
                     continue
                 result[ip] = mac.lower()
+        log.info(f"ARP table (/proc/net/arp): {len(result)} entries")
     except FileNotFoundError:
-        log.debug("/proc/net/arp not available — MAC lookup skipped")
+        log.warning("/proc/net/arp not available — MAC lookup skipped")
     except Exception as e:
         log.warning(f"ARP table read failed: {e}")
 
@@ -267,9 +270,12 @@ async def scan_networks(db: Session, network_ids: list[int] | None = None) -> li
     # Pi-hole network devices — tracks all DNS clients by MAC (works without being DHCP server)
     from services.pihole_client import fetch_pihole_network_devices
     pihole_devices = await fetch_pihole_network_devices(db)
+    log.info(f"Pi-hole network devices: {len(pihole_devices)} IPs with data "
+             f"({sum(1 for v in pihole_devices.values() if v.get('mac'))} with real MACs)")
 
     # ARP table — fallback for hosts not seen by Pi-hole (static IPs, infra)
-    arp_table = _read_arp_table()
+    arp_table = await asyncio.to_thread(_read_arp_table)
+    log.info(f"ARP table: {len(arp_table)} entries")
 
     alive_sorted = sorted(alive_ips, key=lambda x: ipaddress.ip_address(x))
 

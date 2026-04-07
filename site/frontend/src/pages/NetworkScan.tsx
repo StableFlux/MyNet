@@ -258,7 +258,7 @@ export default function NetworkScan() {
           </div>{/* end 5/6 col */}
 
           {/* 1/6 — scan button */}
-          <div className="w-1/6 flex-shrink-0 flex items-center justify-center border-l border-glass-border p-4">
+          <div className="w-1/6 flex-shrink-0 flex items-end justify-center p-4" style={{ borderLeft: '1px solid rgb(var(--color-white) / 0.15)' }}>
             <button
               type="button"
               onClick={runScan}

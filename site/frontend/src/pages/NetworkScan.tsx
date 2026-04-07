@@ -68,15 +68,13 @@ export default function NetworkScan() {
   const allSelected = networks.length > 0 && selectedIds.size === networks.length
 
   function toggleNetwork(id: number) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    const next = new Set(selectedIds)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setSelectedIds(next)
   }
 
   function toggleAll() {
-    setSelectedIds(allSelected ? new Set() : new Set(networks.map((n) => n.id)))
+    setSelectedIds(allSelected ? new Set<number>() : new Set(networks.map((n) => n.id)))
   }
 
   const selectedNetworks = networks.filter((n) => selectedIds.has(n.id))
@@ -340,10 +338,10 @@ export default function NetworkScan() {
                       {/* Status */}
                       <td className="px-4 py-3">
                         {h.known
-                          ? <CheckCircle2 size={14} className="text-emerald-400" title="Known" />
+                          ? <span title="Known"><CheckCircle2 size={14} className="text-emerald-400" /></span>
                           : h.dhcp_lease
-                            ? <HelpCircle size={14} className="text-sky-400" title="DHCP lease — not in database" />
-                            : <AlertCircle size={14} className="text-amber-400" title="Unrecognised device" />
+                            ? <span title="DHCP lease — not in database"><HelpCircle size={14} className="text-sky-400" /></span>
+                            : <span title="Unrecognised device"><AlertCircle size={14} className="text-amber-400" /></span>
                         }
                       </td>
 

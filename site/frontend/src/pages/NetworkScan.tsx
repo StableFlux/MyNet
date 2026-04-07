@@ -136,7 +136,7 @@ export default function NetworkScan() {
         </button>
         <div className="flex-1">
           <h1 className="text-xl font-bold text-white">Network Scan</h1>
-          <p className="text-xs text-white/40 mt-0.5">Discover devices on your subnets. Results are read-only — nothing is added automatically.</p>
+          <p className="text-xs text-white/40 mt-0.5">Discover devices on your subnets.</p>
         </div>
       </div>
 
@@ -148,6 +148,7 @@ export default function NetworkScan() {
         <div className="space-y-2 min-w-0">
           <p className="text-sm font-semibold text-white">What this tool does — and doesn't do</p>
           <ul className="text-xs text-white/50 space-y-1">
+            <li><span className="text-white/70 font-medium">Read-only</span> — results are never saved automatically. Nothing is added to MyNet without your explicit action.</li>
             <li><span className="text-white/70 font-medium">Discovers active hosts</span> — ping-sweeps your configured subnets and shows anything that responds.</li>
             <li><span className="text-white/70 font-medium">Cross-references your database</span> — known devices, gateways, and DNS servers are identified automatically.</li>
             <li><span className="text-white/70 font-medium">MAC &amp; hostname enrichment</span> — sourced from Pi-hole's ARP monitoring. Coverage depends on whether Pi-hole has seen the device make a DNS query; some devices may show no MAC.</li>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanLine, RefreshCw, Plus, ExternalLink, CheckCircle2, AlertCircle, ChevronLeft, HelpCircle } from 'lucide-react'
+import { ScanLine, RefreshCw, Plus, ExternalLink, CheckCircle2, AlertCircle, ChevronLeft } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { GlassCard } from '../components/GlassCard'
 import { useNetworkScanStore } from '../store/networkScanStore'
@@ -89,7 +89,7 @@ export default function NetworkScan() {
       selectedIds.forEach((id) => params.append('network_ids', String(id)))
       const { data } = await api.get(`/scan?${params.toString()}`)
       setResult(data)
-      const unrecognised = data.hosts.filter((h: ScanHost) => !h.known && !h.dhcp_lease).length
+      const unrecognised = data.hosts.filter((h: ScanHost) => !h.known).length
       const dhcp = data.hosts.filter((h: ScanHost) => h.dhcp_lease).length
       setFilter(unrecognised > 0 ? 'unknown' : dhcp > 0 ? 'dhcp' : 'all')
     } catch (e: any) {
@@ -99,14 +99,15 @@ export default function NetworkScan() {
     }
   }
 
+  // DHCP is cross-cutting — a known device can also be a DHCP device
   const displayed = result?.hosts.filter((h) => {
-    if (filter === 'unknown') return !h.known && !h.dhcp_lease
+    if (filter === 'unknown') return !h.known
     if (filter === 'dhcp') return h.dhcp_lease
     if (filter === 'known') return h.known
     return true
   }) ?? []
 
-  const unknownCount = result?.hosts.filter((h) => !h.known && !h.dhcp_lease).length ?? 0
+  const unknownCount = result?.hosts.filter((h) => !h.known).length ?? 0
   const dhcpCount = result?.hosts.filter((h) => h.dhcp_lease).length ?? 0
 
   function addDeviceUrl(h: ScanHost) {
@@ -285,6 +286,7 @@ export default function NetworkScan() {
               {dhcpCount > 0 && <>
                 <span className="text-white/20">·</span>
                 <span className="text-sky-400 font-semibold">{dhcpCount}</span> DHCP
+                <span className="text-white/20 text-[10px]">(may overlap known)</span>
               </>}
             </div>
             <div className="flex gap-1 ml-auto">
@@ -337,12 +339,12 @@ export default function NetworkScan() {
                     <tr key={h.ip} className="hover:bg-white/[0.03] transition-colors">
                       {/* Status */}
                       <td className="px-4 py-3">
-                        {h.known
-                          ? <span title="Known"><CheckCircle2 size={14} className="text-emerald-400" /></span>
-                          : h.dhcp_lease
-                            ? <span title="DHCP lease — not in database"><HelpCircle size={14} className="text-sky-400" /></span>
-                            : <span title="Unrecognised device"><AlertCircle size={14} className="text-amber-400" /></span>
-                        }
+                        <span title={h.known ? 'Known device' : 'Unrecognised'}>
+                          {h.known
+                            ? <CheckCircle2 size={14} className="text-emerald-400" />
+                            : <AlertCircle size={14} className="text-amber-400" />
+                          }
+                        </span>
                       </td>
 
                       {/* IP */}
@@ -390,22 +392,27 @@ export default function NetworkScan() {
 
                       {/* Device (if known) */}
                       <td className="px-4 py-3 text-xs">
-                        {h.device_id ? (
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/devices/${h.device_id}`)}
-                            className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors"
-                          >
-                            {h.device_name}
-                            <ExternalLink size={11} />
-                          </button>
-                        ) : h.role ? (
-                          <span className="text-emerald-400/80 font-medium">{h.role}</span>
-                        ) : h.dhcp_lease ? (
-                          <span className="text-sky-400/70 font-medium">DHCP lease</span>
-                        ) : (
-                          <span className="text-amber-400/70 font-medium">Unrecognised</span>
-                        )}
+                        <span className="flex items-center gap-2">
+                          {h.device_id ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/devices/${h.device_id}`)}
+                              className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors"
+                            >
+                              {h.device_name}
+                              <ExternalLink size={11} />
+                            </button>
+                          ) : h.role ? (
+                            <span className="text-emerald-400/80 font-medium">{h.role}</span>
+                          ) : (
+                            <span className="text-amber-400/70 font-medium">Unrecognised</span>
+                          )}
+                          {h.dhcp_lease && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20 flex-shrink-0">
+                              DHCP
+                            </span>
+                          )}
+                        </span>
                       </td>
 
                       {/* Action */}

@@ -306,7 +306,8 @@ async def scan_networks(db: Session, network_ids: list[int] | None = None) -> li
         infra_match = None if db_match else infra_index.get(ip)
 
         # 3. Check DHCP range if still unmatched
-        dhcp_network = None if (db_match or infra_match) else _check_dhcp_range(ip, dhcp_ranges)
+        # Always check DHCP range — a known device can still be in a DHCP range
+        dhcp_network = _check_dhcp_range(ip, dhcp_ranges)
 
         known = bool(db_match or infra_match)
 

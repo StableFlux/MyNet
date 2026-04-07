@@ -11,6 +11,7 @@ Pi-hole v6 auth flow:
   3. DELETE /api/auth to close the session
 """
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -614,6 +615,51 @@ async def apply_domain_to_mynet_nics(db: Session, domain: str) -> int:
     if count:
         db.commit()
     return count
+
+
+async def fetch_pihole_network_devices(db: Session) -> dict[str, dict]:
+    """
+    Fetch known network devices from all configured Pi-hole instances via
+    GET /api/network/devices.
+
+    Pi-hole FTL tracks every DNS client by MAC (using its own ARP monitoring),
+    so this works regardless of whether Pi-hole is the DHCP server.
+
+    Returns {ip: {mac, hostname, manufacturer}} merged across all instances.
+    MAC is normalised to lowercase. Hostname/manufacturer may be None.
+    """
+    instances = _get_pihole_devices(db)
+    if not instances:
+        return {}
+
+    result: dict[str, dict] = {}
+    for _, url, password in instances:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                async with _pihole_session(client, url, password) as sid:
+                    headers = {"X-FTL-SID": sid} if sid else {}
+                    r = await client.get(f"{url}/api/network/devices", headers=headers, timeout=10)
+                    data = r.json()
+                    for device in data.get("devices", []):
+                        mac = (device.get("hwaddr") or "").strip().lower()
+                        # Pi-hole uses "ip-x.x.x.x" as a synthetic hwaddr when
+                        # the real MAC couldn't be resolved — discard these
+                        if not re.match(r'^([0-9a-f]{2}:){5}[0-9a-f]{2}$', mac):
+                            mac = None
+                        manufacturer = (device.get("macVendor") or "").strip() or None
+                        for ip_entry in device.get("ips", []):
+                            ip = (ip_entry.get("ip") or "").strip()
+                            hostname = (ip_entry.get("name") or "").strip() or None
+                            if ip:
+                                result[ip] = {
+                                    "mac": mac,
+                                    "hostname": hostname,
+                                    "manufacturer": manufacturer,
+                                }
+        except Exception as e:
+            log.warning(f"Pi-hole network devices fetch failed ({url}): {e}")
+
+    return result
 
 
 async def update_pihole_cache(db: Session):

@@ -563,11 +563,16 @@ export default function DeviceForm() {
     const cloneFrom = (location.state as any)?.cloneFrom
     if (cloneFrom) return { ...emptyForm(), ...cloneFrom }
     const f = emptyForm()
-    // Pre-fill IP/network from URL params (coming from subnet map click)
+    // Pre-fill from URL params (subnet map click or network scan "Add" button)
     const ip = searchParams.get('ip')
     const net = searchParams.get('network')
-    if (ip || net) {
-      f.nics = [{ ...emptyNic(), ip_address: ip ?? '', network_id: net ?? '', nic_type: 'ETH' }]
+    const mac = searchParams.get('mac')
+    const hostname = searchParams.get('hostname')
+    if (ip || net || mac) {
+      f.nics = [{ ...emptyNic(), ip_address: ip ?? '', network_id: net ?? '', mac: mac ?? '', nic_type: 'ETH' }]
+    }
+    if (hostname) {
+      f.name = hostname
     }
     return f
   })

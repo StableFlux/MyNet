@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor } from 'lucide-react'
+import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor, ScanLine } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { useAuthStore } from '../store/authStore'
 import { useThemeStore, type ThemeMode } from '../store/themeStore'
@@ -45,6 +45,12 @@ const SETTINGS_ITEMS = [
     icon: QrCode,
     label: 'Label CSV Export',
     description: 'Export device names and URLs for label printer import.',
+  },
+  {
+    to: '/settings/network-scan',
+    icon: ScanLine,
+    label: 'Network Scan',
+    description: 'Discover devices on your subnets and identify unknown hosts.',
   },
 ]
 

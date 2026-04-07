@@ -33,6 +33,7 @@ import routers.system_settings as system_settings_router
 import routers.dashboard as dashboard_router
 import routers.pihole as pihole_router
 import routers.wan_configs as wan_configs_router
+import routers.scan as scan_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -257,6 +258,7 @@ app.include_router(system_settings_router.router, prefix="/api")
 app.include_router(dashboard_router.router)
 app.include_router(pihole_router.router)
 app.include_router(wan_configs_router.router)
+app.include_router(scan_router.router)
 
 
 # ---------------------------------------------------------------------------

@@ -22,17 +22,17 @@ const SETTINGS_ITEMS = [
     description: 'Customise colours for location types, device categories, and statuses.',
   },
   {
-    to: '/backup',
-    icon: HardDriveDownload,
-    label: 'Backup',
-    description: 'Download a backup of the database.',
-  },
-  // Row 2
-  {
     to: '/users',
     icon: Users,
     label: 'User Management',
     description: 'Manage user accounts, roles, and access.',
+  },
+  // Row 2
+  {
+    to: '/settings/network-scan',
+    icon: ScanLine,
+    label: 'Network Scan',
+    description: 'Discover devices on your subnets and identify unknown hosts.',
   },
   {
     to: '/settings/pihole',
@@ -47,10 +47,10 @@ const SETTINGS_ITEMS = [
     description: 'Export device names and URLs for label printer import.',
   },
   {
-    to: '/settings/network-scan',
-    icon: ScanLine,
-    label: 'Network Scan',
-    description: 'Discover devices on your subnets and identify unknown hosts.',
+    to: '/backup',
+    icon: HardDriveDownload,
+    label: 'Backup',
+    description: 'Download a backup of the database.',
   },
 ]
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { UserPlus, Pencil, Trash2, Shield, Eye, User as UserIcon } from 'lucide-react'
+import { UserPlus, Pencil, Trash2, Shield, Eye, User as UserIcon, ChevronLeft } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { useAuthStore } from '../store/authStore'
 import api from '../lib/api'
@@ -9,6 +10,7 @@ import { User } from '../types'
 const ROLE_ICONS = { admin: Shield, editor: Pencil, viewer: Eye }
 
 export default function UserManagement() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { user: me } = useAuthStore()
   const [creating, setCreating] = useState(false)
@@ -50,9 +52,15 @@ export default function UserManagement() {
   return (
     <div className="space-y-5 max-w-2xl">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">User Management</h1>
-          <p className="text-sm text-white/40 mt-0.5">{users?.length ?? 0} users</p>
+        <div className="flex items-center gap-4">
+          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <ChevronLeft size={14} />
+            Settings
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-white">User Management</h1>
+            <p className="text-sm text-white/40 mt-0.5">{users?.length ?? 0} users</p>
+          </div>
         </div>
         <button onClick={() => { resetForm(); setCreating(true) }}
           className="btn-primary flex items-center gap-2">

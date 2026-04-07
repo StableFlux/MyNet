@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Download, Upload, AlertTriangle, CheckCircle, Loader } from 'lucide-react'
+import { Download, Upload, AlertTriangle, CheckCircle, Loader, ChevronLeft } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import api from '../lib/api'
 
 export default function Backup() {
+  const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
   const [importing, setImporting] = useState(false)
@@ -59,9 +61,15 @@ export default function Backup() {
 
   return (
     <div className="space-y-5 max-w-xl">
-      <div>
-        <h1 className="text-xl font-bold text-white">Backup & Restore</h1>
-        <p className="text-sm text-white/40 mt-0.5">Export all data or restore from a previous backup</p>
+      <div className="flex items-center gap-4">
+        <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
+          <ChevronLeft size={14} />
+          Settings
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-white">Backup & Restore</h1>
+          <p className="text-sm text-white/40 mt-0.5">Export all data or restore from a previous backup</p>
+        </div>
       </div>
 
       {/* JSON Export */}

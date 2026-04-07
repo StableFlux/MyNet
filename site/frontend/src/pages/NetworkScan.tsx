@@ -125,38 +125,39 @@ export default function NetworkScan() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => navigate('/settings')}
-          className="btn-ghost flex items-center gap-1.5 text-sm"
-        >
-          <ChevronLeft size={14} />
-          Settings
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-white">Network Scan</h1>
-          <p className="text-xs text-white/40 mt-0.5">Discover devices on your subnets.</p>
+      <div className="flex items-start gap-6">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="btn-ghost flex items-center gap-1.5 text-sm flex-shrink-0"
+          >
+            <ChevronLeft size={14} />
+            Settings
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-white">Network Scan</h1>
+            <p className="text-xs text-white/40 mt-0.5">Discover devices on your subnets.</p>
+          </div>
         </div>
-      </div>
 
-      {/* Expectations card */}
-      <GlassCard className="flex gap-4">
-        <div className="w-8 h-8 rounded-lg bg-indigo-600/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Info size={15} className="text-indigo-400" />
-        </div>
-        <div className="space-y-2 min-w-0">
-          <p className="text-sm font-semibold text-white">What this tool does — and doesn't do</p>
-          <ul className="text-xs text-white/50 space-y-1">
-            <li><span className="text-white/70 font-medium">Read-only</span> — results are never saved automatically. Nothing is added to MyNet without your explicit action.</li>
-            <li><span className="text-white/70 font-medium">Discovers active hosts</span> — ping-sweeps your configured subnets and shows anything that responds.</li>
-            <li><span className="text-white/70 font-medium">Cross-references your database</span> — known devices, gateways, and DNS servers are identified automatically.</li>
-            <li><span className="text-white/70 font-medium">MAC &amp; hostname enrichment</span> — sourced from Pi-hole's ARP monitoring. Coverage depends on whether Pi-hole has seen the device make a DNS query; some devices may show no MAC.</li>
-            <li><span className="text-white/70 font-medium">Nothing is added automatically</span> — use the Add button on unrecognised devices to create a pre-filled entry in MyNet. All details should be reviewed before saving.</li>
-            <li><span className="text-white/70 font-medium">Not a full inventory tool</span> — offline devices, devices on non-configured subnets, and devices that block ICMP will not appear.</li>
-          </ul>
-        </div>
-      </GlassCard>
+        {/* Expectations card — 1/2 width, top right */}
+        <GlassCard className="w-1/2 flex-shrink-0 flex gap-3 py-3">
+          <div className="w-7 h-7 rounded-lg bg-indigo-600/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Info size={13} className="text-indigo-400" />
+          </div>
+          <div className="space-y-1.5 min-w-0">
+            <p className="text-xs font-semibold text-white">What this tool does — and doesn't do</p>
+            <ul className="text-xs text-white/50 space-y-0.5">
+              <li><span className="text-white/70 font-medium">Read-only</span> — nothing is added to MyNet without your explicit action.</li>
+              <li><span className="text-white/70 font-medium">Discovers active hosts</span> — ping-sweeps your configured subnets and shows anything that responds.</li>
+              <li><span className="text-white/70 font-medium">Cross-references your database</span> — known devices, gateways, and DNS servers are identified automatically.</li>
+              <li><span className="text-white/70 font-medium">MAC &amp; hostname enrichment</span> — sourced from Pi-hole's ARP monitoring; some devices may show no MAC.</li>
+              <li><span className="text-white/70 font-medium">Not a full inventory tool</span> — offline devices and devices blocking ICMP will not appear.</li>
+            </ul>
+          </div>
+        </GlassCard>
+      </div>
 
       {/* Network selection */}
       <GlassCard className="p-0 overflow-hidden">

@@ -138,17 +138,6 @@ export default function NetworkScan() {
           <h1 className="text-xl font-bold text-white">Network Scan</h1>
           <p className="text-xs text-white/40 mt-0.5">Discover devices on your subnets. Results are read-only — nothing is added automatically.</p>
         </div>
-        <button
-          type="button"
-          onClick={runScan}
-          disabled={loading || selectedIds.size === 0}
-          className="btn-primary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {loading
-            ? <><RefreshCw size={14} className="animate-spin" /> Scanning…</>
-            : <><ScanLine size={14} /> {result ? 'Re-scan' : 'Scan Now'}</>
-          }
-        </button>
       </div>
 
       {/* Expectations card */}
@@ -169,28 +158,31 @@ export default function NetworkScan() {
       </GlassCard>
 
       {/* Network selection */}
-      <GlassCard className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-white">Networks to Scan</p>
-            <p className="text-xs text-white/40 mt-0.5">
-              {selectedIds.size === 0
-                ? 'No networks selected'
-                : allSelected
-                  ? `All ${networks.length} network${networks.length !== 1 ? 's' : ''} selected`
-                  : `${selectedIds.size} of ${networks.length} selected`
-              }
-              {totalHosts > 0 && (
-                <span className="ml-2 text-white/25">· ~{totalHosts.toLocaleString()} addresses</span>
+      <GlassCard className="p-0 overflow-hidden">
+        <div className="flex">
+          {/* 5/6 — network selector */}
+          <div className="flex-1 min-w-0 p-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Networks to Scan</p>
+                <p className="text-xs text-white/40 mt-0.5">
+                  {selectedIds.size === 0
+                    ? 'No networks selected'
+                    : allSelected
+                      ? `All ${networks.length} network${networks.length !== 1 ? 's' : ''} selected`
+                      : `${selectedIds.size} of ${networks.length} selected`
+                  }
+                  {totalHosts > 0 && (
+                    <span className="ml-2 text-white/25">· ~{totalHosts.toLocaleString()} addresses</span>
+                  )}
+                </p>
+              </div>
+              {networks.length > 1 && (
+                <button type="button" onClick={toggleAll} className="btn-ghost text-xs flex-shrink-0">
+                  {allSelected ? 'Deselect All' : 'Select All'}
+                </button>
               )}
-            </p>
-          </div>
-          {networks.length > 1 && (
-            <button type="button" onClick={toggleAll} className="btn-ghost text-xs flex-shrink-0">
-              {allSelected ? 'Deselect All' : 'Select All'}
-            </button>
-          )}
-        </div>
+            </div>
 
         {networks.length === 0 ? (
           <p className="text-xs text-white/30 italic">No networks with a defined CIDR. Add a CIDR to a network to enable scanning.</p>
@@ -261,6 +253,23 @@ export default function NetworkScan() {
             })}
           </div>
         )}
+          </div>{/* end 5/6 col */}
+
+          {/* 1/6 — scan button */}
+          <div className="w-1/6 flex-shrink-0 flex items-center justify-center border-l border-glass-border p-4">
+            <button
+              type="button"
+              onClick={runScan}
+              disabled={loading || selectedIds.size === 0}
+              className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loading
+                ? <><RefreshCw size={14} className="animate-spin" /> Scanning…</>
+                : <><ScanLine size={14} /> {result ? 'Re-scan' : 'Scan Now'}</>
+              }
+            </button>
+          </div>
+        </div>
       </GlassCard>
 
       {/* Error */}

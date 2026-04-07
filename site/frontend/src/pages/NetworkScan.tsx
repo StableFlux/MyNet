@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ScanLine, RefreshCw, Plus, ExternalLink, CheckCircle2, AlertCircle, ChevronLeft } from 'lucide-react'
+import { ScanLine, RefreshCw, Plus, ExternalLink, CheckCircle2, AlertCircle, ChevronLeft, Info } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { GlassCard } from '../components/GlassCard'
 import { useNetworkScanStore } from '../store/networkScanStore'
@@ -150,6 +150,23 @@ export default function NetworkScan() {
           }
         </button>
       </div>
+
+      {/* Expectations card */}
+      <GlassCard className="flex gap-4">
+        <div className="w-8 h-8 rounded-lg bg-indigo-600/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Info size={15} className="text-indigo-400" />
+        </div>
+        <div className="space-y-2 min-w-0">
+          <p className="text-sm font-semibold text-white">What this tool does — and doesn't do</p>
+          <ul className="text-xs text-white/50 space-y-1">
+            <li><span className="text-white/70 font-medium">Discovers active hosts</span> — ping-sweeps your configured subnets and shows anything that responds.</li>
+            <li><span className="text-white/70 font-medium">Cross-references your database</span> — known devices, gateways, and DNS servers are identified automatically.</li>
+            <li><span className="text-white/70 font-medium">MAC &amp; hostname enrichment</span> — sourced from Pi-hole's ARP monitoring. Coverage depends on whether Pi-hole has seen the device make a DNS query; some devices may show no MAC.</li>
+            <li><span className="text-white/70 font-medium">Nothing is added automatically</span> — use the Add button on unrecognised devices to create a pre-filled entry in MyNet. All details should be reviewed before saving.</li>
+            <li><span className="text-white/70 font-medium">Not a full inventory tool</span> — offline devices, devices on non-configured subnets, and devices that block ICMP will not appear.</li>
+          </ul>
+        </div>
+      </GlassCard>
 
       {/* Network selection */}
       <GlassCard className="space-y-4">

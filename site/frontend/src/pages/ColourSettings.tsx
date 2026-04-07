@@ -363,9 +363,9 @@ export default function ColourSettings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/settings')}
-            className="btn-ghost p-1.5 -ml-1.5 text-white/40 hover:text-white/70">
-            <ChevronLeft size={16} />
+          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <ChevronLeft size={14} />
+            Settings
           </button>
           <div>
             <h1 className="text-xl font-bold text-white">Colour Settings</h1>

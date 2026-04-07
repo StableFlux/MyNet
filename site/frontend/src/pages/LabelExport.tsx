@@ -141,8 +141,9 @@ export default function LabelExport() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost p-2" aria-label="Back">
-            <ChevronLeft size={18} />
+          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <ChevronLeft size={14} />
+            Settings
           </button>
           <div>
             <h1 className="text-xl font-bold text-white">Label CSV Export</h1>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Wifi, CheckCircle, XCircle, Clock, Loader, ExternalLink, Save, RefreshCw, AlertTriangle, AlertCircle, GitMerge, ArrowLeft, ArrowRight, Trash2, Globe } from 'lucide-react'
+import { Wifi, CheckCircle, XCircle, Clock, Loader, ExternalLink, Save, RefreshCw, AlertTriangle, AlertCircle, GitMerge, ArrowLeft, ArrowRight, Trash2, Globe, ChevronLeft } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { useAuthStore } from '../store/authStore'
 import api from '../lib/api'
@@ -110,9 +110,15 @@ export default function PiholeSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-white">Pi-hole Integration</h1>
-        <p className="text-sm text-white/40 mt-0.5">DNS filtering stats and device query history.</p>
+      <div className="flex items-center gap-4">
+        <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
+          <ChevronLeft size={14} />
+          Settings
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-white">Pi-hole Integration</h1>
+          <p className="text-sm text-white/40 mt-0.5">DNS filtering stats and device query history.</p>
+        </div>
       </div>
 
       {/* Configuration */}

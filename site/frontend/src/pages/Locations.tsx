@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MapPin, Plus, Pencil, Trash2, Check, X, ChevronDown, ChevronRight, Lock, Monitor } from 'lucide-react'
+import { MapPin, Plus, Pencil, Trash2, Check, X, ChevronDown, ChevronRight, Lock, Monitor, ChevronLeft } from 'lucide-react'
 import api from '../lib/api'
 import { useColorSettings } from '../hooks/useColorSettings'
 import { LOCATION_TYPE_ICON } from '../components/DeviceTypeIcon'
@@ -249,6 +250,7 @@ function TreeNode({ node, allItems, byId, knownTypes, editMode, setEditMode, for
 // Page
 // ---------------------------------------------------------------------------
 export default function Locations() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const canEdit = user?.role === 'admin' || user?.role === 'editor'
@@ -308,9 +310,15 @@ export default function Locations() {
     <div className="space-y-5">
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">Locations</h1>
-          <p className="text-sm text-white/40 mt-0.5">{totalCount} location{totalCount !== 1 ? 's' : ''}</p>
+        <div className="flex items-center gap-4">
+          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <ChevronLeft size={14} />
+            Settings
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-white">Locations</h1>
+            <p className="text-sm text-white/40 mt-0.5">{totalCount} location{totalCount !== 1 ? 's' : ''}</p>
+          </div>
         </div>
         {canEdit && (
           <button type="button"

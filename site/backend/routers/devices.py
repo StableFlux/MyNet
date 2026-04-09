@@ -11,7 +11,7 @@ from models.device_type import DeviceType
 from models.nic import Nic
 from models.switch_port import SwitchPort
 from models.user import User
-from services.events import log_event
+from services.events import log_event, resolve_events
 from models.event import EventType
 from services.auth import require_editor, require_viewer
 from services.encryption import encrypt, decrypt, is_locked
@@ -580,6 +580,8 @@ def update_device(
             _cleanup_infra_data(device, db)
         if device.status in (DeviceStatus.stock, DeviceStatus.undeployed, DeviceStatus.decommissioned):
             device.monitoring_enabled = False
+            resolve_events(db, EventType.device_offline, device.id, resolved_by="status_change")
+            resolve_events(db, EventType.wan_offline, device.id, resolved_by="status_change")
         _sync_nics(device, body.nics, db)
         new = {"name": device.name, "status": str(device.status), "location": device.location}
         log_event(db, EventType.device_updated, f"Device '{device.name}' updated",
@@ -678,7 +680,6 @@ def suppress_mac_conflict(
         raise HTTPException(404, "NIC not found")
     nic.mac_conflict_suppressed = True
     # Resolve any open mac_conflict event for this device and log suppression
-    from services.events import resolve_events
     resolve_events(db, EventType.mac_conflict, device_id, resolved_by=current_user.username)
     device = db.get(Device, device_id)
     log_event(db, EventType.mac_conflict_suppressed,

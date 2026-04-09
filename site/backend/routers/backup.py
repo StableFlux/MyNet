@@ -76,17 +76,28 @@ def export_backup(db: Session = Depends(get_db)):
             "auth_required":            sys.auth_required if sys else True,
             "pihole_poll_interval_secs": sys.pihole_poll_interval_secs if sys else 300,
             "dns_domain":               sys.dns_domain if sys else None,
+            "mynet_url":                sys.mynet_url if sys else None,
             "location_type_colors":     sys.location_type_colors if sys else None,
             "device_category_colors":   sys.device_category_colors if sys else None,
             "device_status_colors":     sys.device_status_colors if sys else None,
             "wan_port_color":           sys.wan_port_color if sys else None,
+            # UniFi connection config (credentials intentionally excluded)
+            "unifi_host":               sys.unifi_host if sys else None,
+            "unifi_auth_type":          sys.unifi_auth_type if sys else None,
+            "unifi_write_enabled":      sys.unifi_write_enabled if sys else False,
+            # Pi-hole connection config (credentials intentionally excluded)
+            "pihole1_url":              sys.pihole1_url if sys else None,
+            "pihole2_url":              sys.pihole2_url if sys else None,
             # encryption fields intentionally excluded — keys never leave the server
+            # unifi_api_key, unifi_username, unifi_password intentionally excluded
+            # pihole1_password, pihole2_password intentionally excluded
         },
         "users":         [_row_to_dict(r, ts) for r in db.query(User).order_by(User.id).all()],
         "networks":      [_row_to_dict(r, ts) for r in db.query(Network).order_by(Network.id).all()],
         "device_types":  [_row_to_dict(r, ts) for r in db.query(DeviceType).order_by(DeviceType.id).all()],
         "locations":     [_row_to_dict(r) for r in db.query(Location).order_by(Location.id).all()],
-        "devices":       [_row_to_dict(r, ts) for r in db.query(Device).order_by(Device.id).all()],
+        # pihole_password excluded — credentials are not included in backups
+        "devices":       [_row_to_dict(r, ts | {"pihole_password"}) for r in db.query(Device).order_by(Device.id).all()],
         "nics":          [_row_to_dict(r, ts) for r in db.query(Nic).order_by(Nic.id).all()],
         "switch_ports":  [_row_to_dict(r) for r in db.query(SwitchPort).order_by(SwitchPort.id).all()],
         "wan_configs":   [_row_to_dict(r) for r in db.query(WanConfig).order_by(WanConfig.id).all()],
@@ -169,6 +180,18 @@ def _do_restore(db: Session, data: dict) -> dict:
             s.pihole_poll_interval_secs = ss["pihole_poll_interval_secs"] or 300
         if "dns_domain" in ss:
             s.dns_domain = ss["dns_domain"]
+        if "mynet_url" in ss:
+            s.mynet_url = ss["mynet_url"]
+        if "unifi_host" in ss:
+            s.unifi_host = ss["unifi_host"]
+        if "unifi_auth_type" in ss:
+            s.unifi_auth_type = ss["unifi_auth_type"]
+        if "unifi_write_enabled" in ss:
+            s.unifi_write_enabled = ss["unifi_write_enabled"]
+        if "pihole1_url" in ss:
+            s.pihole1_url = ss["pihole1_url"]
+        if "pihole2_url" in ss:
+            s.pihole2_url = ss["pihole2_url"]
         if "location_type_colors" in ss:
             s.location_type_colors = ss["location_type_colors"]
         if "device_category_colors" in ss:

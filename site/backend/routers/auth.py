@@ -1,11 +1,16 @@
 """
 Auth router: login, logout, setup (first-run), current user.
 """
+import time
+import threading
+from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+import re as _re
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -15,33 +20,83 @@ from services.auth import (
     get_current_user, require_admin,
 )
 
+# ---------------------------------------------------------------------------
+# Simple in-process rate limiter for login attempts
+# Allows LOGIN_MAX_ATTEMPTS per IP within LOGIN_WINDOW_SECS.
+# Resets after LOGIN_LOCKOUT_SECS of no attempts.
+# ---------------------------------------------------------------------------
+
+LOGIN_MAX_ATTEMPTS  = 10
+LOGIN_WINDOW_SECS   = 60
+LOGIN_LOCKOUT_SECS  = 300   # 5 minutes
+
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_login_lock = threading.Lock()
+
+
+def _check_login_rate(ip: str) -> None:
+    now = time.monotonic()
+    with _login_lock:
+        attempts = _login_attempts[ip]
+        # Drop attempts outside the window
+        attempts[:] = [t for t in attempts if now - t < LOGIN_WINDOW_SECS]
+        if len(attempts) >= LOGIN_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many login attempts — please wait before trying again.",
+            )
+        attempts.append(now)
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
 
+_EMAIL_RE = _re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _validate_email(v: str | None) -> str | None:
+    if v is None or v == '':
+        return None
+    if not _EMAIL_RE.match(v):
+        raise ValueError('Invalid email address')
+    return v
+
+
 class SetupRequest(BaseModel):
-    username: str
-    display_name: str
-    password: str
+    username: str = Field(min_length=1, max_length=50)
+    display_name: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=8, max_length=128)
     email: str | None = None
+
+    @field_validator('email', mode='before')
+    @classmethod
+    def validate_email(cls, v): return _validate_email(v)
 
 
 class CreateUserRequest(BaseModel):
-    username: str
-    display_name: str
-    password: str
+    username: str = Field(min_length=1, max_length=50)
+    display_name: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=8, max_length=128)
     role: UserRole = UserRole.viewer
     email: str | None = None
 
+    @field_validator('email', mode='before')
+    @classmethod
+    def validate_email(cls, v): return _validate_email(v)
+
 
 class UpdateUserRequest(BaseModel):
-    display_name: str | None = None
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
     email: str | None = None
     role: UserRole | None = None
     is_active: bool | None = None
-    password: str | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+
+    @field_validator('email', mode='before')
+    @classmethod
+    def validate_email(cls, v): return _validate_email(v)
 
 
 class UserOut(BaseModel):
@@ -92,10 +147,12 @@ def setup(req: SetupRequest, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(
+    request: Request,
     response: Response,
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    _check_login_rate(request.client.host if request.client else "unknown")
     user = db.query(User).filter(User.username == form.username.lower()).first()
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(

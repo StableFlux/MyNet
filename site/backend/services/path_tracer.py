@@ -14,7 +14,13 @@ from models.device import Device
 from models.nic import Nic
 
 
-def trace_path(db: Session, source_id: int, target_id: int) -> dict:
+def trace_path(
+    db: Session,
+    source_id: int,
+    target_id: int,
+    wifi_associations: dict[str, str] | None = None,
+    ap_mac_to_device_id: dict[str, int] | None = None,
+) -> dict:
     """
     Returns:
       {
@@ -55,7 +61,8 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
     seen_pairs: set[tuple] = set()
 
     def add_edge(a: int, b: int, connection_type: str,
-                 exit_port_a=None, entry_port_b=None, vlan_ids=None, conn_color=None):
+                 exit_port_a=None, entry_port_b=None, vlan_ids=None, conn_color=None,
+                 wifi_precise: bool = True):
         key = (min(a, b), max(a, b), connection_type, exit_port_a, entry_port_b)
         if key in seen_pairs:
             return
@@ -64,12 +71,14 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
             "to": b, "connection_type": connection_type,
             "exit_port": exit_port_a, "entry_port": entry_port_b,
             "vlan_ids": vlan_ids or [], "conn_color": conn_color,
+            "wifi_precise": wifi_precise,
         })
         # Reverse direction: exit/entry are swapped
         adj.setdefault(b, []).append({
             "to": a, "connection_type": connection_type,
             "exit_port": entry_port_b, "entry_port": exit_port_a,
             "vlan_ids": vlan_ids or [], "conn_color": conn_color,
+            "wifi_precise": wifi_precise,
         })
 
     for d in devices:
@@ -97,8 +106,9 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
 
     # WiFi NIC → AP edges.
     # APs identified by device type name containing "access point" (case-insensitive).
-    # The AP's management NIC is typically on a different VLAN than the WiFi client,
-    # so we can't match on network_id — we just connect to all APs and let BFS find the shortest path.
+    # If UniFi wifi_associations are provided ({client_mac: ap_mac}) and ap_mac_to_device_id
+    # ({ap_mac: device_id}), connect the NIC directly to its known AP only.
+    # Otherwise fall back to connecting to all APs and letting BFS find the shortest path.
     ap_devices = [
         d for d in devices
         if d.device_type and 'access point' in d.device_type.name.lower()
@@ -108,14 +118,36 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
             if nic.nic_type.value != "WIFI" or nic.is_active is False:
                 continue
             vlan_ids = [nic.network.vlan_id] if nic.network and nic.network.vlan_id else []
-            for ap in ap_devices:
-                if ap.id == d.id:
-                    continue
-                add_edge(d.id, ap.id, "wifi",
-                         exit_port_a=nic.ssid or nic.label or None,
+            conn_color = nic.network.color if nic.network else None
+            exit_port = nic.ssid or nic.label or None
+
+            # Try precise AP match via UniFi association data
+            nic_mac = (nic.mac or "").lower().strip()
+            known_ap_id: int | None = None
+            if nic_mac and wifi_associations and ap_mac_to_device_id:
+                ap_mac = wifi_associations.get(nic_mac)
+                if ap_mac:
+                    known_ap_id = ap_mac_to_device_id.get(ap_mac)
+
+            if known_ap_id and known_ap_id in device_map and known_ap_id != d.id:
+                # Precise: connect only to the known AP
+                add_edge(d.id, known_ap_id, "wifi",
+                         exit_port_a=exit_port,
                          entry_port_b=None,
                          vlan_ids=vlan_ids,
-                         conn_color=nic.network.color if nic.network else None)
+                         conn_color=conn_color,
+                         wifi_precise=True)
+            else:
+                # Fallback: connect to all APs
+                for ap in ap_devices:
+                    if ap.id == d.id:
+                        continue
+                    add_edge(d.id, ap.id, "wifi",
+                             exit_port_a=exit_port,
+                             entry_port_b=None,
+                             vlan_ids=vlan_ids,
+                             conn_color=conn_color,
+                             wifi_precise=False)
 
     # BFS
     visited = {source_id}
@@ -178,8 +210,12 @@ def trace_path(db: Session, source_id: int, target_id: int) -> dict:
             "current_vlan": vlan,
             "current_vlan_color": vlan_color,
             "is_vlan_boundary": is_vlan_boundary,
+            "wifi_precise": edge["wifi_precise"] if edge and edge.get("connection_type") == "wifi" else None,
         })
         if vlan is not None:
             prev_vlan = vlan
 
-    return {"found": True, "hops": hops, "incomplete": False}
+    has_imprecise_wifi = any(
+        h["wifi_precise"] is False for h in hops
+    )
+    return {"found": True, "hops": hops, "incomplete": False, "has_imprecise_wifi": has_imprecise_wifi}

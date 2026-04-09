@@ -75,10 +75,16 @@ export default function Backup() {
       {/* JSON Export */}
       <GlassCard>
         <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-1">JSON Export</h3>
-        <p className="text-sm text-white/60 mb-4">
+        <p className="text-sm text-white/60 mb-3">
           Downloads a complete JSON backup of all networks, devices, users, and settings.
           Encryption keys are never included.
         </p>
+        <div className="flex items-start gap-2 mb-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+          <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-400/80">
+            Backup files contain <strong className="text-amber-400">sensitive data</strong> including user account hashes and device credentials. Store backups securely and never share them.
+          </p>
+        </div>
         <button type="button" onClick={handleExport} className="btn-primary flex items-center gap-2">
           <Download size={15} /> Download JSON Backup
         </button>

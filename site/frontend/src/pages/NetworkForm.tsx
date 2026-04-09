@@ -46,7 +46,6 @@ interface FormState {
   color: string
   ssids: SsidEntry[]
   notes: string
-  inter_vlan_rules: string // JSON textarea
 }
 
 function emptyForm(): FormState {
@@ -55,7 +54,7 @@ function emptyForm(): FormState {
     dhcp_range_start: '', dhcp_range_end: '',
     dns_auto: false, dns_servers: ['', ''],
     purpose: '', color: '#6366f1',
-    ssids: [], notes: '', inter_vlan_rules: '',
+    ssids: [], notes: '',
   }
 }
 
@@ -88,17 +87,10 @@ function networkToForm(n: any): FormState {
     color: n.color ?? '#6366f1',
     ssids: Array.isArray(n.ssids) ? n.ssids.map(normaliseSsid) : [],
     notes: n.notes ?? '',
-    inter_vlan_rules: n.inter_vlan_rules
-      ? JSON.stringify(n.inter_vlan_rules, null, 2)
-      : '',
   }
 }
 
 function formToPayload(f: FormState) {
-  let inter_vlan_rules: any = null
-  if (f.inter_vlan_rules.trim()) {
-    try { inter_vlan_rules = JSON.parse(f.inter_vlan_rules) } catch { /* leave null */ }
-  }
   const filled = f.dns_auto ? [] : f.dns_servers.map((s) => s.trim()).filter(Boolean)
   return {
     name: f.name,
@@ -115,7 +107,6 @@ function formToPayload(f: FormState) {
     color: f.color,
     ssids: f.ssids.filter((e) => e.ssid.trim()),
     notes: f.notes || null,
-    inter_vlan_rules,
   }
 }
 
@@ -212,10 +203,6 @@ export default function NetworkForm() {
   const validate = (): boolean => {
     const e: Record<string, string> = {}
     if (!form.name.trim()) e.name = 'Name is required'
-    if (form.inter_vlan_rules.trim()) {
-      try { JSON.parse(form.inter_vlan_rules) }
-      catch { e.inter_vlan_rules = 'Must be valid JSON' }
-    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -494,22 +481,6 @@ export default function NetworkForm() {
         </div>
       </Section>
 
-      {/* Inter-VLAN rules */}
-      <Section title="Inter-VLAN Rules (JSON)" defaultOpen={false}>
-        <div>
-          <textarea
-            value={form.inter_vlan_rules}
-            onChange={(e) => set({ inter_vlan_rules: e.target.value })}
-            placeholder={'[\n  {"allow": true, "dest_vlan": 1, "note": "to core"}\n]'}
-            rows={5}
-            className="glass-input w-full text-sm font-mono resize-y"
-          />
-          {errors.inter_vlan_rules && (
-            <p className="text-xs text-red-400 mt-1">{errors.inter_vlan_rules}</p>
-          )}
-          <p className="text-[10px] text-white/30 mt-1">Optional. Free-form JSON for documenting firewall rules between VLANs.</p>
-        </div>
-      </Section>
 
       {/* Notes */}
       <Section title="Notes" defaultOpen={false}>

@@ -563,16 +563,33 @@ export default function DeviceForm() {
     const cloneFrom = (location.state as any)?.cloneFrom
     if (cloneFrom) return { ...emptyForm(), ...cloneFrom }
     const f = emptyForm()
-    // Pre-fill from URL params (subnet map click or network scan "Add" button)
-    const ip = searchParams.get('ip')
-    const net = searchParams.get('network')
-    const mac = searchParams.get('mac')
-    const hostname = searchParams.get('hostname')
-    if (ip || net || mac) {
-      f.nics = [{ ...emptyNic(), ip_address: ip ?? '', network_id: net ?? '', mac: mac ?? '', nic_type: 'ETH' }]
+    // Pre-fill from URL params (subnet map click, UniFi "Add to MyNet", or network scan)
+    const ip         = searchParams.get('ip')
+    const net        = searchParams.get('network')
+    const mac        = searchParams.get('mac')
+    const hostname   = searchParams.get('hostname')
+    const name       = searchParams.get('name')
+    const isWireless = searchParams.get('is_wireless') === 'true'
+    const ssid       = searchParams.get('ssid') ?? ''
+    const dnsEntry   = searchParams.get('dns_entry') ?? ''
+    if (ip || net || mac || isWireless) {
+      f.nics = [{
+        ...emptyNic(),
+        ip_address: ip ?? '',
+        network_id: net ?? '',
+        mac:        mac ?? '',
+        nic_type:   isWireless ? 'WIFI' : 'ETH',
+        ssid:       ssid,
+        dns_entry:  dnsEntry,
+      }]
+    }
+    if (name) {
+      f.name = name
+    } else if (hostname) {
+      f.name = hostname
     }
     if (hostname) {
-      f.name = hostname
+      f.hostname = hostname
     }
     return f
   })
@@ -985,7 +1002,6 @@ export default function DeviceForm() {
                 onChange={(e) => set({ hardware_type: e.target.value })}>
                 <option value="" className="bg-surface-overlay">Select type…</option>
                 <optgroup label="Compute">
-                  <option value="SBC" className="bg-surface-overlay">SBC (Single Board Computer)</option>
                   <option value="Mini PC" className="bg-surface-overlay">Mini PC</option>
                   <option value="Desktop" className="bg-surface-overlay">Desktop</option>
                   <option value="Laptop" className="bg-surface-overlay">Laptop</option>
@@ -1016,9 +1032,6 @@ export default function DeviceForm() {
                   <option value="Smart Plug" className="bg-surface-overlay">Smart Plug</option>
                   <option value="Sensor" className="bg-surface-overlay">Sensor</option>
                 </optgroup>
-                <optgroup label="IoT / Embedded">
-                  <option value="Microcontroller" className="bg-surface-overlay">Microcontroller</option>
-                </optgroup>
                 <optgroup label="A/V">
                   <option value="Camera" className="bg-surface-overlay">Camera</option>
                   <option value="NVR" className="bg-surface-overlay">NVR</option>
@@ -1030,7 +1043,21 @@ export default function DeviceForm() {
                   <option value="Printer" className="bg-surface-overlay">Printer</option>
                   <option value="3D Printer" className="bg-surface-overlay">3D Printer</option>
                   <option value="Scanner" className="bg-surface-overlay">Scanner</option>
-                  <option value="UPS" className="bg-surface-overlay">UPS</option>
+                </optgroup>
+                <optgroup label="Power">
+                  <option value="UPS" className="bg-surface-overlay">UPS (Uninterruptible Power Supply)</option>
+                  <option value="PDU" className="bg-surface-overlay">PDU (Power Distribution Unit)</option>
+                  <option value="Power Strip" className="bg-surface-overlay">Power Strip</option>
+                  <option value="USB Charger" className="bg-surface-overlay">USB Charger</option>
+                  <option value="PoE Injector" className="bg-surface-overlay">PoE Injector</option>
+                  <option value="EV Charger" className="bg-surface-overlay">EV Charger</option>
+                  <option value="Solar Inverter" className="bg-surface-overlay">Solar Inverter</option>
+                  <option value="Generator" className="bg-surface-overlay">Generator</option>
+                </optgroup>
+                <optgroup label="Maker &amp; Projects">
+                  <option value="SBC" className="bg-surface-overlay">SBC (Single Board Computer)</option>
+                  <option value="Microcontroller" className="bg-surface-overlay">Microcontroller</option>
+                  <option value="FPGA" className="bg-surface-overlay">FPGA</option>
                 </optgroup>
                 <optgroup label="Other">
                   <option value="Other" className="bg-surface-overlay">Other</option>

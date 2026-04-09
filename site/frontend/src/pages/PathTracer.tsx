@@ -181,7 +181,7 @@ export default function PathTracer() {
             <div className="glass-card p-5 space-y-4" style={{ background: 'linear-gradient(160deg, var(--card-base-deepest) 0%, var(--card-base-deepest) 100%)' }}>
               <div className="flex items-center gap-4 flex-wrap">
                 <p className="text-xs text-white/40">{hops.length} hops</p>
-                {hops.some((h: any) => h.connection_type === 'wifi') && (
+                {trace?.has_imprecise_wifi && (
                   <div className="flex items-center gap-1.5 text-xs text-sky-400/80">
                     <Wifi size={13} />
                     <span>Wireless hops are a best estimate — the actual AP may differ</span>

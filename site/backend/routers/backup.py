@@ -8,8 +8,11 @@ password fields are exported as ciphertext. Restoring on a different instance
 (with a different passphrase) will leave those fields unreadable.
 """
 import json
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import DateTime, text
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -211,7 +214,8 @@ async def restore_setup(
         counts = _do_restore(db, data)
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Restore failed: {exc}")
+        log.error("Restore (setup) failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Restore failed — check server logs for details.")
 
     return {"success": True, "users": counts["users"]}
 
@@ -234,7 +238,8 @@ async def import_backup(
         counts = _do_restore(db, data)
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Import failed: {exc}")
+        log.error("Backup import failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Import failed — check server logs for details.")
 
     # Warn if the backup came from an older version that had a fernet_key
     had_old_key = bool(data.get("fernet_key"))
@@ -304,6 +309,7 @@ def factory_reset(
 
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Factory reset failed: {exc}")
+        log.error("Factory reset failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Factory reset failed. Check server logs for details.")
 
     return {"success": True}

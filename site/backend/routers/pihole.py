@@ -1,7 +1,7 @@
 """
 Pi-hole integration endpoints.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -194,13 +194,11 @@ async def pihole_set_blocking(
 
     device = db.get(Device, device_id)
     if not device or not device.pihole_enabled:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Pi-hole device not found")
 
     instances = _get_pihole_devices(db)
     match = next((i for i in instances if i[0] == device_id), None)
     if not match:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="No usable NIC address for this Pi-hole device")
 
     _, url, password = match
@@ -288,7 +286,6 @@ async def dns_set_mynet_dns(
     from services.pihole_client import set_mynet_nic_dns_entry
     found = await set_mynet_nic_dns_entry(db, body["nic_id"], body["hostname"])
     if not found:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="NIC not found")
     return {"ok": True}
 
@@ -303,7 +300,6 @@ async def dns_update_mynet_ip(
     from services.pihole_client import update_mynet_nic_ip
     found = await update_mynet_nic_ip(db, body["hostname"], body["ip"])
     if not found:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="No MyNet NIC found with that dns_entry")
     return {"ok": True}
 
@@ -332,7 +328,6 @@ async def dns_apply_domain_to_piholes(
     from services.pihole_client import apply_domain_to_piholes
     domain = (body.get("domain") or "").strip()
     if not domain:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="domain is required")
     count = await apply_domain_to_piholes(db, domain)
     return {"ok": True, "updated": count}
@@ -348,7 +343,6 @@ async def dns_apply_domain_to_mynet(
     from services.pihole_client import apply_domain_to_mynet_nics
     domain = (body.get("domain") or "").strip()
     if not domain:
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="domain is required")
     count = await apply_domain_to_mynet_nics(db, domain)
     return {"ok": True, "updated": count}

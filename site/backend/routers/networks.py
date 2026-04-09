@@ -29,6 +29,18 @@ class NetworkIn(BaseModel):
         except ValueError:
             raise ValueError(f'"{v}" is not a valid CIDR notation (e.g. 192.168.1.0/24)')
         return v
+
+    @field_validator('gateway', 'dhcp_range_start', 'dhcp_range_end', 'dns_primary', 'dns_secondary', mode='before')
+    @classmethod
+    def validate_ip_field(cls, v):
+        if v is None or v == '':
+            return None
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            raise ValueError(f'"{v}" is not a valid IP address')
+        return v
+
     gateway: Optional[str] = None
     dhcp_range_start: Optional[str] = None
     dhcp_range_end: Optional[str] = None
@@ -40,7 +52,6 @@ class NetworkIn(BaseModel):
     ssids: Optional[list] = None  # list of {ssid, password, hidden} objects
     color: str = "#6366f1"
     icon: Optional[str] = None
-    inter_vlan_rules: Optional[list[dict]] = None
     notes: Optional[str] = None
 
 

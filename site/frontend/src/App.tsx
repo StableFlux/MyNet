@@ -30,6 +30,7 @@ import LabelExport from './pages/LabelExport'
 import ColourSettings from './pages/ColourSettings'
 import PiholeSettings from './pages/PiholeSettings'
 import NetworkScan from './pages/NetworkScan'
+import UnifiSettings from './pages/UnifiSettings'
 
 function AppInner() {
   const { user, setUser } = useAuthStore()
@@ -113,6 +114,7 @@ function AppInner() {
         <Route path="/backup" element={<AdminRoute><Backup /></AdminRoute>} />
         <Route path="/settings/label-export" element={<AdminRoute><LabelExport /></AdminRoute>} />
         <Route path="/settings/network-scan" element={<AdminRoute><NetworkScan /></AdminRoute>} />
+        <Route path="/settings/unifi" element={<AdminRoute><UnifiSettings /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

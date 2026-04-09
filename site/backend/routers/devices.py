@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import Optional
 
@@ -89,13 +89,20 @@ class DeviceIn(BaseModel):
     password: Optional[str] = None          # plaintext in, encrypted in DB
     ssh_enabled: bool = False
     ssh_port: int = 22
-    ssh_key: Optional[str] = None
+    ssh_key: Optional[str] = Field(default=None, max_length=16384)
     status: DeviceStatus = DeviceStatus.in_service
     location: Optional[str] = None
     storage_location: Optional[str] = None
     storage_location_id: Optional[int] = None
     purchase_date: Optional[str] = None
-    url: Optional[str] = None
+    url: Optional[str] = Field(default=None, max_length=2048)
+
+    @field_validator('url', mode='before')
+    @classmethod
+    def validate_url_scheme(cls, v: Optional[str]) -> Optional[str]:
+        if v and not v.startswith(('http://', 'https://')):
+            raise ValueError('Device URL must use http:// or https://')
+        return v
     service_name: Optional[str] = None
     service_port: Optional[int] = None
     hypervisor_device_id: Optional[int] = None

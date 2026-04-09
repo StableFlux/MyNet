@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
@@ -488,7 +488,6 @@ async def ping_now(
     _: User = Depends(require_editor),
 ):
     """On-demand ping for Quick Actions. Optional ?ip= to target a specific NIC."""
-    from fastapi import HTTPException
     device = db.get(Device, device_id)
     if not device:
         raise HTTPException(404, "Device not found")

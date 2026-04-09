@@ -12,7 +12,6 @@ export interface Network {
   ssids: string[] | null
   color: string
   icon: string | null
-  inter_vlan_rules: Record<string, unknown>[] | null
   notes: string | null
 }
 

@@ -6,8 +6,9 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Set
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from database import engine
 from models import *  # noqa: F401, F403 — imports all models so Base knows about them
@@ -34,6 +35,7 @@ import routers.dashboard as dashboard_router
 import routers.pihole as pihole_router
 import routers.wan_configs as wan_configs_router
 import routers.scan as scan_router
+import routers.unifi as unifi_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -75,17 +77,24 @@ manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Guard: warn loudly (or auto-generate) if JWT secret is missing.
-    # In production, JWT_SECRET_KEY must be set in .env — an empty key allows token forgery.
+    # Guard: if JWT_SECRET_KEY is not set, generate one and persist it to .env so it
+    # survives restarts. An ephemeral key would invalidate all sessions on every restart.
     if not settings.jwt_secret_key:
         import secrets
-        settings.jwt_secret_key = secrets.token_hex(32)
-        log.warning(
-            "JWT_SECRET_KEY is not set — generated an ephemeral key for this session. "
-            "All sessions will be invalidated on restart. "
-            "For production, set JWT_SECRET_KEY in your .env file: "
-            "python -c \"import secrets; print(secrets.token_hex(32))\""
-        )
+        from pathlib import Path
+        generated = secrets.token_hex(32)
+        settings.jwt_secret_key = generated
+        env_path = Path(__file__).parent / ".env"
+        try:
+            existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+            if "JWT_SECRET_KEY" not in existing:
+                with env_path.open("a", encoding="utf-8") as f:
+                    f.write(f"\nJWT_SECRET_KEY={generated}\n")
+                log.info("JWT_SECRET_KEY generated and saved to .env — sessions will persist across restarts.")
+            else:
+                log.warning("JWT_SECRET_KEY is blank in .env — using an ephemeral key for this session.")
+        except OSError as e:
+            log.warning(f"Could not persist JWT_SECRET_KEY to .env ({e}) — sessions will be lost on restart.")
 
     # Create all tables
     Base.metadata.create_all(bind=engine)
@@ -233,13 +242,49 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: use explicit origins from env if provided, otherwise allow all private-network ranges.
+# The regex fallback is intentionally permissive for self-hosted LAN use — set CORS_ORIGINS
+# in .env to restrict to specific origins for internet-facing deployments.
+if settings.cors_origins:
+    _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+@app.get("/health", tags=["health"])
+def health_check():
+    """Liveness probe — returns 200 if the application is running."""
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Global exception handler — prevents internal error details leaking to clients
+# ---------------------------------------------------------------------------
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    log.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected error occurred. Please check the server logs."},
+    )
+
 
 # Include routers
 app.include_router(auth_router.router)
@@ -259,6 +304,7 @@ app.include_router(dashboard_router.router)
 app.include_router(pihole_router.router)
 app.include_router(wan_configs_router.router)
 app.include_router(scan_router.router)
+app.include_router(unifi_router.router)
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +313,35 @@ app.include_router(scan_router.router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Authenticate before accepting — reject unauthenticated connections.
+    # Token passed as query param ?token=<jwt> since WebSocket upgrade headers
+    # don't support cookies reliably across all browsers/reverse proxies.
+    from services.auth import _decode_token
+    from models.system_settings import SystemSettings
+    from models.user import User, UserRole
+
+    db = SessionLocal()
+    try:
+        # Check if auth is disabled
+        sys_settings = db.query(SystemSettings).first()
+        auth_disabled = sys_settings and not sys_settings.auth_required
+
+        if not auth_disabled:
+            token = websocket.query_params.get("token") or websocket.cookies.get("access_token")
+            if not token:
+                await websocket.close(code=4401)
+                return
+            payload = _decode_token(token)
+            if not payload:
+                await websocket.close(code=4401)
+                return
+            user = db.get(User, int(payload["sub"]))
+            if not user or not user.is_active:
+                await websocket.close(code=4401)
+                return
+    finally:
+        db.close()
+
     await manager.connect(websocket)
     try:
         while True:

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""
     jwt_expire_minutes: int = 480  # 8 hours
 
+    # CORS — comma-separated list of allowed origins (exact match).
+    # If empty, falls back to allowing all private-network IP ranges (LAN-only default).
+    # Example: CORS_ORIGINS=https://mynet.home,http://192.168.1.100
+    cors_origins: str = ""
+
     # QR / Labels
     qr_label_width_px: int = 696   # Brother P950NW 24mm tape at 300dpi
     qr_label_height_px: int = 272

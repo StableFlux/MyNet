@@ -64,6 +64,10 @@ def apply_migrations(engine) -> None:
 
         # ── networks ──────────────────────────────────────────────────────────
         net_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(networks)"))}
+        if "inter_vlan_rules" in net_cols:
+            conn.execute(text("ALTER TABLE networks DROP COLUMN inter_vlan_rules"))
+            conn.commit()
+            log.info("apply_migrations: networks.inter_vlan_rules dropped")
         if "dns_auto" not in net_cols:
             conn.execute(text("ALTER TABLE networks ADD COLUMN dns_auto BOOLEAN NOT NULL DEFAULT 0"))
             conn.commit()
@@ -427,6 +431,42 @@ def apply_migrations(engine) -> None:
             conn.execute(text("ALTER TABLE system_settings ADD COLUMN mynet_url VARCHAR"))
             conn.commit()
             log.info("apply_migrations: system_settings.mynet_url added")
+
+        # ── system_settings: UniFi integration columns ───────────────────────
+        ss_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(system_settings)"))}
+        if "unifi_host" not in ss_cols:
+            # Migrate from old unifi_url column if it exists
+            if "unifi_url" in ss_cols:
+                conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_host VARCHAR"))
+                conn.execute(text("""
+                    UPDATE system_settings
+                    SET unifi_host = REPLACE(REPLACE(unifi_url, 'https://', ''), 'http://', '')
+                    WHERE unifi_url IS NOT NULL
+                """))
+            else:
+                conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_host VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.unifi_host added")
+        if "unifi_api_key" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_api_key VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.unifi_api_key added")
+        if "unifi_auth_type" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_auth_type VARCHAR NOT NULL DEFAULT 'api_key'"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.unifi_auth_type added")
+        if "unifi_username" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_username VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.unifi_username added")
+        if "unifi_password" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_password VARCHAR"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.unifi_password added")
+        if "unifi_write_enabled" not in ss_cols:
+            conn.execute(text("ALTER TABLE system_settings ADD COLUMN unifi_write_enabled BOOLEAN NOT NULL DEFAULT 0"))
+            conn.commit()
+            log.info("apply_migrations: system_settings.unifi_write_enabled added")
 
         # ── drop old audit_log and alerts tables after migration ──────────────
         tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}

@@ -55,3 +55,12 @@ class SystemSettings(Base):
     device_status_colors = Column(JSON, nullable=True)
     wan_port_color = Column(String, nullable=True)  # hex — applied to all WAN ports
     mynet_url = Column(String, nullable=True)        # base URL for printable label QR codes
+
+    # UniFi integration
+    unifi_host = Column(String, nullable=True)           # IP or hostname, e.g. 10.10.10.1
+    unifi_auth_type = Column(String, nullable=False, default="api_key")  # "api_key" | "credentials"
+    unifi_api_key = Column(String, nullable=True)        # encrypted; requires Network App >= 8.1
+    unifi_username = Column(String, nullable=True)       # for credentials auth
+    unifi_password = Column(String, nullable=True)       # encrypted; for credentials auth
+    unifi_write_enabled = Column(Boolean, nullable=False, default=False)  # when False, integration is read-only
+    # https:// is always used; SSL verification is always disabled (local self-signed cert)

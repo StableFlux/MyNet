@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor, ScanLine } from 'lucide-react'
+import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor, ScanLine, Router } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { useAuthStore } from '../store/authStore'
 import { useThemeStore, type ThemeMode } from '../store/themeStore'
@@ -40,6 +40,13 @@ const SETTINGS_ITEMS = [
     label: 'Pi-hole Integration',
     description: 'Configure Pi-hole DNS filtering instances and polling interval.',
   },
+  {
+    to: '/settings/unifi',
+    icon: Router,
+    label: 'UniFi Integration',
+    description: 'Connect to your UniFi Network Application for device enrichment.',
+  },
+  // Row 3
   {
     to: '/settings/label-export',
     icon: QrCode,
@@ -502,6 +509,12 @@ export default function Settings() {
                 Encrypts stored device credentials at rest. Passphrase required — keys are never included in backups.
               </p>
             </div>
+            {!encEnabled && (
+              <div className="flex items-center gap-1.5 text-amber-400/80 text-xs">
+                <ShieldOff size={12} />
+                <span>Device passwords are stored in plaintext — enable encryption to protect them at rest.</span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               {!encEnabled ? (
                 <span className="text-xs text-white/30">Off</span>

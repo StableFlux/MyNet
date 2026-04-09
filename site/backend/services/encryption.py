@@ -134,8 +134,10 @@ def disable_encryption(passphrase: str, db) -> bool:
     for device in db.query(Device).filter(Device.password != None).all():
         try:
             device.password = f.decrypt(device.password.encode()).decode()
-        except (InvalidToken, Exception):
-            pass  # already plaintext or corrupted — leave as-is
+        except InvalidToken:
+            log.warning("Device %s: password could not be decrypted (already plaintext or corrupted) — leaving as-is", device.id)
+        except Exception as e:
+            log.error("Device %s: unexpected error decrypting password: %s", device.id, e)
 
     s.encryption_enabled = False
     s.encryption_salt = None
@@ -172,8 +174,10 @@ def migrate_from_old_key(old_fernet_key: str, db) -> None:
             plain = f.decrypt(device.password.encode()).decode()
             device.password = plain
             count += 1
-        except (InvalidToken, Exception):
-            pass  # already plaintext or unrecognised — leave as-is
+        except InvalidToken:
+            pass  # already plaintext or encrypted with a different key — leave as-is
+        except Exception as e:
+            log.warning("Device %s: unexpected error during migration: %s", device.id, e)
 
     s = db.query(SystemSettings).first()
     if s:

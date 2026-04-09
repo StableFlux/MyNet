@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -15,6 +16,11 @@ from services.qr_generator import (
 )
 
 router = APIRouter(prefix="/api/qr", tags=["qr"])
+
+
+def _safe_filename(name: str) -> str:
+    """Strip characters that could cause HTTP header injection or path traversal."""
+    return re.sub(r"[^\w\-.]", "_", name)[:64]
 
 
 @router.get("/devices/{device_id}/mynet")
@@ -66,7 +72,7 @@ def label_qr(
     return Response(
         content=png,
         media_type="image/png",
-        headers={"Content-Disposition": f'attachment; filename="label_{device.name.replace(" ", "_")}.png"'},
+        headers={"Content-Disposition": f'attachment; filename="label_{_safe_filename(device.name)}.png"'},
     )
 
 
@@ -78,9 +84,8 @@ def url_label(
 ):
     """Generate a label PNG for any URL + name (used for service QR labels)."""
     png = generate_url_label_png(url, name)
-    safe = name.replace("/", "_").replace(" ", "_")
     return Response(
         content=png,
         media_type="image/png",
-        headers={"Content-Disposition": f'attachment; filename="label_{safe}.png"'},
+        headers={"Content-Disposition": f'attachment; filename="label_{_safe_filename(name)}.png"'},
     )

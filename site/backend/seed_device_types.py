@@ -142,13 +142,18 @@ DEVICE_TYPES = [
     {"name": "Irrigation Controller", "category": "IoT", "icon": "droplets",      "color": "#f59e0b", "fields_schema": _iot_web()},
 
     # ── Power ─────────────────────────────────────────────────────────────────
-    {"name": "UPS",              "category": "Power", "icon": "battery-charging", "color": "#fbbf24", "fields_schema": _minimal_web()},
-    {"name": "PDU",              "category": "Power", "icon": "plug",             "color": "#fbbf24", "fields_schema": _minimal_web()},
-    {"name": "EV Charger",       "category": "Power", "icon": "zap",             "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
-    {"name": "Solar Inverter",   "category": "Power", "icon": "sun",             "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
-    {"name": "Battery Storage",  "category": "Power", "icon": "battery",         "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
-    {"name": "Smart Meter",      "category": "Power", "icon": "gauge",           "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
-    {"name": "Generator",        "category": "Power", "icon": "zap-off",         "color": "#fbbf24", "fields_schema": _minimal()},
+    {"name": "UPS",                  "category": "Power", "icon": "battery-charging", "color": "#fbbf24", "fields_schema": _minimal_web()},
+    {"name": "PDU",                  "category": "Power", "icon": "power-square",     "color": "#fbbf24", "fields_schema": _minimal_web()},
+    {"name": "Power Strip",          "category": "Power", "icon": "plug",             "color": "#fbbf24", "fields_schema": _minimal()},
+    {"name": "USB Charger",          "category": "Power", "icon": "plug-zap",         "color": "#fbbf24", "fields_schema": _minimal()},
+    {"name": "Wall Adapter",         "category": "Power", "icon": "plug-zap",         "color": "#fbbf24", "fields_schema": _minimal()},
+    {"name": "PoE Injector",         "category": "Power", "icon": "zap",              "color": "#fbbf24", "fields_schema": _minimal()},
+    {"name": "EV Charger",           "category": "Power", "icon": "car",              "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
+    {"name": "Solar Inverter",       "category": "Power", "icon": "sun",              "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
+    {"name": "Battery Storage",      "category": "Power", "icon": "battery",          "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
+    {"name": "Smart Meter",          "category": "Power", "icon": "gauge",            "color": "#fbbf24", "fields_schema": {**_minimal_web(), "show_ha": True}},
+    {"name": "Generator",            "category": "Power", "icon": "zap-off",          "color": "#fbbf24", "fields_schema": _minimal()},
+    {"name": "Other (Power)",        "category": "Power", "icon": "power",            "color": "#fbbf24", "fields_schema": _minimal()},
 
     # ── Maker & Projects ──────────────────────────────────────────────────────
     {"name": "SBC (Raspberry Pi)", "category": "Maker & Projects", "icon": "circuit-board", "color": "#ef4444", "fields_schema": {**_server(), "show_gpu": False}},
@@ -156,6 +161,10 @@ DEVICE_TYPES = [
     {"name": "Microcontroller",    "category": "Maker & Projects", "icon": "cpu",           "color": "#10b981", "fields_schema": {**_minimal_web(), "show_ssh": True}},
     {"name": "FPGA",               "category": "Maker & Projects", "icon": "cpu",           "color": "#10b981", "fields_schema": {**_minimal_web(), "show_credentials": True}},
     {"name": "Development Board",  "category": "Maker & Projects", "icon": "circuit-board", "color": "#10b981", "fields_schema": _minimal_web()},
+    {"name": "Other (Maker)",      "category": "Maker & Projects", "icon": "wrench",        "color": "#10b981", "fields_schema": _minimal_web()},
+
+    # ── Other ─────────────────────────────────────────────────────────────────
+    {"name": "Other",              "category": "Other",            "icon": "package",       "color": "#64748b", "fields_schema": _minimal()},
 
 ]
 

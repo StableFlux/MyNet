@@ -443,25 +443,36 @@ export default function PiholeSettings() {
                             </button>
                           )
 
+                          // Map pihole_device_id → "Pi-hole N" using the order from piholeStatus.
+                          // Falls back to "Pi-hole" (singular) or "Pi-holes" (plural) when unknown.
+                          const phIdToLabel: Record<number, string> = {}
+                          ;(piholeStatus ?? []).forEach((ph: any, idx: number) => {
+                            phIdToLabel[ph.device_id] = `Pi-hole ${idx + 1}`
+                          })
+                          const phEntries: { pihole_device_id: number; ip: string }[] = row.pihole_entries ?? []
+                          const phLabel = (entry: { pihole_device_id: number }) =>
+                            phIdToLabel[entry.pihole_device_id] ?? 'Pi-hole'
+                          const phSingle = phEntries.length === 1 ? phLabel(phEntries[0]) : null
+
                           const actions: React.ReactNode[] = []
                           if (!canEdit) { /* viewer — no actions */ } else
                           if (row.status === 'partial') {
-                            actions.push(btn('Sync to all Pi-holes', ArrowRight, 'update-pihole', row.mynet_ip, undefined, 'blue'))
+                            actions.push(btn('Add to Pi-holes', ArrowRight, 'update-pihole', row.mynet_ip, undefined, 'blue'))
                           } else if (row.status === 'mynet_only') {
-                            actions.push(btn('Add to Pi-hole', ArrowRight, 'push', row.mynet_ip, undefined, 'blue'))
+                            actions.push(btn(phSingle ? `Add to ${phSingle}` : 'Add to Pi-holes', ArrowRight, 'push', row.mynet_ip, undefined, 'blue'))
                           } else if (row.status === 'pihole_only') {
                             if (row.mynet_nic_id) {
-                              actions.push(btn(`Add to ${row.mynet_nic_device_name}`, ArrowLeft, 'set-mynet-dns', undefined, row.mynet_nic_id, 'blue'))
+                              actions.push(btn('Add to MyNet', ArrowLeft, 'set-mynet-dns', undefined, row.mynet_nic_id, 'blue'))
                             }
-                            actions.push(btn('Remove from Pi-hole', Trash2, 'remove', undefined, undefined, 'danger'))
+                            actions.push(btn(phSingle ? `Delete from ${phSingle}` : 'Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
                           } else if (row.status === 'ip_mismatch') {
                             actions.push(btn('Use MyNet IP', ArrowLeft, 'update-pihole', row.mynet_ip))
-                            actions.push(btn('Use Pi-hole IP', ArrowRight, 'update-mynet-ip', piIp))
+                            actions.push(btn(phSingle ? `Use ${phSingle} IP` : 'Use Pi-hole IP', ArrowRight, 'update-mynet-ip', piIp))
                           } else if (row.status === 'pihole_conflict') {
                             if (row.mynet_ip) {
-                              actions.push(btn('Sync all Pi-holes to MyNet', ArrowLeft, 'update-pihole', row.mynet_ip))
+                              actions.push(btn('Use MyNet IP', ArrowLeft, 'update-pihole', row.mynet_ip))
                             } else {
-                              actions.push(btn('Remove from all Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
+                              actions.push(btn('Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
                             }
                           } else if (row.status === 'no_ip' && row.mynet_device_id) {
                             actions.push(

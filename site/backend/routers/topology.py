@@ -5,6 +5,7 @@ from database import get_db
 from models.user import User
 from services.auth import require_viewer
 from services.path_tracer import trace_path
+from services.unifi_client import get_wifi_associations
 
 router = APIRouter(prefix="/api/topology", tags=["topology"])
 
@@ -136,11 +137,35 @@ def device_graph(db: Session = Depends(get_db), _: User = Depends(require_viewer
 # Path tracer
 # ---------------------------------------------------------------------------
 
+
 @router.get("/path")
-def path_trace(
+async def path_trace(
     source_id: int,
     target_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_viewer),
 ):
-    return trace_path(db, source_id, target_id)
+    from models.device import Device
+    from models.device_type import DeviceType
+
+    # Build AP MAC → device ID lookup from AP devices' NICs
+    ap_devices = (
+        db.query(Device)
+        .join(DeviceType, Device.device_type_id == DeviceType.id)
+        .filter(DeviceType.name.ilike('%access point%'))
+        .options(selectinload(Device.nics))
+        .all()
+    )
+    ap_mac_to_device_id: dict[str, int] = {}
+    for ap in ap_devices:
+        for nic in ap.nics:
+            if nic.mac:
+                ap_mac_to_device_id[nic.mac.lower().strip()] = ap.id
+
+    wifi_associations = await get_wifi_associations(db)
+
+    return trace_path(
+        db, source_id, target_id,
+        wifi_associations=wifi_associations,
+        ap_mac_to_device_id=ap_mac_to_device_id,
+    )

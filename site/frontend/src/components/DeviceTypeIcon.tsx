@@ -19,7 +19,7 @@ import {
   // Peripherals
   Printer, Scan, ScanLine, BatteryCharging, Battery, PenTool, Tag,
   // Power
-  Zap, ZapOff, Gauge,
+  Zap, ZapOff, Gauge, PlugZap, Power, PowerSquare,
   // Servers & VMs
   Terminal, GitBranch, Loader,
   // Security
@@ -95,6 +95,11 @@ const HARDWARE_ICON_MAP: Record<string, LucideIcon> = {
   'zap':            Zap,
   'zap-off':        ZapOff,
   'gauge':          Gauge,
+  'plug-zap':       PlugZap,
+  'power':          Power,
+  'power-square':   PowerSquare,
+  'car':            Car,
+  'wrench':         Wrench,
   // ── Security ──────────────────────────────────────────────────────────────────
   'bell':           Bell,
   'phone-call':     PhoneCall,
@@ -146,7 +151,19 @@ export const HARDWARE_TYPE_ICON: Record<string, string> = {
   'Printer': 'printer',
   '3D Printer': 'layers',
   'Scanner': 'scan',
+  // ── Power ─────────────────────────────────────────────────────────────────
   'UPS': 'battery-charging',
+  'PDU': 'power-square',
+  'Power Strip': 'plug',
+  'USB Charger': 'plug-zap',
+  'PoE Injector': 'zap',
+  'EV Charger': 'car',
+  'Solar Inverter': 'sun',
+  'Generator': 'zap-off',
+  // ── Maker & Projects ──────────────────────────────────────────────────────
+  'FPGA': 'cpu',
+  // ── Other ─────────────────────────────────────────────────────────────────
+  'Other': 'package',
 }
 
 export const HARDWARE_TYPE_CATEGORY: Record<string, string> = {
@@ -181,7 +198,19 @@ export const HARDWARE_TYPE_CATEGORY: Record<string, string> = {
   'Printer': 'Peripherals',
   '3D Printer': 'Peripherals',
   'Scanner': 'Peripherals',
-  'UPS': 'Peripherals',
+  // ── Power ─────────────────────────────────────────────────────────────────
+  'UPS': 'Power',
+  'PDU': 'Power',
+  'Power Strip': 'Power',
+  'USB Charger': 'Power',
+  'PoE Injector': 'Power',
+  'EV Charger': 'Power',
+  'Solar Inverter': 'Power',
+  'Generator': 'Power',
+  // ── Maker & Projects ──────────────────────────────────────────────────────
+  'FPGA': 'Maker & Projects',
+  // ── Other ─────────────────────────────────────────────────────────────────
+  'Other': 'Other',
 }
 
 export const LOCATION_TYPE_ICON: Record<string, LucideIcon> = {

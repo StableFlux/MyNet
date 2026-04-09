@@ -1,7 +1,7 @@
 """
 Unified events endpoint — replaces both /api/alerts and /api/audit.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional
@@ -101,7 +101,6 @@ def acknowledge_event(
 ):
     event = db.get(Event, event_id)
     if not event:
-        from fastapi import HTTPException
         raise HTTPException(404, "Event not found")
     now = datetime.now(timezone.utc)
     event.acknowledged_at = now

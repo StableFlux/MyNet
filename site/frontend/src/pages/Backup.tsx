@@ -13,15 +13,21 @@ export default function Backup() {
   const [result, setResult] = useState<{ ok: boolean; message: string; detail?: any } | null>(null)
 
   const handleExport = async () => {
-    const { data } = await api.get('/backup/export')
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const ts = new Date().toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '')
-    a.download = `mynet-backup-${ts}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const resp = await api.get('/backup/export', { responseType: 'blob' })
+      const blob = new Blob([resp.data], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ts = new Date().toISOString().slice(0, 19).replace('T', '-').replace(/:/g, '')
+      a.download = `mynet-backup-${ts}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      alert(err.response?.data?.detail ?? 'Export failed — check you are logged in as an admin.')
+    }
   }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {

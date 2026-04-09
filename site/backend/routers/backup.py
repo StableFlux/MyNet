@@ -85,12 +85,8 @@ def export_backup(db: Session = Depends(get_db)):
             "unifi_host":               sys.unifi_host if sys else None,
             "unifi_auth_type":          sys.unifi_auth_type if sys else None,
             "unifi_write_enabled":      sys.unifi_write_enabled if sys else False,
-            # Pi-hole connection config (credentials intentionally excluded)
-            "pihole1_url":              sys.pihole1_url if sys else None,
-            "pihole2_url":              sys.pihole2_url if sys else None,
             # encryption fields intentionally excluded — keys never leave the server
             # unifi_api_key, unifi_username, unifi_password intentionally excluded
-            # pihole1_password, pihole2_password intentionally excluded
         },
         "users":         [_row_to_dict(r, ts) for r in db.query(User).order_by(User.id).all()],
         "networks":      [_row_to_dict(r, ts) for r in db.query(Network).order_by(Network.id).all()],
@@ -188,10 +184,6 @@ def _do_restore(db: Session, data: dict) -> dict:
             s.unifi_auth_type = ss["unifi_auth_type"]
         if "unifi_write_enabled" in ss:
             s.unifi_write_enabled = ss["unifi_write_enabled"]
-        if "pihole1_url" in ss:
-            s.pihole1_url = ss["pihole1_url"]
-        if "pihole2_url" in ss:
-            s.pihole2_url = ss["pihole2_url"]
         if "location_type_colors" in ss:
             s.location_type_colors = ss["location_type_colors"]
         if "device_category_colors" in ss:

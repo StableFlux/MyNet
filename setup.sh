@@ -252,11 +252,15 @@ server {
     root $STATIC_DIR;
     index index.html;
 
+    # Limit request body size — backup files are JSON, 50MB is generous
+    client_max_body_size 50M;
+
     # Security headers
     add_header X-Content-Type-Options  "nosniff"                         always;
     add_header X-Frame-Options         "SAMEORIGIN"                      always;
     add_header X-XSS-Protection        "1; mode=block"                   always;
     add_header Referrer-Policy         "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self'; frame-ancestors 'self';" always;
 
     # Gzip compression
     gzip            on;

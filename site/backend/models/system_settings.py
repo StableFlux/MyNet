@@ -47,7 +47,7 @@ class SystemSettings(Base):
 
     # Pi-hole integration
     pihole_poll_interval_secs = Column(Integer, nullable=False, default=300)
-    dns_domain = Column(String, nullable=True)  # e.g. ".halpin" — applied as suffix to DNS entries
+    dns_domain = Column(String, nullable=True)  # e.g. "home.arpa" — applied as suffix to DNS entries
 
     # Colour settings — stored as {name: hex} dicts; NULL means use defaults
     location_type_colors = Column(JSON, nullable=True)

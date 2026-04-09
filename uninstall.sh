@@ -129,6 +129,7 @@ if [[ "$REMOVE_NODE" =~ ^[Yy]$ ]]; then
     apt-get remove --purge -y -qq nodejs 2>/dev/null || true
     rm -f /etc/apt/sources.list.d/nodesource.list
     rm -f /etc/apt/keyrings/nodesource.gpg
+    rm -f /usr/share/keyrings/nodesource.gpg
     apt-get autoremove -y -qq 2>/dev/null || true
     success "Node.js removed"
 fi

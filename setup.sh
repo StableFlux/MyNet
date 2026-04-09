@@ -111,36 +111,66 @@ step "Installing system packages"
 
 apt-get update -qq
 
-# Python: find the best available version (prefer 3.12, accept 3.10+)
+# Python: use already-installed python3 if it's 3.10+, then try versioned
+# packages, then fall back to the distro default python3.
+# Note: deadsnakes PPA is Ubuntu-only and is not used here.
 PYTHON_BIN=""
-for ver in 3.12 3.11 3.10; do
-    if apt-cache show "python$ver" &>/dev/null 2>&1; then
-        PYTHON_BIN="python$ver"
-        break
-    fi
-done
 
+# Check if python3 is already present and meets the minimum version
+if command -v python3 &>/dev/null; then
+    _maj=$(python3 -c 'import sys; print(sys.version_info.major)' 2>/dev/null || echo 0)
+    _min=$(python3 -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo 0)
+    if [ "$_maj" -ge 3 ] && [ "$_min" -ge 10 ]; then
+        PYTHON_BIN="python3"
+        info "Using already-installed $(python3 --version)"
+    fi
+fi
+
+# Try versioned packages from the distro repos
 if [ -z "$PYTHON_BIN" ]; then
-    info "Python 3.10+ not in default repos — adding deadsnakes PPA..."
-    apt-get install -y -qq software-properties-common
-    add-apt-repository -y ppa:deadsnakes/ppa
-    apt-get update -qq
-    PYTHON_BIN="python3.11"
+    for ver in 3.12 3.11 3.10; do
+        if apt-cache show "python$ver" &>/dev/null 2>&1; then
+            PYTHON_BIN="python$ver"
+            break
+        fi
+    done
+fi
+
+# Last resort: install distro python3 (Debian 12+ ships 3.11+, Debian 13 ships 3.12)
+if [ -z "$PYTHON_BIN" ]; then
+    info "No versioned Python 3.10+ package found — installing distro python3..."
+    apt-get install -y -qq python3 python3-venv python3-dev
+    PYTHON_BIN="python3"
 fi
 
 info "Using $PYTHON_BIN"
 
-PKGS=(
-    "$PYTHON_BIN"
-    "${PYTHON_BIN}-venv"
-    "${PYTHON_BIN}-dev"
-    "libffi-dev"           # required by cryptography package
-    "fonts-dejavu-core"    # required by Pillow for QR label generation
-    "nginx"
-    "curl"
-    "git"
-    "ca-certificates"
-)
+# Build package list — python3 uses generic names; versioned bins use suffixed names
+if [ "$PYTHON_BIN" = "python3" ]; then
+    PKGS=(
+        "python3"
+        "python3-venv"
+        "python3-dev"
+        "libffi-dev"           # required by cryptography package
+        "fonts-dejavu-core"    # required by Pillow for QR label generation
+        "nginx"
+        "curl"
+        "git"
+        "ca-certificates"
+    )
+else
+    PKGS=(
+        "$PYTHON_BIN"
+        "${PYTHON_BIN}-venv"
+        "${PYTHON_BIN}-dev"
+        "libffi-dev"
+        "fonts-dejavu-core"
+        "nginx"
+        "curl"
+        "git"
+        "ca-certificates"
+    )
+fi
 
 apt-get install -y -qq "${PKGS[@]}"
 success "System packages installed"

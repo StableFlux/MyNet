@@ -341,11 +341,13 @@ NGINX
 
 # Enable the site
 ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/mynet
-# Remove default nginx site if present
+# Remove default nginx site from both possible locations
 rm -f /etc/nginx/sites-enabled/default
+rm -f /etc/nginx/conf.d/default.conf
 
 nginx -t
-systemctl reload nginx
+systemctl enable nginx
+systemctl restart nginx
 success "nginx configured on port $APP_PORT"
 
 # ── systemd service ───────────────────────────────────────────────────────────

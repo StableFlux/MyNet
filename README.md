@@ -71,6 +71,16 @@ git pull
 sudo bash update.sh
 ```
 
+### Uninstall
+
+To completely remove MyNet, all data, and all installed components:
+
+```bash
+sudo bash uninstall.sh
+```
+
+You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also remove nginx, Node.js, and any swapfile created during setup. All MyNet data is permanently deleted.
+
 ---
 
 ## Documentation

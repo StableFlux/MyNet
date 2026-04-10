@@ -12,6 +12,33 @@ success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 die()     { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}━━━  $*  ━━━${RESET}"; }
 
+# ── Spinner ───────────────────────────────────────────────────────────────────
+# Usage: spin_run "Descriptive message" command [args...]
+# Runs command in background, shows animated spinner, dumps output on failure.
+_SPIN_LOG=$(mktemp /tmp/mynet-XXXXXX.log)
+trap 'rm -f "$_SPIN_LOG"' EXIT
+
+spin_run() {
+    local msg="$1"; shift
+    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠣⠏'
+    local i=0
+    "$@" >"$_SPIN_LOG" 2>&1 &
+    local pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${CYAN}${frames:$((i % 10)):1}${RESET}  %s" "$msg" >&2
+        sleep 0.12
+        i=$(( i + 1 ))
+    done
+    printf "\r\033[K" >&2
+    if ! wait "$pid"; then
+        echo -e "${RED}[ERROR]${RESET} Failed: $*" >&2
+        echo "──── Output ────────────────────────────────────────────────" >&2
+        cat "$_SPIN_LOG" >&2
+        echo "────────────────────────────────────────────────────────────" >&2
+        exit 1
+    fi
+}
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/opt/mynet"
 VENV_DIR="$INSTALL_DIR/venv"
@@ -42,8 +69,8 @@ step "Rebuilding frontend"
 
 export NODE_OPTIONS="--max-old-space-size=700"
 cd "$FRONTEND_SRC"
-npm ci --prefer-offline --silent
-npm run build
+spin_run "Installing npm dependencies (this may take a while on Pi)..." npm ci --prefer-offline
+spin_run "Building frontend (this may take a while on Pi)..."           npm run build
 rm -rf "$STATIC_DIR"
 cp -r dist "$STATIC_DIR"
 unset NODE_OPTIONS
@@ -53,8 +80,8 @@ success "Frontend rebuilt and deployed"
 # ── Update Python dependencies ────────────────────────────────────────────────
 step "Updating Python dependencies"
 
-"$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet -r "$BACKEND_SRC/requirements.txt"
+spin_run "Upgrading pip..."                    "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+spin_run "Installing Python dependencies..."   "$VENV_DIR/bin/pip" install --quiet -r "$BACKEND_SRC/requirements.txt"
 success "Dependencies up to date"
 
 # ── Fix ownership and restart ─────────────────────────────────────────────────

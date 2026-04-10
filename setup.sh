@@ -19,6 +19,33 @@ warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 die()     { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}━━━  $*  ━━━${RESET}"; }
 
+# ── Spinner ───────────────────────────────────────────────────────────────────
+# Usage: spin_run "Descriptive message" command [args...]
+# Runs command in background, shows animated spinner, dumps output on failure.
+_SPIN_LOG=$(mktemp /tmp/mynet-XXXXXX.log)
+trap 'rm -f "$_SPIN_LOG"' EXIT
+
+spin_run() {
+    local msg="$1"; shift
+    local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠣⠏'
+    local i=0
+    "$@" >"$_SPIN_LOG" 2>&1 &
+    local pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        printf "\r  ${CYAN}${frames:$((i % 10)):1}${RESET}  %s" "$msg" >&2
+        sleep 0.12
+        i=$(( i + 1 ))
+    done
+    printf "\r\033[K" >&2
+    if ! wait "$pid"; then
+        echo -e "${RED}[ERROR]${RESET} Failed: $*" >&2
+        echo "──── Output ────────────────────────────────────────────────" >&2
+        cat "$_SPIN_LOG" >&2
+        echo "────────────────────────────────────────────────────────────" >&2
+        exit 1
+    fi
+}
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 INSTALL_DIR="/opt/mynet"
 DATA_DIR="$INSTALL_DIR/data"
@@ -109,7 +136,7 @@ fi
 # ── System packages ───────────────────────────────────────────────────────────
 step "Installing system packages"
 
-apt-get update -qq
+spin_run "Updating package lists..." apt-get update -qq
 
 # Python: use already-installed python3 if it's 3.10+, then try versioned
 # packages, then fall back to the distro default python3.
@@ -172,7 +199,7 @@ else
     )
 fi
 
-apt-get install -y -qq "${PKGS[@]}"
+spin_run "Installing system packages..." apt-get install -y -qq "${PKGS[@]}"
 success "System packages installed"
 
 # ── Node.js 20 ────────────────────────────────────────────────────────────────
@@ -182,8 +209,8 @@ if command -v node &>/dev/null && node --version | grep -q '^v2[0-9]'; then
     success "Node.js $(node --version) already installed"
 else
     info "Adding NodeSource repository..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null
-    apt-get install -y -qq nodejs
+    spin_run "Configuring NodeSource repository..." bash -c 'curl -fsSL https://deb.nodesource.com/setup_20.x | bash -'
+    spin_run "Installing Node.js..." apt-get install -y -qq nodejs
     success "Node.js $(node --version) installed"
 fi
 
@@ -201,15 +228,13 @@ success "Directories created under $INSTALL_DIR"
 # ── Frontend build ────────────────────────────────────────────────────────────
 step "Building frontend"
 
-info "Installing npm dependencies..."
 cd "$FRONTEND_SRC"
 
 # Limit Node.js heap — important on Pi 3B+ (1GB RAM)
 export NODE_OPTIONS="--max-old-space-size=700"
 
-npm ci --prefer-offline --silent
-info "Running Vite build..."
-npm run build
+spin_run "Installing npm dependencies (this may take a while on Pi)..." npm ci --prefer-offline
+spin_run "Building frontend (this may take a while on Pi)..."           npm run build
 success "Frontend built successfully"
 
 # Copy built assets to install location
@@ -229,8 +254,8 @@ else
     success "Virtual environment already exists — updating"
 fi
 
-"$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet -r "$BACKEND_SRC/requirements.txt"
+spin_run "Upgrading pip..."                    "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+spin_run "Installing Python dependencies..."   "$VENV_DIR/bin/pip" install --quiet -r "$BACKEND_SRC/requirements.txt"
 success "Python dependencies installed"
 
 # ── Environment configuration ─────────────────────────────────────────────────

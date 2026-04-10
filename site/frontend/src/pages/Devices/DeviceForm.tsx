@@ -1006,6 +1006,7 @@ export default function DeviceForm() {
                   <option value="Desktop" className="bg-surface-overlay">Desktop</option>
                   <option value="Laptop" className="bg-surface-overlay">Laptop</option>
                   <option value="Server" className="bg-surface-overlay">Server</option>
+                  <option value="Virtual Machine" className="bg-surface-overlay">Virtual Machine</option>
                   <option value="Workstation" className="bg-surface-overlay">Workstation</option>
                   <option value="Thin Client" className="bg-surface-overlay">Thin Client</option>
                 </optgroup>

@@ -21,7 +21,7 @@ import {
   // Power
   Zap, ZapOff, Gauge, PlugZap, Power, PowerSquare,
   // Servers & VMs
-  Terminal, GitBranch, Loader,
+  Terminal, GitBranch, Loader, AppWindow,
   // Security
   Bell, PhoneCall,
   // Misc
@@ -107,6 +107,7 @@ const HARDWARE_ICON_MAP: Record<string, LucideIcon> = {
   'book-open':      BookOpen,
   'gamepad-2':      Gamepad2,
   'box':            Box,
+  'app-window':     AppWindow,
   'globe':          Globe,
   'layout':         Layers,   // 'layout' legacy name — map to Layers as closest equivalent
   'package':        Package,
@@ -119,6 +120,7 @@ export const HARDWARE_TYPE_ICON: Record<string, string> = {
   'Desktop': 'monitor',
   'Laptop': 'laptop',
   'Server': 'server',
+  'Virtual Machine': 'app-window',
   'Workstation': 'monitor-dot',
   'Thin Client': 'monitor',
   // ── Networking ────────────────────────────────────────────────────────────
@@ -172,6 +174,7 @@ export const HARDWARE_TYPE_CATEGORY: Record<string, string> = {
   'Desktop': 'Compute',
   'Laptop': 'Compute',
   'Server': 'Compute',
+  'Virtual Machine': 'Compute',
   'Workstation': 'Compute',
   'Thin Client': 'Compute',
   'Network Switch': 'Networking',

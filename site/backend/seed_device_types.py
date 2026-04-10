@@ -105,9 +105,9 @@ DEVICE_TYPES = [
     {"name": "Server (Linux)",           "category": "Servers & VMs", "icon": "server",  "color": "#6366f1", "fields_schema": _server()},
     {"name": "Server (Windows)",         "category": "Servers & VMs", "icon": "server",  "color": "#6366f1", "fields_schema": _server()},
     {"name": "Server (Mac)",             "category": "Servers & VMs", "icon": "server",  "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False}},
-    {"name": "Virtual Machine (Linux)",  "category": "Servers & VMs", "icon": "box",     "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False, "show_vm_host": True}},
-    {"name": "Virtual Machine (Windows)","category": "Servers & VMs", "icon": "box",     "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False, "show_vm_host": True}},
-    {"name": "Virtual Machine (Mac)",    "category": "Servers & VMs", "icon": "box",     "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False, "show_vm_host": True}},
+    {"name": "Virtual Machine (Linux)",  "category": "Servers & VMs", "icon": "app-window", "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False, "show_vm_host": True}},
+    {"name": "Virtual Machine (Windows)","category": "Servers & VMs", "icon": "app-window", "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False, "show_vm_host": True}},
+    {"name": "Virtual Machine (Mac)",    "category": "Servers & VMs", "icon": "app-window", "color": "#6366f1", "fields_schema": {**_server(), "show_wol": False, "show_vm_host": True}},
     {"name": "Container Host",           "category": "Servers & VMs", "icon": "layers",  "color": "#6366f1", "fields_schema": _server()},
     {"name": "Media Server",             "category": "Servers & VMs", "icon": "film",    "color": "#6366f1", "fields_schema": _server()},
 

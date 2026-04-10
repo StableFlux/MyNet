@@ -858,22 +858,24 @@ async def forget_client(db: Session, mac: str) -> None:
             f"— falling back to REST user delete"
         )
 
-        user_list = await client.get(
-            f"{url}{_LEGACY_BASE}/rest/user",
-            params={"mac": mac_lower},
-        )
+        user_list = await client.get(f"{url}{_LEGACY_BASE}/rest/user")
         if user_list.status_code != 200:
             raise RuntimeError(
                 f"Could not look up client in UniFi — HTTP {user_list.status_code}"
             )
 
-        users = user_list.json().get("data", [])
-        if not users:
+        # /rest/user ignores query params — match explicitly by MAC
+        all_users = user_list.json().get("data", [])
+        matched = next(
+            (u for u in all_users if (u.get("mac") or "").lower() == mac_lower),
+            None,
+        )
+        if matched is None:
             raise LookupError(
                 "Client not found in UniFi — it may have already been removed"
             )
 
-        uid = users[0].get("_id")
+        uid = matched.get("_id")
         if not uid:
             raise RuntimeError(
                 f"UniFi returned a user record without _id for {mac_lower}"
@@ -987,20 +989,23 @@ async def update_client_fields(db: Session, mac: str, fields: dict) -> dict:
     url = cfg["url"]
 
     async with _credentials_session(url, cfg["username"], cfg["password"]) as client:
-        user_list = await client.get(
-            f"{url}{_LEGACY_BASE}/rest/user",
-            params={"mac": mac_lower},
-        )
+        user_list = await client.get(f"{url}{_LEGACY_BASE}/rest/user")
         if user_list.status_code != 200:
             raise RuntimeError(
-                f"Failed to fetch UniFi user for {mac_lower}: HTTP {user_list.status_code}"
+                f"Failed to fetch UniFi user list: HTTP {user_list.status_code}"
             )
 
-        users = user_list.json().get("data", [])
-        if not users:
-            raise LookupError("Client not found in UniFi")
+        # /rest/user does not support MAC filtering via query params — it returns
+        # all known clients regardless. Match explicitly by MAC to avoid writing
+        # to the wrong device.
+        all_users = user_list.json().get("data", [])
+        existing = next(
+            (u for u in all_users if (u.get("mac") or "").lower() == mac_lower),
+            None,
+        )
+        if existing is None:
+            raise LookupError(f"Client {mac_lower} not found in UniFi")
 
-        existing = users[0]
         uid = existing.get("_id")
         if not uid:
             raise RuntimeError(

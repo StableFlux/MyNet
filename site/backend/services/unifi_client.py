@@ -244,10 +244,19 @@ def _map_client_integration(c: dict) -> dict:
     }
 
 
-def _merge_client_sources(raw_alluser: list[dict], raw_user: list[dict]) -> list[dict]:
+def _merge_client_sources(
+    raw_alluser: list[dict],
+    raw_user: list[dict],
+    raw_sta: list[dict] | None = None,
+) -> list[dict]:
     """
     Merge stat/alluser (primary) with rest/user (supplementary).
     alluser entries take precedence; rest/user fills in MACs not present in alluser.
+
+    If raw_sta (stat/sta — currently connected clients) is provided, its hostname
+    and IP values overwrite the alluser values for matching MACs.  stat/sta has the
+    live DHCP hostname whereas alluser records the hostname from first connection and
+    does not update when the device later changes its hostname.
     """
     result: list[dict] = []
     seen_macs: set[str] = set()
@@ -265,6 +274,27 @@ def _merge_client_sources(raw_alluser: list[dict], raw_user: list[dict]) -> list
         entry = _map_client(c, "rest/user")
         seen_macs.add(mac)
         result.append(entry)
+
+    # Overlay live data from stat/sta for currently-connected clients.
+    # stat/sta has the current DHCP hostname; alluser freezes it at first-seen.
+    if raw_sta:
+        sta_by_mac: dict[str, dict] = {}
+        for c in raw_sta:
+            mac = (c.get("mac") or "").lower()
+            if mac:
+                sta_by_mac[mac] = c
+
+        for entry in result:
+            mac = entry.get("mac") or ""
+            live = sta_by_mac.get(mac)
+            if not live:
+                continue
+            live_hostname = live.get("hostname") or None
+            live_ip = live.get("ip") or None
+            if live_hostname:
+                entry["hostname"] = live_hostname
+            if live_ip:
+                entry["ip"] = live_ip
 
     return result
 
@@ -721,6 +751,12 @@ async def fetch_all_for_comparison(db: Session) -> tuple[list[dict], list[dict],
             r_user = await client.get(f"{url}{_LEGACY_BASE}/rest/user")
             r_user.raise_for_status()
 
+            # stat/sta — currently connected clients; has live hostnames and IPs
+            r_sta = await client.get(f"{url}{_LEGACY_BASE}/stat/sta")
+            raw_sta = r_sta.json().get("data", []) if r_sta.status_code == 200 else []
+            if r_sta.status_code not in (200, 403):
+                log.warning(f"UniFi stat/sta returned HTTP {r_sta.status_code}")
+
             r_dev = await client.get(f"{url}{_LEGACY_BASE}/stat/device")
             if r_dev.status_code == 403:
                 log.warning("UniFi stat/device: 403 — infrastructure devices excluded")
@@ -735,13 +771,14 @@ async def fetch_all_for_comparison(db: Session) -> tuple[list[dict], list[dict],
         clients = _merge_client_sources(
             r_alluser.json().get("data", []),
             r_user.json().get("data", []),
+            raw_sta,
         )
         devices  = [_map_infra_device(d, "credentials") for d in raw_dev]
         networks = [m for n in r_net.json().get("data", []) if (m := _map_network(n))]
 
         log.debug(
             f"UniFi single-session fetch: {len(clients)} clients, "
-            f"{len(devices)} infra, {len(networks)} networks"
+            f"{len(raw_sta)} active (sta), {len(devices)} infra, {len(networks)} networks"
         )
         return clients, devices, networks
 

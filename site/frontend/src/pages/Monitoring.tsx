@@ -8,7 +8,7 @@ import { DeviceTypeIcon, HARDWARE_TYPE_ICON, NIC_TYPE_ICON } from '../components
 import { useColorSettings } from '../hooks/useColorSettings'
 import api from '../lib/api'
 
-const CARD_GRID = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'
+const CARD_GRID = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3'
 
 const STATUS_COLOR: Record<string, string> = {
   up: '#10b981',
@@ -37,35 +37,33 @@ function NicRow({ nic, deviceId }: { nic: any; deviceId: number }) {
   const NicIcon = NIC_TYPE_ICON[nic.nic_type?.toUpperCase()] ?? NIC_TYPE_ICON.ETH
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 overflow-hidden">
       {/* Status dot */}
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
       {/* NIC type icon + IP */}
-      <div className="flex items-center gap-1 w-24 flex-shrink-0 min-w-0">
+      <div className="flex items-center gap-1 w-20 flex-shrink-0 min-w-0">
         <NicIcon size={10} className="flex-shrink-0 text-white/25" />
         <span className="text-[10px] font-mono text-white/50 truncate">{nic.ip}</span>
       </div>
-      {/* NIC label */}
-      <span className="text-[10px] text-white/30 w-24 flex-shrink-0 truncate">{nic.nic_label ?? ''}</span>
-      {/* VLAN badge — always reserves space so column aligns */}
-      <div className="w-16 flex-shrink-0">
+      {/* VLAN badge */}
+      <div className="flex-1 min-w-0">
         {nic.network_name && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded"
+          <span className="text-[10px] px-1.5 py-0.5 rounded truncate block w-fit max-w-full"
             style={{ color: nic.network_color, backgroundColor: `${nic.network_color ?? '#64748b'}22` }}>
             {nic.network_name}
           </span>
         )}
       </div>
       {/* Uptime */}
-      <span className="text-[10px] font-mono text-white/40 w-10 flex-shrink-0 text-right">
+      <span className="text-[10px] font-mono text-white/40 w-9 flex-shrink-0 text-right">
         {nic.uptime_pct != null ? `${nic.uptime_pct}%` : '—'}
       </span>
       {/* Latency */}
-      <span className="text-[10px] font-mono text-white/40 w-12 flex-shrink-0 text-right">
+      <span className="text-[10px] font-mono text-white/40 w-10 flex-shrink-0 text-right">
         {nic.status === 'up' && nic.latency_ms != null ? `${nic.latency_ms}ms` : nic.status}
       </span>
       {/* Sparkline */}
-      <div className="h-5 w-16 flex-shrink-0">
+      <div className="h-5 w-12 flex-shrink-0">
         {nic.sparkline && nic.sparkline.length > 1 && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={nic.sparkline} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -217,9 +215,17 @@ function DeviceMonitorCard({ d }: { d: any }) {
           </div>
         </div>
 
-        <div className="text-right flex-shrink-0">
-          <p className="text-xs text-white/60">{relativeTime(d.last_seen)}</p>
-          <p className="text-[10px] text-white/25">last seen</p>
+        <div className="flex items-start gap-4 flex-shrink-0">
+          {d.avg_latency != null && (
+            <div className="text-right">
+              <p className="text-xs font-mono text-white/60">{d.avg_latency}ms</p>
+              <p className="text-[10px] text-white/25">avg latency</p>
+            </div>
+          )}
+          <div className="text-right">
+            <p className="text-xs text-white/60">{relativeTime(d.last_seen)}</p>
+            <p className="text-[10px] text-white/25">last seen</p>
+          </div>
         </div>
 
       </div>
@@ -301,14 +307,6 @@ function DeviceMonitorCard({ d }: { d: any }) {
         )
       })()}
 
-      {/* Stats row */}
-      <div className="text-center">
-        <p className="text-xs font-mono text-white">
-          {d.avg_latency != null ? `${d.avg_latency}ms` : '—'}
-        </p>
-        <p className="text-[10px] text-white/30">avg latency</p>
-      </div>
-
       {/* Per-NIC rows — LAN only */}
       {(() => {
         const lanNics = (d.nics ?? []).filter((n: any) => !n.is_wan_ping)
@@ -326,7 +324,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
 
 export default function Monitoring() {
   const [viewMode, setViewMode] = useState<'grouped' | 'grid'>(() => {
-    try { return (JSON.parse(sessionStorage.getItem('monitoring-view') ?? '{}').viewMode ?? 'grouped') } catch { return 'grouped' }
+    try { return (JSON.parse(sessionStorage.getItem('monitoring-view') ?? '{}').viewMode ?? 'grid') } catch { return 'grid' }
   })
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(sessionStorage.getItem('monitoring-collapsed') ?? '{}') } catch { return {} }

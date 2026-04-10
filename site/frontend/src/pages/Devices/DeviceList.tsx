@@ -54,10 +54,10 @@ export default function DeviceList() {
   })
   const [grouped, setGrouped] = useState<boolean>(() => {
     const saved = sessionStorage.getItem('devicelist-filters')
-    if (!saved) return true
+    if (!saved) return false
     const s = JSON.parse(saved)
     if (s.viewMode === 'grouped') return true // migrate old 'grouped' viewMode
-    return s.grouped ?? true
+    return s.grouped ?? false
   })
   const [includeStatuses, setIncludeStatuses] = useState<Set<string>>(() => {
     const saved = sessionStorage.getItem('devicelist-filters')

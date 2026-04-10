@@ -4,6 +4,10 @@
 
 # Switch Ports
 
+<div align="center">
+  <img src="../../docs/images/switches.png" alt="Switch port diagram" width="100%" />
+</div>
+
 > Map every physical port on your managed switches, track what is plugged in where, and configure WAN uplink details — all from a visual port diagram.
 
 ---

@@ -4,6 +4,10 @@
 
 # Monitoring
 
+<div align="center">
+  <img src="../../docs/images/monitoring-1.png" alt="Monitoring overview" width="100%" />
+</div>
+
 > MyNet pings every monitored device on a configurable schedule, tracks latency over time, and raises an alert when a device goes offline. WAN connections are monitored separately to track internet health.
 
 ---

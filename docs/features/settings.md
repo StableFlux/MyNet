@@ -4,6 +4,10 @@
 
 # Settings
 
+<div align="center">
+  <img src="../../docs/images/settings.png" alt="Settings page" width="100%" />
+</div>
+
 > Configure your MyNet instance: system identity, authentication, DNS domain, appearance colors, credential encryption, and integration connections.
 
 ---

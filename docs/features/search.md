@@ -4,6 +4,11 @@
 
 # Search & Filtering
 
+<div align="center">
+  <img src="../../docs/images/subnet-lists-1.png" alt="Subnet list view" width="49%" />
+  <img src="../../docs/images/subnet-lists-2.png" alt="Filtered subnet results" width="49%" />
+</div>
+
 > Find any device instantly by name, IP, MAC, hostname, SSID, or any other attribute. Combine filters to narrow results to exactly what you need.
 
 ---

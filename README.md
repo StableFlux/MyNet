@@ -128,6 +128,58 @@ You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also
 
 ---
 
+## Screenshots
+
+### Dashboard
+
+<div align="center">
+  <img src="docs/images/dashboard-1.png" alt="Dashboard overview" width="100%" />
+</div>
+
+<div align="center">
+  <img src="docs/images/dashboard-2.png" alt="Dashboard monitoring health" width="49%" />
+  <img src="docs/images/dashboard-3.png" alt="Dashboard Pi-hole stats" width="49%" />
+</div>
+
+<div align="center">
+  <img src="docs/images/dashboard-4.png" alt="Dashboard events and activity" width="49%" />
+  <img src="docs/images/dashboard-5.png" alt="Dashboard devices by type" width="49%" />
+</div>
+
+### Device Inventory
+
+<div align="center">
+  <img src="docs/images/devices-1.png" alt="Device list" width="49%" />
+  <img src="docs/images/edit-device.png" alt="Edit device" width="49%" />
+</div>
+
+### Networks & Subnets
+
+<div align="center">
+  <img src="docs/images/networks.png" alt="Networks" width="49%" />
+  <img src="docs/images/subnet-lists-1.png" alt="Subnet list" width="49%" />
+</div>
+
+### Monitoring
+
+<div align="center">
+  <img src="docs/images/monitoring-1.png" alt="Monitoring overview" width="100%" />
+</div>
+
+### Switches, Events & More
+
+<div align="center">
+  <img src="docs/images/switches.png" alt="Switch port diagram" width="49%" />
+  <img src="docs/images/events-1.png" alt="Events log" width="49%" />
+</div>
+
+<div align="center">
+  <img src="docs/images/locations.png" alt="Location tree" width="49%" />
+  <img src="docs/images/stock-deployment-1.png" alt="Stock and undeployed" width="49%" />
+</div>
+
+---
+
 ## License
 
 [GNU Affero General Public License v3.0](LICENSE)

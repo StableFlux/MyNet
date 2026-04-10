@@ -4,6 +4,17 @@
 
 # Devices
 
+<div align="center">
+  <img src="../../docs/images/devices-1.png" alt="Device list" width="100%" />
+</div>
+<div align="center">
+  <img src="../../docs/images/edit-device.png" alt="Edit device" width="100%" style="margin-top:8px" />
+</div>
+<div align="center">
+  <img src="../../docs/images/stock-deployment-1.png" alt="Stock and undeployed devices" width="49%" />
+  <img src="../../docs/images/stock-deployment-2.png" alt="Deploying a device from stock" width="49%" />
+</div>
+
 > The device inventory is the heart of MyNet. Every piece of hardware and software on your network lives here — from switches and access points to laptops, phones, IoT sensors, and VMs.
 
 ---

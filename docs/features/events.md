@@ -4,6 +4,10 @@
 
 # Events
 
+<div align="center">
+  <img src="../../docs/images/events-1.png" alt="Events log" width="100%" />
+</div>
+
 > MyNet keeps a unified event log that captures everything — device changes, network edits, monitoring alerts, IP conflicts, and system activity. Every action is attributed to a user with a timestamp.
 
 ---

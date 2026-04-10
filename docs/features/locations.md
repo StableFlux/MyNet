@@ -4,6 +4,10 @@
 
 # Locations
 
+<div align="center">
+  <img src="../../docs/images/locations.png" alt="Location tree" width="100%" />
+</div>
+
 > Organise your devices with a hierarchical location tree. Model anything from a simple room layout to a multi-floor building with racks and shelves.
 
 ---

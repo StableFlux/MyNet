@@ -4,6 +4,14 @@
 
 # Networks
 
+<div align="center">
+  <img src="../../docs/images/networks.png" alt="Networks and VLANs" width="100%" />
+</div>
+<div align="center">
+  <img src="../../docs/images/subnet-lists-1.png" alt="Subnet list" width="49%" />
+  <img src="../../docs/images/subnet-lists-2.png" alt="Subnet detail" width="49%" />
+</div>
+
 > Define your VLANs and subnets, configure DNS and DHCP ranges, and visualise IP allocation across every subnet with the interactive subnet map.
 
 ---

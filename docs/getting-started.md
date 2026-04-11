@@ -31,6 +31,8 @@
 | **Storage** | 500 MB free (Pi users: use a high-endurance SD card or move the database to USB) |
 | **Network** | Static IP or DHCP reservation recommended for your server |
 
+> **Raspberry Pi recommendation:** A **Raspberry Pi 4 (1 GB or more)** is the recommended minimum for a smooth experience. The Pi 4's Cortex-A72 cores are roughly 3–4× faster than the Pi 3B+'s Cortex-A53 for the single-threaded Python/SQLite workload that MyNet uses. A Pi 3B+ will run MyNet but may feel sluggish, particularly on the Monitoring and Switches pages. A Pi 4 or better eliminates this.
+
 > **Note:** The setup script installs all software dependencies (Python 3.10+, Node.js 20, nginx) automatically. You do not need to pre-install them.
 
 ---

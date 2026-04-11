@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 # How often the batch tick fires. Devices with longer intervals are skipped
 # until they're actually due (tracked via _last_pinged).
-TICK_SECS = 30
+TICK_SECS = 60
 
 scheduler = AsyncIOScheduler()
 _ws_broadcast_fn = None

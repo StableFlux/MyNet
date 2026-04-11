@@ -11,7 +11,8 @@ export function AlertBell() {
       const { data } = await api.get('/events/active-count')
       return data as { count: number }
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   })
 
   const count = data?.count ?? 0

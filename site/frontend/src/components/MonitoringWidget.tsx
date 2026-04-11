@@ -15,7 +15,8 @@ export function MonitoringWidget({ deviceId }: Props) {
       const { data } = await api.get(`/monitoring/device/${deviceId}?hours=1`)
       return data
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   })
 
   if (!data) return null

@@ -115,12 +115,14 @@ export default function Dashboard() {
   const { data: s } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => { const { data } = await api.get('/dashboard'); return data },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   })
   const { data: health = [] } = useQuery({
     queryKey: ['monitoring', 'summary'],
     queryFn: async () => { const { data } = await api.get('/monitoring/summary'); return data },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   })
   const { data: pihole } = useQuery({
     queryKey: ['pihole', 'dashboard'],

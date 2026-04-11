@@ -54,7 +54,8 @@ function MonitoringTargets({ deviceId }: { deviceId: number }) {
       const { data } = await api.get(`/monitoring/device/${deviceId}?hours=1`)
       return data
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   })
 
   if (!data) return null
@@ -385,7 +386,8 @@ function DeviceDetailInner({
   const { data: monitoringData } = useQuery({
     queryKey: ['monitoring', device.id],
     queryFn: async () => { const { data } = await api.get(`/monitoring/device/${device.id}?hours=1`); return data },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
     enabled: device.monitoring_enabled,
   })
   const wanStatusByPortId: Record<number, string> = {}

@@ -204,11 +204,17 @@ def _map_client(c: dict, source: str) -> dict:
     if local_dns and not c.get("local_dns_record_enabled", True):
         local_dns = None  # configured but disabled — treat as absent
 
+    # When a Local DNS Record is configured, UniFi often returns the DNS FQDN
+    # (e.g. "ha.halpin") in the hostname field rather than the actual DHCP-reported
+    # hostname (e.g. "homeassistant"). Strip it so the hostname column stays clean.
+    raw_hostname = c.get("hostname") or None
+    hostname = None if (raw_hostname and raw_hostname == local_dns) else raw_hostname
+
     return {
         "ip":          ip,
         "mac":         (c.get("mac") or "").lower() or None,
         "name":        c.get("name") or None,       # user-set alias in UniFi console
-        "hostname":    c.get("hostname") or None,   # DHCP-reported device hostname
+        "hostname":    hostname,                    # DHCP-reported device hostname
         "local_dns":   local_dns,                   # UniFi Local DNS Record (per-client)
         "is_wireless": not bool(c.get("is_wired", False)),
         "ssid":        c.get("essid") or None,
@@ -225,12 +231,17 @@ def _map_client(c: dict, source: str) -> dict:
 
 def _map_client_integration(c: dict) -> dict:
     """Map a raw UniFi Integration API client record to a normalised dict."""
+    local_dns = c.get("localDnsRecord") or None
+    # displayName in the Integration API is the user-set client name/alias, not the
+    # DHCP hostname — don't use it as hostname. Also strip if it equals the DNS record.
+    raw_hostname = c.get("hostname") or None
+    hostname = None if (raw_hostname and raw_hostname == local_dns) else raw_hostname
     return {
         "ip":          c.get("ipAddress") or None,
         "mac":         (c.get("macAddress") or "").lower() or None,
         "name":        c.get("name") or None,
-        "hostname":    c.get("displayName") or c.get("hostname") or None,
-        "local_dns":   c.get("localDnsRecord") or None,
+        "hostname":    hostname,
+        "local_dns":   local_dns,
         "is_wireless": c.get("type") == "WIRELESS",
         "ssid":        None,
         "uplink_mac":  None,
@@ -291,7 +302,9 @@ def _merge_client_sources(
                 continue
             live_hostname = live.get("hostname") or None
             live_ip = live.get("ip") or None
-            if live_hostname:
+            # Don't overwrite with the DNS FQDN — UniFi sta data can return
+            # local_dns_record as the hostname when one is configured.
+            if live_hostname and live_hostname != entry.get("local_dns"):
                 entry["hostname"] = live_hostname
             if live_ip:
                 entry["ip"] = live_ip

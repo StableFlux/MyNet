@@ -653,7 +653,6 @@ export default function DeviceForm() {
   // Fetch switch devices with their ports (for NIC dropdowns + uplink configuration)
   const { data: switchDevices } = useQuery({
     queryKey: ['switch-devices'],
-    staleTime: 2 * 60 * 1000,
     queryFn: async () => {
       const [{ data: dtData }, { data: devData }] = await Promise.all([
         api.get('/device-types'),

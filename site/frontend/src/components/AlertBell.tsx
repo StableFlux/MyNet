@@ -12,7 +12,6 @@ export function AlertBell() {
       return data as { count: number }
     },
     refetchInterval: 60_000,
-    staleTime: 60_000,
   })
 
   const count = data?.count ?? 0

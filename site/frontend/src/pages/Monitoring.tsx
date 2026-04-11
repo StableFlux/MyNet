@@ -346,14 +346,12 @@ export default function Monitoring() {
     queryKey: ['monitoring', 'summary'],
     queryFn: async () => { const { data } = await api.get('/monitoring/summary'); return data },
     refetchInterval: 60_000,
-    staleTime: 60_000,
   })
 
   const { data: devices, isLoading } = useQuery({
     queryKey: ['monitoring', 'devices'],
     queryFn: async () => { const { data } = await api.get('/monitoring/devices'); return data },
     refetchInterval: 60_000,
-    staleTime: 60_000,
   })
 
   const totalOnline = summary?.reduce((n: number, s: any) => n + s.online, 0) ?? 0

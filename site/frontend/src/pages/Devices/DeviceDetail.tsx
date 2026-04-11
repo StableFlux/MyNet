@@ -55,7 +55,6 @@ function MonitoringTargets({ deviceId }: { deviceId: number }) {
       return data
     },
     refetchInterval: 60_000,
-    staleTime: 60_000,
   })
 
   if (!data) return null
@@ -274,13 +273,11 @@ const { data: auditHistory, isLoading: auditLoading } = useQuery({
   const { data: piholeGlobal } = useQuery({
     queryKey: ['pihole', 'dashboard'],
     queryFn: async () => { const { data } = await api.get('/pihole/dashboard'); return data },
-    staleTime: 300_000,
   })
 
   const { data: sysSettings } = useQuery({
     queryKey: ['system-settings'],
     queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
-    staleTime: 60_000,
   })
   const piholeConfigured = piholeGlobal?.enabled === true
 
@@ -387,7 +384,6 @@ function DeviceDetailInner({
     queryKey: ['monitoring', device.id],
     queryFn: async () => { const { data } = await api.get(`/monitoring/device/${device.id}?hours=1`); return data },
     refetchInterval: 60_000,
-    staleTime: 60_000,
     enabled: device.monitoring_enabled,
   })
   const wanStatusByPortId: Record<number, string> = {}

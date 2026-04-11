@@ -45,7 +45,6 @@ export function Layout({ children }: Props) {
   const { data: sysSettings } = useQuery({
     queryKey: ['system-settings'],
     queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
-    staleTime: 60_000,
   })
 
   const systemName = sysSettings?.system_name ?? 'MyNet'

@@ -16,7 +16,6 @@ export function MonitoringWidget({ deviceId }: Props) {
       return data
     },
     refetchInterval: 60_000,
-    staleTime: 60_000,
   })
 
   if (!data) return null

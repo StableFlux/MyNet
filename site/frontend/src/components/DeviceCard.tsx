@@ -45,7 +45,6 @@ export function DeviceCard({ device }: Props) {
     queryKey: ['monitoring', device.id],
     queryFn: async () => { const { data } = await api.get(`/monitoring/device/${device.id}`); return data ?? null },
     enabled: monitoringEnabled,
-    staleTime: 30_000,
   })
 
   const nicOnlineMap = useMemo(() => {

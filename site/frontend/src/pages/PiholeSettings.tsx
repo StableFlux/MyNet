@@ -474,18 +474,21 @@ export default function PiholeSettings() {
                             } else {
                               actions.push(btn('Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
                             }
-                          } else if (row.status === 'no_ip' && row.mynet_device_id) {
-                            actions.push(
-                              <button
-                                key="goto-device"
-                                type="button"
-                                onClick={() => navigate(`/devices/${row.mynet_device_id}`)}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors border text-white/50 border-white/10 hover:bg-white/5"
-                              >
-                                <ExternalLink size={10} />
-                                Set IP on device
-                              </button>
-                            )
+                          } else if (row.status === 'no_ip') {
+                            if (row.mynet_device_id) {
+                              actions.push(
+                                <button
+                                  key="goto-device"
+                                  type="button"
+                                  onClick={() => navigate(`/devices/${row.mynet_device_id}`)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors border text-white/50 border-white/10 hover:bg-white/5"
+                                >
+                                  <ExternalLink size={10} />
+                                  Set IP on device
+                                </button>
+                              )
+                            }
+                            actions.push(btn(phSingle ? `Delete from ${phSingle}` : 'Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
                           }
 
                           return (

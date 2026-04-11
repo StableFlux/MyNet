@@ -125,91 +125,102 @@ def dashboard_summary(
     by_brand = [{"brand": b, "count": c} for b, c in brand_counts]
 
     # Monitoring: offline devices + totals + WAN summary — all from one query
+    import logging as _logging
     from models.wan_config import WanConfig
     from sqlalchemy import text as _text
     from sqlalchemy.orm import joinedload
 
-    monitored = (
-        db.query(Device)
-        .filter(Device.monitoring_enabled.is_(True))
-        .options(joinedload(Device.nics))
-        .all()
-    )
-    monitoring_total = len(monitored)
-
-    if monitored:
-        monitored_ids = [d.id for d in monitored]
-
-        # Load WAN configs once — used for both LAN exclusion and WAN summary
-        all_wan_configs = db.query(WanConfig).filter(WanConfig.device_id.in_(monitored_ids)).all()
-
-        wan_ips_by_device: dict[int, set] = {}
-        active_wan_configs = []
-        for wc in all_wan_configs:
-            wan_ip = wc.wan_ping_target or "1.1.1.1"
-            wan_ips_by_device.setdefault(wc.device_id, set()).add(wan_ip)
-            if wc.wan_monitoring_enabled is not False:
-                active_wan_configs.append(wc)
-
-        placeholders = ",".join(f":id{i}" for i in range(len(monitored_ids)))
-        params = {f"id{i}": v for i, v in enumerate(monitored_ids)}
-        last_rows = db.execute(_text(f"""
-            SELECT mr.device_id, mr.ip_pinged, mr.status, mr.timestamp
-            FROM monitoring_results mr
-            INNER JOIN (
-                SELECT device_id, ip_pinged, MAX(id) AS max_id
-                FROM monitoring_results
-                WHERE device_id IN ({placeholders})
-                GROUP BY device_id, ip_pinged
-            ) latest ON mr.id = latest.max_id
-        """), params).fetchall()
-
-        # Index by (device_id, ip) for WAN lookup
-        last_by_key: dict[tuple, object] = {}
-        for row in last_rows:
-            last_by_key[(row.device_id, row.ip_pinged)] = row
-
-        # LAN: most recent non-WAN result per device
-        last_by_device: dict[int, object] = {}
-        for row in last_rows:
-            if row.ip_pinged in wan_ips_by_device.get(row.device_id, set()):
-                continue
-            existing = last_by_device.get(row.device_id)
-            if existing is None or row.timestamp > existing.timestamp:
-                last_by_device[row.device_id] = row
-    else:
-        last_by_device = {}
-        last_by_key = {}
-        active_wan_configs = []
+    _log = _logging.getLogger(__name__)
 
     offline_devices = []
-    for device in monitored:
-        last = last_by_device.get(device.id)
-        if last and str(last.status) != PingStatus.up:
-            primary_ip = next(
-                (n.ip_address for n in device.nics if n.ip_address and n.ip_address != "DHCP"),
-                None,
-            )
-            offline_devices.append({
-                "id": device.id,
-                "name": device.name,
-                "ip": primary_ip,
-                "status": str(last.status),
-                "last_seen": last.timestamp.isoformat(),
-            })
-    monitoring_online = monitoring_total - len(offline_devices)
-
-    # WAN summary — reuses last_rows already fetched above
+    monitoring_total = 0
+    monitoring_online = 0
     wan_connections = []
-    for wc in active_wan_configs:
-        wan_ip = wc.wan_ping_target or "1.1.1.1"
-        row = last_by_key.get((wc.device_id, wan_ip))
-        status = str(row.status) if row else "unknown"
-        wan_connections.append({
-            "switch_port_id": wc.switch_port_id,
-            "isp_name": wc.isp_name,
-            "status": status,
-        })
+
+    try:
+        monitored = (
+            db.query(Device)
+            .filter(Device.monitoring_enabled.is_(True))
+            .options(joinedload(Device.nics))
+            .all()
+        )
+        monitoring_total = len(monitored)
+
+        if monitored:
+            monitored_ids = [d.id for d in monitored]
+
+            # Load WAN configs once — used for both LAN exclusion and WAN summary
+            all_wan_configs = db.query(WanConfig).filter(WanConfig.device_id.in_(monitored_ids)).all()
+
+            wan_ips_by_device: dict[int, set] = {}
+            active_wan_configs = []
+            for wc in all_wan_configs:
+                wan_ip = wc.wan_ping_target or "1.1.1.1"
+                wan_ips_by_device.setdefault(wc.device_id, set()).add(wan_ip)
+                if wc.wan_monitoring_enabled is not False:
+                    active_wan_configs.append(wc)
+
+            placeholders = ",".join(f":id{i}" for i in range(len(monitored_ids)))
+            params = {f"id{i}": v for i, v in enumerate(monitored_ids)}
+            last_rows = db.execute(_text(f"""
+                SELECT mr.device_id, mr.ip_pinged, mr.status, mr.timestamp
+                FROM monitoring_results mr
+                INNER JOIN (
+                    SELECT device_id, ip_pinged, MAX(id) AS max_id
+                    FROM monitoring_results
+                    WHERE device_id IN ({placeholders})
+                    GROUP BY device_id, ip_pinged
+                ) latest ON mr.id = latest.max_id
+            """), params).fetchall()
+
+            # Index by (device_id, ip) for WAN lookup
+            last_by_key: dict[tuple, object] = {}
+            for row in last_rows:
+                last_by_key[(row.device_id, row.ip_pinged)] = row
+
+            # LAN: most recent non-WAN result per device
+            last_by_device: dict[int, object] = {}
+            for row in last_rows:
+                if row.ip_pinged in wan_ips_by_device.get(row.device_id, set()):
+                    continue
+                existing = last_by_device.get(row.device_id)
+                if existing is None or row.timestamp > existing.timestamp:
+                    last_by_device[row.device_id] = row
+        else:
+            last_by_device = {}
+            last_by_key = {}
+            active_wan_configs = []
+
+        for device in monitored:
+            last = last_by_device.get(device.id)
+            if last and str(last.status) != PingStatus.up:
+                primary_ip = next(
+                    (n.ip_address for n in device.nics if n.ip_address and n.ip_address != "DHCP"),
+                    None,
+                )
+                offline_devices.append({
+                    "id": device.id,
+                    "name": device.name,
+                    "ip": primary_ip,
+                    "status": str(last.status),
+                    "last_seen": last.timestamp.isoformat(),
+                })
+        monitoring_online = monitoring_total - len(offline_devices)
+
+        # WAN summary — reuses last_rows already fetched above
+        for wc in active_wan_configs:
+            wan_ip = wc.wan_ping_target or "1.1.1.1"
+            row = last_by_key.get((wc.device_id, wan_ip))
+            status = str(row.status) if row else "unknown"
+            wan_connections.append({
+                "switch_port_id": wc.switch_port_id,
+                "isp_name": wc.isp_name,
+                "status": status,
+            })
+
+    except Exception as _e:
+        _log.exception(f"Dashboard monitoring section failed: {_e}")
+
     wan_total = len(wan_connections)
     wan_online_count = sum(1 for c in wan_connections if c["status"] == "up")
 

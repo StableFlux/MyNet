@@ -207,7 +207,7 @@ def dashboard_summary(
                 if lan_results:
                     most_recent = max(lan_results, key=lambda r: r.timestamp)
                     device_status = most_recent.status  # plain string from raw SQL
-                    is_online = device_status == PingStatus.up
+                    is_online = device_status == "up"
                     last_seen = most_recent.timestamp.isoformat()
                 else:
                     # Never been pinged — treat as offline/unknown

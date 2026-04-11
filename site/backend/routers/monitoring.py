@@ -153,7 +153,7 @@ def monitoring_summary(
 
             network_stats[net_id]["total"] += 1
             row = last_by_nic.get((device.id, ip))
-            if row and str(row.status) == PingStatus.up:
+            if row and row.status == "up":
                 network_stats[net_id]["online"] += 1
             else:
                 network_stats[net_id]["offline"] += 1

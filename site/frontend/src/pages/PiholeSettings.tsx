@@ -61,6 +61,8 @@ export default function PiholeSettings() {
   const [piholeInterval, setPiholeInterval] = useState(300)
   const [dnsDomain, setDnsDomain] = useState('')
   const [hoveredDupIp, setHoveredDupIp] = useState<string | null>(null)
+  const [expandedHostname, setExpandedHostname] = useState<string | null>(null)
+  const toggleDnsRow = (hostname: string) => setExpandedHostname(prev => prev === hostname ? null : hostname)
   const [applyTotal, setApplyTotal] = useState<number | null>(null)
   const [applying, setApplying] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
@@ -483,8 +485,103 @@ export default function PiholeSettings() {
                   })()}
                 </div>
 
-                {/* Table */}
-                <div className="overflow-x-auto">
+                {/* Mobile: expandable rows */}
+                <div className="md:hidden divide-y divide-white/[0.04]">
+                  {(() => {
+                    const piholeNames: string[] = Array.from(new Set(
+                      dnsComparison.flatMap((r: any) => r.pihole_entries.map((e: any) => e.pihole_device_name))
+                    ))
+                    const pending = dnsMutation.isPending
+                    const ipHostnames: Record<string, string[]> = {}
+                    for (const r of dnsComparison) {
+                      const ips = new Set<string>()
+                      if (r.mynet_ip) ips.add(r.mynet_ip)
+                      for (const e of r.pihole_entries) ips.add(e.ip)
+                      for (const ip of ips) {
+                        if (!ipHostnames[ip]) ipHostnames[ip] = []
+                        if (!ipHostnames[ip].includes(r.hostname)) ipHostnames[ip].push(r.hostname)
+                      }
+                    }
+                    const duplicateIps = new Set(Object.entries(ipHostnames).filter(([, hs]) => hs.length > 1).map(([ip]) => ip))
+                    return dnsComparison.map((row: any) => {
+                      const cfg = STATUS_CONFIG[row.status] ?? STATUS_CONFIG.match
+                      const Icon = cfg.icon
+                      const piIpByName: Record<string, string> = {}
+                      for (const e of row.pihole_entries) piIpByName[e.pihole_device_name] = e.ip
+                      const piIp = row.pihole_entries[0]?.ip
+                      const rowIps = new Set<string>([...(row.mynet_ip ? [row.mynet_ip] : []), ...row.pihole_entries.map((e: any) => e.ip)])
+                      const isDuplicate = [...rowIps].some(ip => duplicateIps.has(ip))
+                      const isExpanded = expandedHostname === row.hostname
+                      const dupIp = [...rowIps].find(ip => duplicateIps.has(ip))
+                      const dupConflicts = dupIp ? (ipHostnames[dupIp] ?? []).filter(h => h !== row.hostname) : []
+                      const btn = (label: string, BtnIcon: React.ElementType, action: string, ip?: string, nicId?: number, style = 'default') => (
+                        <button key={action} type="button" disabled={pending}
+                          onClick={() => dnsMutation.mutate({ action, hostname: row.hostname, ip, nicId })}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-40 border ${style === 'danger' ? 'text-red-400 border-red-500/20 hover:bg-red-500/10' : style === 'blue' ? 'text-blue-400 border-blue-500/20 hover:bg-blue-500/10' : 'text-white/50 border-white/10 hover:bg-white/5'}`}>
+                          <BtnIcon size={11} />{label}
+                        </button>
+                      )
+                      const phIdToLabel: Record<number, string> = {}
+                      ;(piholeStatus ?? []).forEach((ph: any, idx: number) => { phIdToLabel[ph.device_id] = `Pi-hole ${idx + 1}` })
+                      const phEntries: { pihole_device_id: number; ip: string }[] = row.pihole_entries ?? []
+                      const phLabel = (entry: { pihole_device_id: number }) => phIdToLabel[entry.pihole_device_id] ?? 'Pi-hole'
+                      const phSingle = phEntries.length === 1 ? phLabel(phEntries[0]) : null
+                      const actions: React.ReactNode[] = []
+                      if (!canEdit) { /* viewer */ } else
+                      if (row.status === 'partial') { actions.push(btn('Add to Pi-holes', ArrowRight, 'update-pihole', row.mynet_ip, undefined, 'blue')) }
+                      else if (row.status === 'mynet_only') { actions.push(btn(phSingle ? `Add to ${phSingle}` : 'Add to Pi-holes', ArrowRight, 'push', row.mynet_ip, undefined, 'blue')) }
+                      else if (row.status === 'pihole_only') {
+                        if (row.mynet_nic_id) actions.push(btn('Add to MyNet', ArrowLeft, 'set-mynet-dns', undefined, row.mynet_nic_id, 'blue'))
+                        actions.push(btn(phSingle ? `Delete from ${phSingle}` : 'Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
+                      } else if (row.status === 'ip_mismatch') {
+                        actions.push(btn('Use MyNet IP', ArrowLeft, 'update-pihole', row.mynet_ip))
+                        actions.push(btn(phSingle ? `Use ${phSingle} IP` : 'Use Pi-hole IP', ArrowRight, 'update-mynet-ip', piIp))
+                      } else if (row.status === 'pihole_conflict') {
+                        if (row.mynet_ip) actions.push(btn('Use MyNet IP', ArrowLeft, 'update-pihole', row.mynet_ip))
+                        else actions.push(btn('Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
+                      } else if (row.status === 'no_ip') {
+                        if (row.mynet_device_id) actions.push(<button key="goto-device" type="button" onClick={() => navigate(`/devices/${row.mynet_device_id}`)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors border text-white/50 border-white/10 hover:bg-white/5"><ExternalLink size={11} />Set IP on device</button>)
+                        actions.push(btn(phSingle ? `Delete from ${phSingle}` : 'Delete from Pi-holes', Trash2, 'remove', undefined, undefined, 'danger'))
+                      }
+                      return (
+                        <div key={row.hostname} className={isDuplicate ? 'bg-yellow-500/[0.04]' : ''}>
+                          <button type="button" onClick={() => toggleDnsRow(row.hostname)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/[0.02] transition-colors">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium flex-shrink-0 ${cfg.className}`}><Icon size={9} /></span>
+                            <span className="flex-1 font-mono text-sm text-white/70 truncate">{row.hostname}</span>
+                            {isDuplicate && <span className="text-[10px] text-yellow-400/70 flex-shrink-0">Dup IP</span>}
+                            <ChevronDown size={13} className={`text-white/20 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {isExpanded && (
+                            <div className="px-4 pb-3 pt-2 border-t border-white/[0.05]">
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+                                <div><p className="text-[10px] text-white/30 uppercase tracking-wider mb-0.5">MyNet Device</p>
+                                  {row.mynet_device_name ? <button type="button" onClick={() => navigate(`/devices/${row.mynet_device_id}`)} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors truncate max-w-full block">{row.mynet_device_name}</button> : <p className="text-xs text-white/20">—</p>}
+                                </div>
+                                <div><p className="text-[10px] text-white/30 uppercase tracking-wider mb-0.5">MyNet IP</p><p className="text-xs font-mono text-white/60">{row.mynet_ip || '—'}</p></div>
+                                {piholeNames.map((name: string) => (
+                                  <div key={name}><p className="text-[10px] text-white/30 uppercase tracking-wider mb-0.5">{name}</p><p className="text-xs font-mono text-white/60">{piIpByName[name] || '—'}</p></div>
+                                ))}
+                                <div><p className="text-[10px] text-white/30 uppercase tracking-wider mb-0.5">Status</p>
+                                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium ${cfg.className}`}><Icon size={9} />{cfg.label}</span>
+                                </div>
+                                {isDuplicate && (
+                                  <div className="col-span-2"><p className="text-[10px] text-yellow-400/60 uppercase tracking-wider mb-0.5">Duplicate IP</p>
+                                    <p className="text-xs text-yellow-400/80">{dupConflicts.length ? `Same IP as: ${dupConflicts.join(', ')}` : 'IP used by multiple hostnames'}</p>
+                                  </div>
+                                )}
+                              </div>
+                              {actions.length > 0 && <div className="flex flex-wrap gap-2 mt-3 pt-2.5 border-t border-white/[0.05]">{actions}</div>}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+
+                {/* Desktop: table */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-white/[0.06]">

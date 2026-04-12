@@ -130,7 +130,7 @@ export default function PiholeSettings() {
         </div>
         {configured && (
           <div className="flex items-center gap-3">
-            <GlassCard className="flex-1 sm:flex-none sm:w-64 flex items-center gap-3 py-3">
+            <GlassCard className="flex-1 sm:flex-none sm:w-80 flex items-center gap-3 py-3">
               <div className="w-8 h-8 rounded-lg bg-red-600/20 flex items-center justify-center flex-shrink-0">
                 <Wifi size={15} className="text-red-400" />
               </div>

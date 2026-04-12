@@ -1,7 +1,7 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Map, Pencil, Trash2, Wifi, EyeOff } from 'lucide-react'
+import { Plus, Map, Pencil, Trash2, Wifi, EyeOff, ChevronDown } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import api from '../lib/api'
 
@@ -19,6 +19,8 @@ export default function Networks() {
   const qc = useQueryClient()
   const { user } = useAuthStore()
   const canEdit = user?.role === 'admin' || user?.role === 'editor'
+  const [expandedNetwork, setExpandedNetwork] = React.useState<number | null>(null)
+  const toggleNetwork = (id: number) => setExpandedNetwork(prev => prev === id ? null : id)
 
   const { data: networks, isLoading } = useQuery({
     queryKey: ['networks'],
@@ -66,11 +68,12 @@ export default function Networks() {
               ...(n.dns_secondary ? [n.dns_secondary] : []),
               ...(Array.isArray(n.dns_extra) ? n.dns_extra : []),
             ]
+            const isExpanded = expandedNetwork === n.id
 
             return (
               <div
                 key={n.id}
-                className="glass-card p-5 space-y-3"
+                className="glass-card overflow-hidden flex"
                 style={{
                   borderTopColor: n.color ? n.color + '66' : undefined,
                   background: n.color
@@ -81,6 +84,7 @@ export default function Networks() {
                     : undefined,
                 }}
               >
+              <div className="flex-1 min-w-0 p-5 space-y-3">
                 {/* Header row */}
                 <div className="flex items-start gap-3">
                   <div
@@ -99,9 +103,12 @@ export default function Networks() {
                         </span>
                       )}
                       {n.purpose && (
-                        <span className="text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded">{n.purpose}</span>
+                        <span className="hidden md:inline text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded">{n.purpose}</span>
                       )}
                     </div>
+                    {n.purpose && (
+                      <span className="md:hidden text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded mt-0.5 inline-block">{n.purpose}</span>
+                    )}
                   </div>
                   {/* Actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -131,7 +138,7 @@ export default function Networks() {
                 </div>
 
                 {/* Info grid */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3 pl-4">
+                <div className={`grid grid-cols-2 gap-x-4 gap-y-3 pl-4 ${!isExpanded ? 'hidden md:grid' : ''}`}>
                   {/* IP */}
                   {n.cidr && <InfoItem label="CIDR" value={n.cidr} mono />}
                   {n.gateway && <InfoItem label="Gateway" value={n.gateway} mono />}
@@ -160,7 +167,7 @@ export default function Networks() {
 
                 {/* SSIDs */}
                 {ssids.length > 0 && (
-                  <div className="pl-4 space-y-1.5">
+                  <div className={`pl-4 space-y-1.5 ${!isExpanded ? 'hidden md:block' : ''}`}>
                     <p className="text-[10px] text-white/30 flex items-center gap-1.5">
                       <Wifi size={10} /> Wireless SSIDs
                     </p>
@@ -198,6 +205,16 @@ export default function Networks() {
                     </div>
                   </div>
                 )}
+              </div>{/* end main content */}
+              {/* Mobile expand strip */}
+              <button
+                type="button"
+                onClick={() => toggleNetwork(n.id)}
+                className="md:hidden flex items-center justify-center w-8 flex-shrink-0 border-l border-white/[0.05] bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
+                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+              >
+                <ChevronDown size={13} className={`text-white/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
               </div>
             )
           })}

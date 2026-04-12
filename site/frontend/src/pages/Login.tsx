@@ -34,7 +34,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center p-4">
       <div className="w-full max-w-sm -mt-32">
-        <img src="/logo.png" alt="MyNet" className="w-[365px] mx-auto mb-6 block" />
+        <img src="/logo.png" alt="MyNet" className="w-[365px] max-w-full mx-auto mb-6 block" />
         <div className="glass-card p-6">
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <input

@@ -89,7 +89,7 @@ function InlineForm({ form, onChange, knownTypes, listId, onSave, onCancel, savi
     <div className="mx-3 mb-2 mt-1 p-3 rounded-xl border border-indigo-500/20 space-y-2.5"
       style={{ background: 'linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, var(--card-base-deepest)) 0%, var(--card-base-deepest) 100%)' }}>
       <p className="text-[10px] font-semibold text-indigo-300/60 uppercase tracking-widest">{label}</p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
           <label className="block text-[10px] text-white/35 mb-1">Name</label>
           <input autoFocus className="glass-input text-sm w-full" placeholder="e.g. Shelf A"
@@ -334,7 +334,7 @@ export default function Locations() {
         <div className="rounded-xl border border-indigo-500/30 p-4 space-y-3"
           style={{ background: 'linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, var(--card-base-deep)) 0%, var(--card-base-deepest) 100%)' }}>
           <p className="text-xs font-semibold text-indigo-300">New Top-Level Location</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] text-white/40 mb-1">Name</label>
               <input autoFocus className="glass-input text-sm w-full" placeholder="e.g. Home"
@@ -394,7 +394,7 @@ export default function Locations() {
               {isEditingHeader ? (
                 <div className="px-4 py-3 space-y-3 border-b border-white/[0.06]">
                   <p className="text-[10px] font-semibold text-indigo-300/60 uppercase tracking-widest">Edit location</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="block text-[10px] text-white/35 mb-1">Name</label>
                       <input autoFocus className="glass-input text-sm w-full" value={form.name}

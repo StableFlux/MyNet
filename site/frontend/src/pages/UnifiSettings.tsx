@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Router, CheckCircle, XCircle, Loader, Save, FlaskConical, Settings, RefreshCw, AlertTriangle, AlertCircle, Trash2, CheckSquare, Square, Plus, Copy, Check, Send, X } from 'lucide-react'
+import { ChevronLeft, ChevronDown, Router, CheckCircle, XCircle, Loader, Save, FlaskConical, Settings, RefreshCw, AlertTriangle, AlertCircle, Trash2, CheckSquare, Square, Plus, Copy, Check, Send, X } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import api from '../lib/api'
 
@@ -131,6 +131,9 @@ export default function UnifiSettings() {
 
   const [syncingKey, setSyncingKey] = useState<string | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [expandedMobNet, setExpandedMobNet] = useState<string | null>(null)
+  const [expandedMobGrp, setExpandedMobGrp] = useState<string | null>(null)
+  const [expandedMobNic, setExpandedMobNic] = useState<string | null>(null)
   const [deviceSearch, setDeviceSearch] = useState('')
 
   function toggleExpandedRow(key: string) {
@@ -343,8 +346,8 @@ export default function UnifiSettings() {
     : !!(form.host && form.username && (form.password || saved?.password_set))
 
   const configPanel = (
-    <div className="flex gap-4 items-start">
-      <GlassCard className="w-2/5 space-y-4">
+    <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
+      <GlassCard className="sm:w-2/5 space-y-4">
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
             <Router size={16} className="text-indigo-400" />
@@ -403,7 +406,7 @@ export default function UnifiSettings() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="unifi-username" className="text-[10px] text-white/40 block mb-1">Username</label>
               <input
@@ -476,8 +479,8 @@ export default function UnifiSettings() {
       </GlassCard>
 
       {/* How to connect — changes based on authType */}
-      <GlassCard className="w-3/5">
-        <div className="flex gap-6">
+      <GlassCard className="sm:w-3/5">
+        <div className="flex flex-col sm:flex-row gap-5 sm:gap-6">
           <div className="flex-1 space-y-4">
             {authType === 'api_key' ? (
               <div>
@@ -541,18 +544,20 @@ export default function UnifiSettings() {
   return (
     <>
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
-          <ChevronLeft size={14} />
-          Settings
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-white">UniFi Integration</h1>
-          <p className="text-sm text-white/40 mt-0.5">Connect MyNet to your local UniFi controller.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm flex-shrink-0">
+            <ChevronLeft size={14} />
+            Settings
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-bold text-white">UniFi Integration</h1>
+            <p className="text-sm text-white/40 mt-0.5">Connect MyNet to your local UniFi controller.</p>
+          </div>
         </div>
         {configured && (
-          <>
-            <GlassCard className="w-1/4 flex items-center gap-3 py-3">
+          <div className="flex items-center gap-3">
+            <GlassCard className="flex-1 sm:flex-none sm:w-64 flex items-center gap-3 py-3">
               <div className="w-8 h-8 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
                 <Router size={15} className="text-indigo-400" />
               </div>
@@ -572,12 +577,12 @@ export default function UnifiSettings() {
             <button
               type="button"
               onClick={() => { setShowConfig(v => !v); setTestResult(null) }}
-              className="btn-ghost flex items-center gap-2 text-sm w-28 justify-center"
+              className="btn-ghost flex items-center gap-2 text-sm flex-shrink-0"
             >
               <Settings size={14} />
               {showConfig ? 'Hide' : 'Configure'}
             </button>
-          </>
+          </div>
         )}
       </div>
 
@@ -585,13 +590,13 @@ export default function UnifiSettings() {
 
       {configured && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-white">Network &amp; Device Reconciliation</h2>
                 <p className="text-xs text-white/40 mt-0.5">Cross-references MyNet records against UniFi.</p>
               </div>
-              <div className="flex rounded-lg overflow-hidden border border-white/10 text-xs">
+              <div className="flex rounded-lg overflow-hidden border border-white/10 text-xs self-start sm:self-auto">
                 {(['networks', 'devices'] as const).map(view => (
                   <button
                     key={view}
@@ -612,7 +617,7 @@ export default function UnifiSettings() {
               type="button"
               onClick={() => refetchComparison()}
               disabled={compFetching}
-              className="btn-ghost flex items-center gap-2 text-sm"
+              className="btn-ghost flex items-center gap-2 text-sm self-start sm:self-auto"
             >
               <RefreshCw size={13} className={compFetching ? 'animate-spin' : ''} />
               {compFetching ? 'Fetching…' : 'Fetch comparison'}
@@ -626,7 +631,116 @@ export default function UnifiSettings() {
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">Networks</h3>
                 <GlassCard className="p-0 overflow-hidden">
                   <SummaryBar rows={comparison.networks} />
-                  <div className="overflow-x-auto">
+                  {/* Mobile: expandable network cards */}
+                  <div className="sm:hidden divide-y divide-white/[0.04]">
+                    {comparison.networks.map((row: any) => {
+                      const mobNetKey = `mob-net-${row.row_key}`
+                      const isExpanded = expandedMobNet === mobNetKey
+                      const diffs = new Set(row.differences ?? [])
+                      const dhcpDiff = diffs.has('dhcp_start') || diffs.has('dhcp_end')
+                      const subnetDiff = diffs.has('cidr') || diffs.has('gateway')
+                      const unifiDhcp = (row.unifi_dhcp_start || row.unifi_dhcp_end) ? `${row.unifi_dhcp_start ?? '–'} – ${row.unifi_dhcp_end ?? '–'}` : null
+                      const mynetDhcp = (row.mynet_dhcp_start || row.mynet_dhcp_end) ? `${row.mynet_dhcp_start ?? '–'} – ${row.mynet_dhcp_end ?? '–'}` : null
+                      const mynetSubnetFields = {
+                        ...(row.mynet_cidr       ? { cidr:       row.mynet_cidr }       : {}),
+                        ...(row.mynet_gateway    ? { gateway:    row.mynet_gateway }    : {}),
+                        ...(row.mynet_dhcp_start ? { dhcp_start: row.mynet_dhcp_start } : {}),
+                        ...(row.mynet_dhcp_end   ? { dhcp_end:   row.mynet_dhcp_end }   : {}),
+                      }
+                      const unifiSubnetFields = {
+                        ...(row.unifi_cidr       ? { cidr:       row.unifi_cidr }       : {}),
+                        ...(row.unifi_gateway    ? { gateway:    row.unifi_gateway }    : {}),
+                        ...(row.unifi_dhcp_start ? { dhcp_start: row.unifi_dhcp_start } : {}),
+                        ...(row.unifi_dhcp_end   ? { dhcp_end:   row.unifi_dhcp_end }   : {}),
+                      }
+                      const uid = row.unifi_network_id
+                      const mid = row.mynet_network_id
+                      const f = (v: any, diff: boolean) => v
+                        ? <span className={diff ? 'text-amber-400 font-medium' : 'text-white/60'}>{v}</span>
+                        : <span className="text-white/20">—</span>
+                      return (
+                        <div key={row.row_key}>
+                          <button type="button" onClick={() => setExpandedMobNet(prev => prev === mobNetKey ? null : mobNetKey)}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition-colors">
+                            <span className="font-mono text-xs text-white/40 w-10 flex-shrink-0">{row.vlan_id ?? '—'}</span>
+                            <span className="flex-1 text-sm text-white/80 truncate">{row.unifi_name ?? row.mynet_name ?? '—'}</span>
+                            <StatusBadge status={row.status} />
+                            <ChevronDown size={13} className={`text-white/20 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {isExpanded && (
+                            <div className="px-4 pb-4 pt-2 border-t border-white/[0.05] space-y-3">
+                              {/* UniFi vs MyNet two-column comparison */}
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                                <div className="space-y-2">
+                                  <p className="text-[10px] font-semibold text-indigo-400/70 uppercase tracking-wider">UniFi</p>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">VLAN</p>{f(row.unifi_vlan_id, diffs.has('vlan_id'))}</div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">Name</p>{f(row.unifi_name, diffs.has('name'))}</div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">CIDR</p><span className="font-mono">{f(row.unifi_cidr, diffs.has('cidr'))}</span></div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">Gateway</p><span className="font-mono">{f(row.unifi_gateway, diffs.has('gateway'))}</span></div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">DHCP Range</p><span className="font-mono text-[10px]">{f(unifiDhcp, dhcpDiff)}</span></div>
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-[10px] font-semibold text-[#3ea99e]/70 uppercase tracking-wider">MyNet</p>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">VLAN</p>{f(row.mynet_vlan_id, diffs.has('vlan_id'))}</div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">Name</p>{f(row.mynet_name, diffs.has('name'))}</div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">CIDR</p><span className="font-mono">{f(row.mynet_cidr, diffs.has('cidr'))}</span></div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">Gateway</p><span className="font-mono">{f(row.mynet_gateway, diffs.has('gateway'))}</span></div>
+                                  <div><p className="text-[10px] text-white/30 mb-0.5">DHCP Range</p><span className="font-mono text-[10px]">{f(mynetDhcp, dhcpDiff)}</span></div>
+                                </div>
+                              </div>
+                              {/* Actions */}
+                              {row.status !== 'match' && (
+                                <div className="pt-2.5 border-t border-white/[0.05] flex flex-wrap gap-2">
+                                  {diffs.has('name') && row.mynet_name && uid && <SyncBtn label="Name→UniFi" variant="mynet" writeGuarded title={`Set UniFi name to "${row.mynet_name}"`} syncKey={`unifi-net-name-${row.row_key}`} onClick={() => syncNetworkToUnifiMutation.mutate({ unifiNetworkId: uid, fields: { name: row.mynet_name } })} />}
+                                  {diffs.has('name') && row.unifi_name && mid && <SyncBtn label="Name→MyNet" title={`Set MyNet name to "${row.unifi_name}"`} syncKey={`mynet-net-name-${row.row_key}`} onClick={() => syncNetworkToMyNetMutation.mutate({ networkId: mid, fields: { name: row.unifi_name } })} />}
+                                  {subnetDiff && uid && Object.keys(mynetSubnetFields).length > 0 && <SyncBtn label="Subnet→UniFi" variant="mynet" writeGuarded title="Update UniFi subnet to MyNet values" syncKey={`unifi-net-subnet-${row.row_key}`} onClick={() => syncNetworkToUnifiMutation.mutate({ unifiNetworkId: uid, fields: mynetSubnetFields })} />}
+                                  {subnetDiff && mid && Object.keys(unifiSubnetFields).length > 0 && <SyncBtn label="Subnet→MyNet" title="Update MyNet subnet to UniFi values" syncKey={`mynet-net-subnet-${row.row_key}`} onClick={() => syncNetworkToMyNetMutation.mutate({ networkId: mid, fields: unifiSubnetFields })} />}
+                                  {dhcpDiff && !subnetDiff && uid && (row.mynet_dhcp_start || row.mynet_dhcp_end) && <SyncBtn label="DHCP→UniFi" variant="mynet" writeGuarded title="Update UniFi DHCP to MyNet values" syncKey={`unifi-net-dhcp-${row.row_key}`} onClick={() => syncNetworkToUnifiMutation.mutate({ unifiNetworkId: uid, fields: { ...(row.mynet_dhcp_start ? { dhcp_start: row.mynet_dhcp_start } : {}), ...(row.mynet_dhcp_end ? { dhcp_end: row.mynet_dhcp_end } : {}) } })} />}
+                                  {dhcpDiff && !subnetDiff && mid && (row.unifi_dhcp_start || row.unifi_dhcp_end) && <SyncBtn label="DHCP→MyNet" title="Update MyNet DHCP to UniFi values" syncKey={`mynet-net-dhcp-${row.row_key}`} onClick={() => syncNetworkToMyNetMutation.mutate({ networkId: mid, fields: { ...(row.unifi_dhcp_start ? { dhcp_start: row.unifi_dhcp_start } : {}), ...(row.unifi_dhcp_end ? { dhcp_end: row.unifi_dhcp_end } : {}) } })} />}
+                                  {row.status === 'unifi_only' && (() => {
+                                    const isConfirming = confirmDeleteNetworkId === uid
+                                    const isDeleting = deleteNetworkMutation.isPending && confirmDeleteNetworkId === uid
+                                    return (
+                                      <>
+                                        <button type="button" onClick={() => { const p = new URLSearchParams(); if (row.unifi_name) p.set('name', row.unifi_name); if (row.unifi_vlan_id) p.set('vlan_id', String(row.unifi_vlan_id)); if (row.unifi_cidr) p.set('cidr', row.unifi_cidr); if (row.unifi_gateway) p.set('gateway', row.unifi_gateway); navigate(`/networks/new?${p.toString()}`) }} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"><Plus size={9} />Add to MyNet</button>
+                                        {isConfirming ? (
+                                          <div className="flex items-center gap-1">
+                                            <button type="button" onClick={() => deleteNetworkMutation.mutate(uid)} disabled={isDeleting} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 transition-colors disabled:opacity-50">{isDeleting ? <Loader size={9} className="animate-spin" /> : <Trash2 size={9} />}{isDeleting ? 'Deleting…' : 'Confirm'}</button>
+                                            <button type="button" onClick={() => { deleteNetworkMutation.reset(); setConfirmDeleteNetworkId(null) }} className="px-1.5 py-1 rounded text-[10px] text-white/30 hover:text-white/50">Cancel</button>
+                                          </div>
+                                        ) : (
+                                          <button type="button" onClick={() => { deleteNetworkMutation.reset(); setConfirmDeleteNetworkId(uid) }} disabled={!canWrite} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"><Trash2 size={9} />Delete from UniFi</button>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
+                                  {row.status === 'mynet_only' && (() => {
+                                    const isConfirming = confirmDeleteMyNetNetworkId === mid
+                                    const isDeleting = deleteMyNetNetworkMutation.isPending && confirmDeleteMyNetNetworkId === mid
+                                    return (
+                                      <>
+                                        <button type="button" onClick={() => addNetworkToUnifiMutation.mutate({ name: row.mynet_name, vlan_id: row.mynet_vlan_id, gateway: row.mynet_gateway ?? undefined, cidr: row.mynet_cidr ?? undefined, dhcp_start: row.mynet_dhcp_start ?? undefined, dhcp_end: row.mynet_dhcp_end ?? undefined })} disabled={addNetworkToUnifiMutation.isPending || !canWrite} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors disabled:opacity-40"><Send size={9} />Add to UniFi</button>
+                                        {isConfirming ? (
+                                          <div className="flex items-center gap-1">
+                                            <button type="button" onClick={() => deleteMyNetNetworkMutation.mutate(mid)} disabled={isDeleting} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 transition-colors disabled:opacity-50">{isDeleting ? <Loader size={9} className="animate-spin" /> : <Trash2 size={9} />}{isDeleting ? 'Deleting…' : 'Confirm'}</button>
+                                            <button type="button" onClick={() => { deleteMyNetNetworkMutation.reset(); setConfirmDeleteMyNetNetworkId(null) }} className="px-1.5 py-1 rounded text-[10px] text-white/30 hover:text-white/50">Cancel</button>
+                                          </div>
+                                        ) : (
+                                          <button type="button" onClick={() => { deleteMyNetNetworkMutation.reset(); setConfirmDeleteMyNetNetworkId(mid) }} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"><Trash2 size={9} />Delete from MyNet</button>
+                                        )}
+                                      </>
+                                    )
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="border-b border-white/[0.06]">
@@ -833,16 +947,16 @@ export default function UnifiSettings() {
 
               {/* ── Devices table ──────────────────────────────────── */}
               {compView === 'devices' && <div className="space-y-2">
-                <div className="flex items-center gap-6">
-                  <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">Devices</h3>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-2">
+                  <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider flex-shrink-0 hidden sm:block">Devices</h3>
                   <input
                     type="search"
                     value={deviceSearch}
                     onChange={e => setDeviceSearch(e.target.value)}
-                    placeholder="Search…"
-                    className="glass-input text-xs py-1 w-80"
+                    placeholder="Search devices…"
+                    className="glass-input text-xs py-1 w-full sm:w-72"
                   />
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-4">
                     {([
                       { key: 'in_service',     label: 'In Service'     },
                       { key: 'stock',          label: 'Stock'          },
@@ -857,8 +971,8 @@ export default function UnifiSettings() {
                       </label>
                     ))}
                   </div>
-                  <span className="text-white/15 text-sm">|</span>
-                  <div className="flex items-end gap-4">
+                  <span className="hidden sm:block text-white/15 text-sm">|</span>
+                  <div className="flex flex-wrap items-end gap-x-3 gap-y-2 sm:gap-4">
                     {([
                       { key: 'match',       label: 'Match'      },
                       { key: 'differences', label: 'Mismatch'   },
@@ -887,7 +1001,124 @@ export default function UnifiSettings() {
                 </div>
                 <GlassCard className="p-0 overflow-hidden">
                   <SummaryBar rows={comparison.devices} activeKeys={compStatusFilter} />
-                  <div className="overflow-x-auto">
+                  {/* Mobile: device group cards */}
+                  <div className="sm:hidden divide-y divide-white/[0.04]">
+                    {filteredDeviceGroups.map(group => {
+                      const mobGrpKey = `mob-grp-${group.groupKey}`
+                      const grpExpanded = expandedMobGrp === mobGrpKey
+                      const worstStatus = ['differences', 'mynet_only', 'unifi_only'].find(s =>
+                        group.nics.some((n: any) => n.status === s)
+                      ) ?? 'match'
+                      return (
+                        <div key={group.groupKey}>
+                          {/* Device group header */}
+                          <div className={`flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors ${grpExpanded ? 'border-b border-white/[0.04]' : ''}`}>
+                            {group.deviceId
+                              ? <button type="button" onClick={() => navigate(`/devices/${group.deviceId}`)} className="flex-1 text-sm font-medium text-indigo-400 hover:text-indigo-300 text-left truncate">{group.deviceName}</button>
+                              : <span className="flex-1 text-sm text-white/40 italic truncate">UniFi only</span>
+                            }
+                            {group.nics.length > 1 && <span className="text-xs text-white/30 flex-shrink-0">{group.nics.length} NICs</span>}
+                            <StatusBadge status={worstStatus} />
+                            <button type="button" onClick={() => setExpandedMobGrp(prev => prev === mobGrpKey ? null : mobGrpKey)} className="p-1 text-white/20 hover:text-white/50 transition-colors flex-shrink-0">
+                              <ChevronDown size={13} className={`transition-transform ${grpExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                          </div>
+                          {/* Per-NIC rows */}
+                          {grpExpanded && group.nics.map((row: any, nicIdx: number) => {
+                            const nicKey = `${group.groupKey}-nic-${nicIdx}`
+                            const nicExpanded = expandedMobNic === nicKey
+                            const diffs = new Set((row.differences ?? []).map((d: any) => d.field))
+                            const macDiff = diffs.has('MAC Address')
+                            const ipDiff = diffs.has('IP Address')
+                            const dnsDiff = diffs.has('DNS Entry')
+                            const hostnameDiff = diffs.has('Hostname')
+                            const hasActions = row.status !== 'match'
+                            const displayIp = row.mynet_ip ?? row.unifi?.ip
+                            const displayMac = row.mynet_mac ?? row.unifi?.mac
+                            const shortMac = displayMac ? displayMac.slice(0, 8) + '…' : '—'
+                            return (
+                              <div key={nicKey} className={`border-b border-white/[0.03] last:border-0 ${row.mynet_nic_disabled ? 'opacity-40' : ''}`}>
+                                {/* NIC row */}
+                                <button type="button" onClick={() => setExpandedMobNic(prev => prev === nicKey ? null : nicKey)}
+                                  className="w-full flex items-center gap-3 px-5 py-2.5 text-left bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                                  <span className="font-mono text-xs text-white/60 flex-1 truncate">{displayIp ?? <span className="text-white/25">No IP</span>}</span>
+                                  <span className="font-mono text-[10px] text-white/30 flex-shrink-0">{shortMac}</span>
+                                  <StatusBadge status={row.status} />
+                                  <ChevronDown size={12} className={`text-white/20 transition-transform flex-shrink-0 ${nicExpanded ? 'rotate-180' : ''}`} />
+                                </button>
+                                {/* NIC expanded detail */}
+                                {nicExpanded && (
+                                  <div className="px-5 pb-3 pt-2 border-t border-white/[0.03] bg-white/[0.015]">
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mb-3">
+                                      <div className="space-y-2">
+                                        <p className="text-[10px] font-semibold text-indigo-400/70 uppercase tracking-wider">UniFi</p>
+                                        {row.unifi ? (
+                                          <>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">Alias</p><p className="text-white/60 truncate">{row.unifi.name ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">MAC</p><p className={`font-mono text-[10px] truncate ${macDiff ? 'text-amber-400' : 'text-white/50'}`}>{row.unifi.mac ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">IP</p><p className={`font-mono truncate ${ipDiff ? 'text-amber-400' : 'text-white/60'}`}>{row.unifi.ip ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">Hostname</p><p className={`font-mono text-[10px] truncate ${hostnameDiff ? 'text-amber-400' : 'text-white/60'}`}>{row.unifi.hostname ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">DNS</p><p className={`font-mono text-[10px] truncate ${dnsDiff ? 'text-amber-400' : 'text-white/60'}`}>{row.unifi.local_dns ?? <span className="text-white/20">—</span>}</p></div>
+                                          </>
+                                        ) : <p className="text-white/25 text-[10px] italic mt-1">Not in UniFi</p>}
+                                      </div>
+                                      <div className="space-y-2">
+                                        <p className="text-[10px] font-semibold text-[#3ea99e]/70 uppercase tracking-wider">MyNet</p>
+                                        {(row.mynet_nic_id || row.mynet_device_id) ? (
+                                          <>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">NIC Label</p><p className="text-white/60 truncate">{row.mynet_nic_label ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">MAC</p><p className={`font-mono text-[10px] truncate ${macDiff ? 'text-amber-400' : 'text-white/50'}`}>{row.mynet_mac ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">IP</p><p className={`font-mono truncate ${ipDiff ? 'text-amber-400' : 'text-white/60'}`}>{row.mynet_ip ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">Hostname</p><p className={`font-mono text-[10px] truncate ${hostnameDiff ? 'text-amber-400' : 'text-white/60'}`}>{row.mynet_hostname ?? <span className="text-white/20">—</span>}</p></div>
+                                            <div><p className="text-[10px] text-white/30 mb-0.5">DNS</p><p className={`font-mono text-[10px] truncate ${dnsDiff ? 'text-amber-400' : 'text-white/60'}`}>{row.mynet_dns_entry ?? <span className="text-white/20">—</span>}</p></div>
+                                          </>
+                                        ) : <p className="text-white/25 text-[10px] italic mt-1">Not in MyNet</p>}
+                                      </div>
+                                    </div>
+                                    {hasActions && (
+                                      <div className="pt-2.5 border-t border-white/[0.05] flex flex-wrap gap-2">
+                                        {macDiff && row.mynet_mac && row.unifi?.mac && <SyncBtn label="MAC→UniFi" variant="mynet" writeGuarded title={`Set UniFi MAC to ${row.mynet_mac}`} syncKey={`unifi-mac-${row.unifi.mac}`} onClick={() => syncToUnifiMutation.mutate({ mac: row.unifi.mac, field: 'mac', value: row.mynet_mac })} />}
+                                        {macDiff && row.unifi?.mac && row.mynet_nic_id && <SyncBtn label="MAC→MyNet" title={`Set MyNet MAC to ${row.unifi.mac}`} syncKey={`mynet-mac-${row.mynet_nic_id}`} onClick={() => syncToMyNetMutation.mutate({ nicId: row.mynet_nic_id, field: 'mac', value: row.unifi.mac })} />}
+                                        {ipDiff && row.mynet_ip && row.unifi?.mac && <SyncBtn label="IP→UniFi" variant="mynet" writeGuarded title={`Set UniFi IP to ${row.mynet_ip}`} syncKey={`unifi-ip-${row.unifi.mac}`} onClick={() => syncToUnifiMutation.mutate({ mac: row.unifi.mac, field: 'ip', value: row.mynet_ip })} />}
+                                        {ipDiff && row.unifi?.ip && row.mynet_nic_id && <SyncBtn label="IP→MyNet" title={`Set MyNet IP to ${row.unifi.ip}`} syncKey={`mynet-ip-${row.mynet_nic_id}`} onClick={() => syncToMyNetMutation.mutate({ nicId: row.mynet_nic_id, field: 'ip', value: row.unifi.ip })} />}
+                                        {hostnameDiff && row.unifi?.hostname && row.mynet_device_id && <SyncBtn label="Host→MyNet" title={`Set MyNet hostname to ${row.unifi.hostname}`} syncKey={`mynet-host-${row.mynet_device_id}`} onClick={() => syncDeviceToMyNetMutation.mutate({ deviceId: row.mynet_device_id, field: 'hostname', value: row.unifi.hostname })} />}
+                                        {dnsDiff && row.mynet_dns_entry && row.unifi?.mac && <SyncBtn label="DNS→UniFi" variant="mynet" writeGuarded title={`Set UniFi DNS to ${row.mynet_dns_entry}`} syncKey={`unifi-dns-${row.unifi.mac}`} onClick={() => syncToUnifiMutation.mutate({ mac: row.unifi.mac, field: 'dns', value: row.mynet_dns_entry })} />}
+                                        {dnsDiff && row.unifi?.local_dns && row.mynet_nic_id && <SyncBtn label="DNS→MyNet" title={`Set MyNet DNS to ${row.unifi.local_dns}`} syncKey={`mynet-dns-${row.mynet_nic_id}`} onClick={() => syncToMyNetMutation.mutate({ nicId: row.mynet_nic_id, field: 'dns', value: row.unifi.local_dns })} />}
+                                        {row.status === 'unifi_only' && (() => {
+                                          const mac = row.unifi?.mac
+                                          const isInfra = row.unifi?.is_infrastructure
+                                          const isConfirming = confirmDeleteMac === mac
+                                          const isDeleting = deleteMutation.isPending && confirmDeleteMac === mac
+                                          return (
+                                            <>
+                                              <button type="button" onClick={() => { const params = new URLSearchParams(); if (row.unifi?.name) params.set('name', row.unifi.name); if (row.unifi?.mac) params.set('mac', row.unifi.mac); if (row.unifi?.ip) params.set('ip', row.unifi.ip); if (row.unifi?.hostname) params.set('hostname', row.unifi.hostname); if (row.unifi?.local_dns) params.set('dns_entry', row.unifi.local_dns); if (row.unifi?.is_wireless) params.set('is_wireless', 'true'); if (row.unifi?.ssid) params.set('ssid', row.unifi.ssid); navigate(`/devices/new?${params.toString()}`) }} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"><Plus size={9} />Add to MyNet</button>
+                                              {!isInfra && (isConfirming ? (
+                                                <div className="flex items-center gap-1">
+                                                  <button type="button" onClick={() => deleteMutation.mutate(mac)} disabled={isDeleting} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 transition-colors disabled:opacity-50">{isDeleting ? <Loader size={9} className="animate-spin" /> : <Trash2 size={9} />}{isDeleting ? '…' : 'Confirm'}</button>
+                                                  <button type="button" onClick={() => { deleteMutation.reset(); setConfirmDeleteMac(null) }} className="px-1.5 py-1 rounded text-[10px] text-white/30 hover:text-white/50">Cancel</button>
+                                                </div>
+                                              ) : (
+                                                <button type="button" onClick={() => { deleteMutation.reset(); setConfirmDeleteMac(mac) }} disabled={!canWrite} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"><Trash2 size={9} />Delete from UniFi</button>
+                                              ))}
+                                            </>
+                                          )
+                                        })()}
+                                        {row.status === 'mynet_only' && (
+                                          <button type="button" onClick={() => row.mynet_mac && openAddToUnifi(row)} disabled={!row.mynet_mac || !canWrite} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"><Send size={9} />Add to UniFi</button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-xs [&_td]:align-middle [&_th]:align-middle">
                       <thead>
                         <tr className="border-b border-white/[0.06]">

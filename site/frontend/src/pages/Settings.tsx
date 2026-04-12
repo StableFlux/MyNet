@@ -351,43 +351,19 @@ export default function Settings() {
         />
       )}
 
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <h1 className="text-xl font-bold text-white">Settings</h1>
-        </div>
-        <div className="flex items-stretch gap-3 w-1/2 flex-shrink-0">
-          <GlassCard hover onClick={() => navigate('/events')} className="flex-1 p-3 cursor-pointer">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
-                <ScrollText size={14} className="text-indigo-300" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-white">Events</p>
-                <p className="text-[10px] text-white/35 leading-tight">Activity, alerts &amp; conflicts</p>
-              </div>
+      <div className="space-y-3">
+        <h1 className="text-xl font-bold text-white">Settings</h1>
+        <GlassCard hover onClick={() => navigate('/events')} className="p-3 cursor-pointer">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
+              <ScrollText size={14} className="text-indigo-300" />
             </div>
-          </GlassCard>
-          <GlassCard className="border-red-500/20 p-3 flex-1">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-lg bg-red-600/15 flex items-center justify-center flex-shrink-0">
-                  <Trash2 size={14} className="text-red-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white">Factory Reset</p>
-                  <p className="text-[10px] text-white/35 leading-tight">Wipe all data and restart setup</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowResetModal(true)}
-                className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                Reset…
-              </button>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white">Events</p>
+              <p className="text-[10px] text-white/35 leading-tight">Activity, alerts &amp; conflicts</p>
             </div>
-          </GlassCard>
-        </div>
+          </div>
+        </GlassCard>
       </div>
 
       {/* Nav cards */}
@@ -411,7 +387,7 @@ export default function Settings() {
       {/* System settings */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-white/60 uppercase tracking-widest">System</h2>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 
           {/* System name */}
           <GlassCard className="space-y-4">
@@ -589,6 +565,31 @@ export default function Settings() {
           </GlassCard>
 
         </div>
+      </div>
+
+      {/* Danger zone */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-white/60 uppercase tracking-widest">Danger Zone</h2>
+        <GlassCard className="border-red-500/20 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-red-600/15 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={15} className="text-red-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">Factory Reset</p>
+                <p className="text-xs text-white/35 mt-0.5">Wipe all data and restart setup. This cannot be undone.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowResetModal(true)}
+              className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              Reset…
+            </button>
+          </div>
+        </GlassCard>
       </div>
 
     </div>

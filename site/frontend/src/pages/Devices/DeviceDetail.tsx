@@ -160,7 +160,7 @@ function WanConfigCard({ wanConfigs }: { wanConfigs: any[] }) {
                 <span className="text-xs font-medium text-white/60">{portLabel}</span>
               </div>
               {/* Fields */}
-              <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
                 {/* Row 1: Connection | VLAN ID | MTU */}
                 <div><Field label="Connection" value={connLabel} /></div>
                 <div>{wc.vlan_id != null ? <Field label="VLAN ID" value={String(wc.vlan_id)} mono /> : <span />}</div>
@@ -489,7 +489,7 @@ function DeviceDetailInner({
                       <span className="text-[8px] font-medium text-white/30 uppercase tracking-wide leading-none">off</span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 grid grid-cols-3 gap-x-4 gap-y-2">
+                  <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
                     <div><Field label="Interface" value={nic.label || (nic.nic_type?.toUpperCase() === 'WIFI' ? 'WiFi' : 'Ethernet')} mono={!!nic.label} /></div>
                     <div>
                       {nic.nic_type?.toUpperCase() === 'WIFI'
@@ -724,7 +724,7 @@ function DeviceDetailInner({
                   key={vm.id}
                   type="button"
                   onClick={() => navigate(`/devices/${vm.id}`)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-glass-border hover:bg-white/[0.06] transition-colors text-left"
+                  className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 py-2 rounded-lg bg-white/[0.03] border border-glass-border hover:bg-white/[0.06] transition-colors text-left gap-1 sm:gap-0"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm text-white truncate">{vm.name}</span>
@@ -732,7 +732,7 @@ function DeviceDetailInner({
                       <span className="text-[11px] text-white/40 truncate">{vm.device_type_name}</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <div className="flex items-center gap-2 flex-shrink-0 sm:ml-2">
                     {vm.primary_ip && (
                       <span className="text-[11px] font-mono text-white/50">{vm.primary_ip}</span>
                     )}
@@ -750,7 +750,7 @@ function DeviceDetailInner({
             <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Services</h3>
             <div className="space-y-3">
               {device.services.map((svc: any, i: number) => (
-                <div key={i} className="grid grid-cols-2 gap-x-6 gap-y-1">
+                <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                   {svc.name && <Field label="Name" value={svc.name} />}
                   {svc.port && <Field label="Port" value={String(svc.port)} mono />}
                   {svc.url && <Field label="URL" value={svc.url} mono />}
@@ -774,7 +774,7 @@ function DeviceDetailInner({
           <GlassCard>
             <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Hardware</h3>
             {(device.brand || device.model || device.cpu || device.ram || device.gpu) && (
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                 {device.brand && <Field label="Brand" value={device.brand} />}
                 {device.model && <Field label="Model" value={device.model} />}
                 {device.cpu && <Field label="CPU" value={device.cpu} />}
@@ -785,7 +785,7 @@ function DeviceDetailInner({
             {device.drives?.length > 0 && (
               <>
                 <p className="text-[10px] text-white/30 uppercase tracking-wider mt-4 mb-2">Storage</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                   {device.drives.map((d: any, i: number) => (
                     <Field
                       key={i}
@@ -804,7 +804,7 @@ function DeviceDetailInner({
         return (
           <GlassCard>
             <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">Software & Access</h3>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
               {device.os && <Field label="OS" value={`${device.os}${device.os_version ? ` ${device.os_version}` : ''}`} />}
               {device.hostname && <Field label="Hostname" value={device.hostname} mono />}
               {device.username && (
@@ -867,13 +867,13 @@ function DeviceDetailInner({
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="relative flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <button type="button" onClick={() => navigate(-1)} className="btn-ghost p-2 flex-shrink-0" aria-label="Back to devices">
+      <div className="flex flex-col gap-3 sm:relative sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <button type="button" onClick={() => navigate(-1)} className="btn-ghost p-2 flex-shrink-0 mt-0.5" aria-label="Back to devices">
             <ChevronLeft size={18} />
           </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <DeviceTypeIcon name={(device as any).device_type_icon ?? HARDWARE_TYPE_ICON[(device as any).hardware_type]} size={32} className="text-white/30 flex-shrink-0" />
+          <div className="flex items-start gap-2 min-w-0">
+            <DeviceTypeIcon name={(device as any).device_type_icon ?? HARDWARE_TYPE_ICON[(device as any).hardware_type]} size={32} className="text-white/30 flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-white truncate">{device.name}</h1>
               {device.use && <p className="text-sm text-white/40 mt-0.5 truncate">{device.use}</p>}
@@ -888,12 +888,47 @@ function DeviceDetailInner({
                   </span>
                 )
               })()}
+              {/* Mobile-only: type + location badges (replaces the absolute-positioned desktop version) */}
+              <div className="sm:hidden flex flex-wrap gap-1.5 mt-1.5">
+                {((device as any).device_type_category || (device as any).device_type_name || (device as any).hardware_type) && (() => {
+                  const hex = colors.categoryColor((device as any).device_type_category ?? (device as any).hardware_type)
+                  return (
+                    <div className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 border"
+                      style={{ borderColor: hex + '40', backgroundColor: hex + '15' }}>
+                      <DeviceTypeIcon name={(device as any).device_type_icon ?? HARDWARE_TYPE_ICON[(device as any).hardware_type]} size={10} style={{ color: hex + '80' }} className="flex-shrink-0" />
+                      {(device as any).device_type_category && <span className="text-xs font-medium" style={{ color: hex + '99' }}>{(device as any).device_type_category}</span>}
+                      {(device as any).device_type_category && (device as any).device_type_name && <span className="text-xs" style={{ color: hex + '50' }}>›</span>}
+                      {(device as any).device_type_name
+                        ? <span className="text-xs font-medium" style={{ color: hex }}>{(device as any).device_type_name}</span>
+                        : !(device as any).device_type_category && (device as any).hardware_type && <span className="text-xs font-medium" style={{ color: hex }}>{(device as any).hardware_type}</span>}
+                    </div>
+                  )
+                })()}
+                {((device as any).location_path || (device as any).storage_location_path) && (() => {
+                  const locType = (device as any).location_type ?? (device as any).storage_location_type
+                  const hex = colors.locationColor(locType)
+                  const LocIcon = LOCATION_TYPE_ICON[locType] ?? MapPin
+                  return (
+                    <div className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 border"
+                      style={{ borderColor: hex + '40', backgroundColor: hex + '15' }}>
+                      <LocIcon size={10} style={{ color: hex + '80' }} className="flex-shrink-0" />
+                      {(device as any).location_path && <span className="text-xs font-medium" style={{ color: hex }}>{(device as any).location_path}</span>}
+                      {(device as any).storage_location_path && (
+                        <>
+                          {(device as any).location_path && <span className="text-xs" style={{ color: hex + '50' }}>·</span>}
+                          <span className="text-xs font-medium" style={{ color: hex }}>{(device as any).storage_location_path}</span>
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Centre meta — device type + location */}
-        <div className="absolute left-1/3 flex flex-col gap-1.5 items-start pointer-events-none">
+        {/* Centre meta — device type + location — desktop only (hidden on mobile, shown inline below title) */}
+        <div className="hidden sm:block absolute left-1/3 flex flex-col gap-1.5 items-start pointer-events-none">
         <div className="flex flex-col gap-1.5 items-start pointer-events-auto">
           {((device as any).device_type_category || (device as any).device_type_name || (device as any).hardware_type) && (() => {
             const hex = colors.categoryColor((device as any).device_type_category ?? (device as any).hardware_type)
@@ -947,7 +982,7 @@ function DeviceDetailInner({
         </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
           <button type="button" onClick={() => setShowHistory(true)} className="btn-ghost flex items-center gap-1.5 text-sm">
             <History size={14} /> History
           </button>
@@ -1079,13 +1114,13 @@ function DeviceDetailInner({
 
       {/* Switch port diagram */}
       {device.switch_ports?.length > 0 && (
-        <div className="flex justify-center">
+        <div className="flex justify-center overflow-x-auto">
           <SwitchDiagram device={device} wanConfigs={wanConfigsWithStatus} wanColor={colors.wanPortColor} />
         </div>
       )}
 
       {/* Main content: DnD grid + fixed sidebar */}
-      <div className="flex gap-5 items-start">
+      <div className="flex flex-col gap-5 md:flex-row md:items-start">
 
         {/* Draggable layout — wide row + two flex columns */}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -1112,7 +1147,7 @@ function DeviceDetailInner({
 
             {/* Two flex columns — no row-height coupling, no gaps */}
             {(col0Cards.length > 0 || col1Cards.length > 0) && (
-              <div className="flex gap-4 items-start">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start">
                 <SortableContext items={col0Cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
                   <div className="flex-1 flex flex-col gap-4">
                     {col0Cards.flatMap(card => {
@@ -1159,7 +1194,7 @@ function DeviceDetailInner({
         </DndContext>
 
         {/* Fixed right sidebar */}
-        <div className="w-72 flex-shrink-0 space-y-4">
+        <div className="w-full md:w-72 md:flex-shrink-0 space-y-4">
           {device.pihole_enabled && piholeStatus && (
             <GlassCard className={piholeStatus.reachable === false ? 'border-red-500/20' : ''}>
               <div className="flex items-center justify-between mb-3">

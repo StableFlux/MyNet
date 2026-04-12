@@ -250,8 +250,8 @@ export default function NetworkForm() {
 
       {/* Identity */}
       <Section title="Identity">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="col-span-2 sm:col-span-2">
             <Field label="Network Name *">
               <TextInput value={form.name} onChange={(v) => set({ name: v })} placeholder="Core Network" />
               {errors.name && <p className="text-xs text-red-400 mt-1">{errors.name}</p>}
@@ -304,7 +304,7 @@ export default function NetworkForm() {
 
       {/* Addressing */}
       <Section title="IP Addressing">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="CIDR">
             <TextInput value={form.cidr} onChange={(v) => set({ cidr: v })} placeholder="192.168.1.0/24" mono />
           </Field>
@@ -407,7 +407,7 @@ export default function NetworkForm() {
                   aria-label={`Remove SSID ${i + 1}`}
                 ><X size={13} /></button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Field label="Network Name">
                   <TextInput
                     value={entry.ssid}

@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore'
 import api from '../../lib/api'
 import { useColorSettings } from '../../hooks/useColorSettings'
 
-const CARD_GRID = 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
+const CARD_GRID = 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
 const LIST_COLS = '1fr 10rem 10rem 49.5rem 8.75rem'
 
 /** Derive opacity variants of a stored hex color for group headers */
@@ -448,24 +448,27 @@ export default function DeviceList() {
       </div>
 
       {/* Status filters + view mode */}
-      <div className="flex items-center gap-4 divide-x divide-white/10">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {([
             { key: 'in_service',     label: 'In Service'     },
             { key: 'stock',          label: 'Stock'          },
             { key: 'undeployed',     label: 'Undeployed'     },
-            { key: 'decommissioned', label: 'Decommissioned' },
-          ] as const).map(({ key, label }) => (
+            { key: 'decommissioned', label: 'Decommissioned', shortLabel: 'Decom' },
+          ] as const).map(({ key, label, shortLabel }: { key: string; label: string; shortLabel?: string }) => (
             <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-              <button type="button" onClick={() => toggleStatus(key)}
-                className={includeStatuses.has(key) ? 'text-indigo-400' : 'text-white/25'}>
-                {includeStatuses.has(key) ? <CheckSquare size={14} /> : <Square size={14} />}
+              <button type="button" onClick={() => toggleStatus(key as any)}
+                className={includeStatuses.has(key as any) ? 'text-indigo-400' : 'text-white/25'}>
+                {includeStatuses.has(key as any) ? <CheckSquare size={14} /> : <Square size={14} />}
               </button>
-              <span className="text-sm text-white/60">{label}</span>
+              <span className="text-sm text-white/60">
+                {shortLabel && <span className="sm:hidden">{shortLabel}</span>}
+                <span className={shortLabel ? 'hidden sm:inline' : ''}>{label}</span>
+              </span>
             </label>
           ))}
         </div>
-        <div className="flex items-center gap-4 pl-4">
+        <div className="flex items-center gap-4 border-l border-white/10 pl-4">
           {([
             { value: 'grid' as const, icon: LayoutGrid,   label: 'Grid' },
             { value: 'list' as const, icon: AlignJustify, label: 'List' },
@@ -489,21 +492,12 @@ export default function DeviceList() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
-          <input
-            type="search"
-            placeholder="Search devices…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            className="glass-input text-sm pl-7 w-80"
-          />
-        </div>
-
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {/* Dropdowns — 2-col grid on mobile, inline on desktop */}
+        <div className="grid grid-cols-2 gap-2 sm:contents">
         <select aria-label="Filter by network" value={networkId ?? ''}
           onChange={(e) => setNetworkId(e.target.value ? Number(e.target.value) : undefined)}
-          className="glass-input text-sm w-60">
+          className="glass-input text-sm w-full sm:w-60">
           <option value="" className="bg-surface-overlay">All networks</option>
           {(networks ?? []).map((n: any) => (
             <option key={n.id} value={n.id} className="bg-surface-overlay">
@@ -512,9 +506,9 @@ export default function DeviceList() {
           ))}
         </select>
 
-        <div ref={locDropRef} className="relative">
+        <div ref={locDropRef} className="relative w-full sm:w-[16.5rem]">
           <button type="button" onClick={() => setLocDropOpen(o => !o)}
-            className="glass-input text-sm w-[16.5rem] flex items-center justify-between gap-2 text-left cursor-pointer">
+            className="glass-input text-sm w-full flex items-center justify-between gap-2 text-left cursor-pointer">
             <span className="truncate text-white">
               {locationFilter === '__none__' ? '— No location'
                 : selectedLocId ? (locations.find(l => l.id === selectedLocId)?.name ?? 'Location')
@@ -523,7 +517,7 @@ export default function DeviceList() {
             <ChevronDown size={13} className={`flex-shrink-0 text-white/30 transition-transform ${locDropOpen ? 'rotate-180' : ''}`} />
           </button>
           {locDropOpen && (
-            <div className="absolute z-30 top-full mt-1 left-0 w-[16.5rem] glass-card rounded-lg border border-white/[0.08] shadow-xl overflow-y-auto max-h-72 py-1">
+            <div className="absolute z-30 top-full mt-1 left-0 w-full sm:w-[16.5rem] glass-card rounded-lg border border-white/[0.08] shadow-xl overflow-y-auto max-h-72 py-1">
               {[
                 { value: '', label: 'All locations', depth: 0 },
                 ...(allSearchResults.some((d: any) => !d.location && !d.storage_location) ? [{ value: '__none__', label: '— No location', depth: 0 }] : []),
@@ -545,7 +539,7 @@ export default function DeviceList() {
           aria-label="Filter by category"
           value={filterCategory}
           onChange={(e) => { setFilterCategory(e.target.value); setDeviceTypeId(undefined) }}
-          className="glass-input text-sm w-60"
+          className="glass-input text-sm w-full sm:w-60"
         >
           <option value="" className="bg-surface-overlay">All categories</option>
           {Array.from(new Set<string>((deviceTypes ?? []).map((dt: any) => dt.category ?? 'Other'))).sort().map((cat) => (
@@ -558,7 +552,7 @@ export default function DeviceList() {
             aria-label="Filter by sub-type"
             value={deviceTypeId ?? ''}
             onChange={(e) => setDeviceTypeId(e.target.value ? Number(e.target.value) : undefined)}
-            className="glass-input text-sm w-60"
+            className="glass-input text-sm w-full sm:w-60"
           >
             <option value="" className="bg-surface-overlay">All sub-types</option>
             {(deviceTypes ?? [])
@@ -569,6 +563,19 @@ export default function DeviceList() {
               ))}
           </select>
         )}
+        </div>{/* end dropdowns grid */}
+
+        {/* Search — full width on mobile, fixed width on desktop */}
+        <div className="relative w-full sm:w-80 sm:order-first">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+          <input
+            type="search"
+            placeholder="Search devices…"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="glass-input text-sm pl-7 w-full"
+          />
+        </div>
 
         {hasFilters && (
           <button type="button" onClick={clearFilters} className="btn-ghost flex items-center gap-1 text-sm">

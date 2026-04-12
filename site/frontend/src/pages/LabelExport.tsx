@@ -39,6 +39,16 @@ export default function LabelExport() {
     queryFn: async () => { const { data } = await api.get('/system-settings'); return data },
   })
 
+  const { data: networks = [] } = useQuery<any[]>({
+    queryKey: ['networks'],
+    queryFn: async () => { const { data } = await api.get('/networks'); return data },
+  })
+
+  const networkMap = useMemo(
+    () => Object.fromEntries((networks as any[]).map((n: any) => [n.id, n])),
+    [networks]
+  )
+
   const grouped = useMemo(() => {
     if (!devices.length || !deviceTypes.length) return []
     const typeMap = Object.fromEntries((deviceTypes as any[]).map((dt: any) => [dt.id, dt]))
@@ -104,7 +114,7 @@ export default function LabelExport() {
   const getExtra = (d: any, col: ExtraCol) => {
     if (col === 'mynet_url')    return `${mynetBase}/devices/${d.id}`
     if (col === 'ip')           return (d.nics ?? []).map((n: any) => n.ip_address).filter((ip: string) => ip && ip !== 'DHCP').join(', ')
-    if (col === 'vlan')         return [...new Set((d.nics ?? []).map((n: any) => n.vlan_id).filter(Boolean))].join(', ')
+    if (col === 'vlan')         return [...new Set((d.nics ?? []).map((n: any) => n.vlan_id ?? networkMap[n.network_id]?.vlan_id).filter(Boolean))].join(', ')
     if (col === 'hostname')     return d.hostname ?? ''
     if (col === 'location')     return d.location ?? ''
     if (col === 'brand')        return [d.brand, d.model].filter(Boolean).join(' ')
@@ -130,7 +140,7 @@ export default function LabelExport() {
     URL.revokeObjectURL(url)
   }
 
-  // Build dynamic grid template: checkbox + name + active extra cols
+  // Desktop grid template: checkbox + name + active extra cols
   const colCount = 1 + extraCols.size
   const gridCols = `2rem repeat(${colCount}, 1fr)`
 
@@ -139,18 +149,17 @@ export default function LabelExport() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm">
-            <ChevronLeft size={14} />
-            Settings
+          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm flex-shrink-0">
+            <ChevronLeft size={14} /> Settings
           </button>
           <div>
             <h1 className="text-xl font-bold text-white">Label CSV Export</h1>
             <p className="text-sm text-white/40 mt-0.5">Select devices to include in the export</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between sm:justify-end gap-3">
           <span className="text-sm text-white/40">{selected.size} of {allIds.length} selected</span>
           <button type="button" onClick={downloadCsv} disabled={selected.size === 0}
             className="btn-primary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -159,12 +168,13 @@ export default function LabelExport() {
         </div>
       </div>
 
+      {/* Options card */}
       <GlassCard>
-        <div className="flex flex-wrap gap-x-8 gap-y-4 divide-x divide-glass-border">
+        <div className="flex flex-col sm:flex-row gap-5">
           {/* Status filters */}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Include Status</p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
               {([
                 { key: 'in_service',     label: 'In Service'     },
                 { key: 'stock',          label: 'Stock'          },
@@ -182,10 +192,13 @@ export default function LabelExport() {
             </div>
           </div>
 
+          {/* Divider */}
+          <div className="border-t border-glass-border sm:border-t-0 sm:border-l sm:border-glass-border" />
+
           {/* Extra column toggles */}
-          <div className="space-y-1.5 pl-8">
+          <div className="space-y-2 sm:pl-3">
             <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Include Details</p>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
               {EXTRA_COLS.map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
                   <button type="button" onClick={() => toggleExtraCol(key)}
@@ -228,8 +241,8 @@ export default function LabelExport() {
                 {/* Category header */}
                 <div className="flex items-center border-b border-glass-border">
                   <button type="button" onClick={() => toggleCategory(catIds)}
-                    className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left flex-1">
-                    <div className="text-indigo-400">
+                    className="flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-white/[0.03] transition-colors text-left flex-1">
+                    <div className="text-indigo-400 flex-shrink-0">
                       {allIn ? <CheckSquare size={15} /> : someIn ? <CheckSquare size={15} className="opacity-50" /> : <Square size={15} className="text-white/25" />}
                     </div>
                     <span className="text-sm font-semibold text-white">{category}</span>
@@ -244,39 +257,57 @@ export default function LabelExport() {
                   </button>
                 </div>
 
-                {!isCollapsed && <>
-                  {/* Column headers */}
-                  <div className="grid gap-x-4 px-5 py-1.5 border-b border-glass-border bg-white/[0.02]"
-                    style={{ gridTemplateColumns: gridCols }}>
-                    <div />
-                    <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Name</span>
-                    {EXTRA_COLS.filter(c => extraCols.has(c.key)).map(c => (
-                      <span key={c.key} className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">{c.label}</span>
-                    ))}
-                  </div>
+                {!isCollapsed && (
+                  <>
+                    {/* Mobile: checkbox + name only */}
+                    <div className="sm:hidden divide-y divide-glass-border/50">
+                      {devs.map((d: any) => {
+                        const isSelected = selected.has(d.id)
+                        return (
+                          <button key={d.id} type="button" onClick={() => toggleDevice(d.id)}
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors text-left">
+                            <div className={`flex-shrink-0 ${isSelected ? 'text-indigo-400' : 'text-white/25'}`}>
+                              {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                            </div>
+                            <span className={`text-sm truncate ${isSelected ? 'text-white' : 'text-white/60'}`}>{d.name}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
 
-                  {/* Devices */}
-                  <div className="divide-y divide-glass-border/50">
-                    {devs.map((d: any) => {
-                      const isSelected = selected.has(d.id)
-                      return (
-                        <button key={d.id} type="button" onClick={() => toggleDevice(d.id)}
-                          className="w-full grid gap-x-4 items-center px-5 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
-                          style={{ gridTemplateColumns: gridCols }}>
-                          <div className={isSelected ? 'text-indigo-400' : 'text-white/25'}>
-                            {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                          </div>
-                          <span className={`text-sm truncate ${isSelected ? 'text-white' : 'text-white/60'}`}>{d.name}</span>
-                          {EXTRA_COLS.filter(c => extraCols.has(c.key)).map(c => (
-                            <span key={c.key} className={`text-xs truncate ${isSelected ? 'text-white/60' : 'text-white/25'}`}>
-                              {getExtra(d, c.key)}
-                            </span>
-                          ))}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>}
+                    {/* Desktop: full column layout with extra cols */}
+                    <div className="hidden sm:block overflow-x-auto">
+                      <div className="grid gap-x-4 px-5 py-1.5 border-b border-glass-border bg-white/[0.02]"
+                        style={{ gridTemplateColumns: gridCols }}>
+                        <div />
+                        <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Name</span>
+                        {EXTRA_COLS.filter(c => extraCols.has(c.key)).map(c => (
+                          <span key={c.key} className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">{c.label}</span>
+                        ))}
+                      </div>
+                      <div className="divide-y divide-glass-border/50">
+                        {devs.map((d: any) => {
+                          const isSelected = selected.has(d.id)
+                          return (
+                            <button key={d.id} type="button" onClick={() => toggleDevice(d.id)}
+                              className="w-full grid gap-x-4 items-center px-5 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
+                              style={{ gridTemplateColumns: gridCols }}>
+                              <div className={isSelected ? 'text-indigo-400' : 'text-white/25'}>
+                                {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                              </div>
+                              <span className={`text-sm truncate ${isSelected ? 'text-white' : 'text-white/60'}`}>{d.name}</span>
+                              {EXTRA_COLS.filter(c => extraCols.has(c.key)).map(c => (
+                                <span key={c.key} className={`text-xs truncate ${isSelected ? 'text-white/60' : 'text-white/25'}`}>
+                                  {getExtra(d, c.key)}
+                                </span>
+                              ))}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
               </GlassCard>
             )
           })}

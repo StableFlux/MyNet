@@ -377,7 +377,7 @@ useEffect(() => {
 
             {/* ── Expanded / per-port config ─────────────────────── */}
             {isOpen && (
-              <div className="px-3 pb-3 pt-2 border-t border-glass-border grid grid-cols-2 gap-3">
+              <div className="px-3 pb-3 pt-2 border-t border-glass-border grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] text-white/40 mb-1">Port Name</label>
                   <input
@@ -493,7 +493,7 @@ useEffect(() => {
                     <span className="text-sm text-white/60">Management Port (OOB)</span>
                   </label>
                   {port.is_management && (
-                    <div className="grid grid-cols-2 gap-3 mt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
                       <div>
                         <label className="block text-[10px] text-white/40 mb-1">Management Network</label>
                         <select value={port.mgmt_network_id ?? ''}

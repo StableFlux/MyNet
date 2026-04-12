@@ -275,7 +275,7 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
             </div>
 
             {/* Common NIC fields */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] text-white/40 mb-1">MAC Address</label>
                 <input value={nic.mac} onChange={(e) => update(i, { mac: e.target.value })}
@@ -375,7 +375,7 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
             </div>
 
             {/* DNS servers + static gateway */}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-glass-border">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-glass-border">
               <div>
                 <label className="block text-[10px] text-white/40 mb-1">DNS Server 1</label>
                 <input value={nic.dns_server_1} onChange={(e) => update(i, { dns_server_1: e.target.value })}
@@ -409,7 +409,7 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
 
             {/* ETH-only fields */}
             {nic.nic_type === 'ETH' && (
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-glass-border">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-glass-border">
                 <div>
                   <label className="block text-[10px] text-white/40 mb-1">Switch</label>
                   <select
@@ -478,7 +478,7 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
               const speeds = getTransceiverSpeeds(nic.nic_type, nic.transceiver_type)
               const noSpeeds = nic.transceiver_type && speeds.length === 0
               return (
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-glass-border">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-glass-border">
                   <div>
                     <label className="block text-[10px] text-white/40 mb-1">Transceiver Type</label>
                     <select value={nic.transceiver_type}
@@ -515,7 +515,7 @@ export function NicForm({ nics, onChange, networks, switchDevices = [], readOnly
 
             {/* WiFi-only fields */}
             {nic.nic_type === 'WIFI' && (
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-glass-border">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-glass-border">
                 <div>
                   <label className="block text-[10px] text-white/40 mb-1">
                     SSID{networkSsids.length > 0 && <span className="text-white/20 ml-1">— from selected network</span>}

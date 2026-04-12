@@ -42,7 +42,7 @@ function DeployForm({
     <div className="mx-4 mb-3 p-4 rounded-xl border border-indigo-500/30 space-y-3"
       style={{ background: 'linear-gradient(160deg, color-mix(in srgb, #6366f1 6%, var(--card-base-deep)) 0%, var(--card-base-deepest) 100%)' }}>
       <p className="text-xs font-semibold text-indigo-300">Deploy {device.name}</p>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-[10px] text-white/40 block mb-1">Name</label>
           <input className="glass-input w-full text-sm" value={form.name}
@@ -94,8 +94,8 @@ export default function StockTracker() {
   const canEdit = user?.role === 'admin' || user?.role === 'editor'
   const colors = useColorSettings()
   const [deployingId, setDeployingId] = useState<number | null>(null)
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const toggleModel = (key: string) => setCollapsed(c => ({ ...c, [key]: !c[key] }))
+  const [expandedModel, setExpandedModel] = useState<string | null>(null)
+  const toggleModel = (key: string) => setExpandedModel(prev => prev === key ? null : key)
 
   const { data: devices } = useQuery({
     queryKey: ['devices', 'stock'],
@@ -246,7 +246,7 @@ export default function StockTracker() {
                         : colors.statusColor('stock')
                       const sample = items[0]
                       const collapseKey = `${brand}::${category}::${modelKey}`
-                      const isCollapsed = collapsed[collapseKey] ?? true
+                      const isCollapsed = expandedModel !== collapseKey
 
                       return (
                         <div key={collapseKey}

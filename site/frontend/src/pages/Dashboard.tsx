@@ -159,7 +159,7 @@ export default function Dashboard() {
     : undefined
 
   return (
-    <div className="space-y-5 -m-6 p-6 min-h-full" style={{ background: dashBg }}>
+    <div className="space-y-5 -m-4 p-4 md:-m-6 md:p-6 min-h-full" style={{ background: dashBg }}>
 
       {/* ── Page header ── */}
       <div className="flex items-center justify-between">
@@ -176,7 +176,7 @@ export default function Dashboard() {
 
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard label="In Service" value={s?.in_service ?? 0}
           sub={`${s?.decommissioned_count ?? 0} decommissioned`}
           icon={Monitor} color="#6366f1" to="/devices" />
@@ -433,7 +433,7 @@ export default function Dashboard() {
               </div>
 
               {/* Stat tiles */}
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { label: 'Total Queries', value: (pihole.total_queries ?? 0).toLocaleString(), color: '#3b82f6' },
                   { label: 'Queries Blocked', value: (pihole.total_blocked ?? 0).toLocaleString(), color: '#ef4444' },
@@ -502,7 +502,7 @@ export default function Dashboard() {
                 </GlassCard>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Top clients */}
               <GlassCard>
                 <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider mb-3">Top DNS Clients</h3>

@@ -139,6 +139,7 @@ export function SwitchDiagram({ device, wanConfigs = [], wanColor = '#f59e0b' }:
 
   return (
     <>
+      <div className="overflow-x-auto pb-1 max-w-full">
       <div className="switch-chassis">
         {/* Header */}
         <div className="flex items-center justify-between gap-6">
@@ -179,6 +180,7 @@ export function SwitchDiagram({ device, wanConfigs = [], wanColor = '#f59e0b' }:
           )}
         </div>
       </div>
+      </div>{/* end overflow-x-auto */}
 
       {/* Hover tooltip */}
       {hoveredPort && (

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AreaChart, Area, LineChart, Line, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Activity, LayoutGrid, List, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Globe } from 'lucide-react'
+import { Activity, LayoutGrid, List, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Globe, Search } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { DeviceTypeIcon, HARDWARE_TYPE_ICON, NIC_TYPE_ICON } from '../components/DeviceTypeIcon'
 import { useColorSettings } from '../hooks/useColorSettings'
@@ -65,7 +65,7 @@ function NicRow({ nic, deviceId }: { nic: any; deviceId: number }) {
       {/* Sparkline */}
       <div className="h-5 w-12 flex-shrink-0">
         {nic.sparkline && nic.sparkline.length > 1 && (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={1}>
             <AreaChart data={nic.sparkline} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -89,9 +89,42 @@ function WanConnectionCard({ wan, wanColor }: { wan: any; wanColor: string }) {
   const gradId = `wan-${wan.device_id}-${wan.switch_port_id ?? wan.ip.replace(/\./g, '-')}`
   const ispLabel = wan.nic_label?.replace(/^WAN\s*[–-]\s*/i, '').trim() || null
 
+  const renderChart = (id: string, height: string) =>
+    wan.sparkline && wan.sparkline.length > 1 ? (
+      <div className={`${height} w-full`}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={1}>
+          <AreaChart data={wan.sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.[0]) return null
+                const val = payload[0].value
+                return (
+                  <div className="text-[10px] bg-surface-overlay border border-white/10 rounded px-2 py-1 text-white/70">
+                    {val != null ? `${val}ms` : 'offline'}
+                  </div>
+                )
+              }}
+            />
+            <Area type="monotone" dataKey="latency" stroke={color} strokeWidth={1.5}
+              fill={`url(#${id})`} dot={false} isAnimationActive={false} connectNulls={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    ) : (
+      <div className={`${height} flex items-center`}>
+        <div className="w-full h-px bg-white/5" />
+      </div>
+    )
+
   return (
     <div
-      className="glass-card p-4 cursor-pointer glass-card-interactive flex items-center gap-4"
+      className="glass-card p-4 cursor-pointer glass-card-interactive"
       onClick={() => navigate(`/devices/${wan.device_id}`)}
       style={{
         borderLeftColor: `${color}66`,
@@ -99,76 +132,56 @@ function WanConnectionCard({ wan, wanColor }: { wan: any; wanColor: string }) {
         background: `linear-gradient(160deg, color-mix(in srgb, ${color} 6%, var(--card-base-mid)) 0%, var(--card-base-deep) 60%)`,
       }}
     >
-      {/* Icon */}
-      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ backgroundColor: `${color}18`, border: `1px solid ${color}33` }}>
-        <Globe size={15} style={{ color: wanColor }} />
-      </div>
-
-      {/* ISP + device + ping target */}
-      <div className="flex-shrink-0 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${wan.status === 'up' ? 'animate-pulse' : ''}`}
-            style={{ backgroundColor: color, boxShadow: wan.status === 'up' ? `0 0 5px ${color}` : undefined }}
-          />
-          <p className="text-sm font-semibold text-white truncate">{ispLabel || wan.ip}</p>
+      {/* Row 1: icon + name + (desktop sparkline) + stats */}
+      <div className="flex items-center gap-3 sm:gap-4">
+        {/* Icon */}
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: `${color}18`, border: `1px solid ${color}33` }}>
+          <Globe size={15} style={{ color: wanColor }} />
         </div>
-        <p className="text-[10px] text-white/30 truncate mt-0.5 pl-3">{wan.device_name}</p>
-        <p className="text-[10px] font-mono text-white/25 truncate mt-0.5 pl-3">{wan.ip}</p>
-      </div>
 
-      {/* Sparkline — fills remaining space */}
-      <div className="flex-1 h-14 min-w-0">
-        {wan.sparkline && wan.sparkline.length > 1 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={wan.sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={color} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.[0]) return null
-                  const val = payload[0].value
-                  return (
-                    <div className="text-[10px] bg-surface-overlay border border-white/10 rounded px-2 py-1 text-white/70">
-                      {val != null ? `${val}ms` : 'offline'}
-                    </div>
-                  )
-                }}
-              />
-              <Area type="monotone" dataKey="latency" stroke={color} strokeWidth={1.5}
-                fill={`url(#${gradId})`} dot={false} isAnimationActive={false} connectNulls={false} />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-full flex items-center">
-            <div className="w-full h-px bg-white/5" />
+        {/* ISP + device + ping target */}
+        <div className="flex-shrink-0 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${wan.status === 'up' ? 'animate-pulse' : ''}`}
+              style={{ backgroundColor: color, boxShadow: wan.status === 'up' ? `0 0 5px ${color}` : undefined }}
+            />
+            <p className="text-sm font-semibold text-white truncate">{ispLabel || wan.ip}</p>
           </div>
-        )}
+          <p className="text-[10px] text-white/30 truncate mt-0.5 pl-3">{wan.device_name}</p>
+          <p className="text-[10px] font-mono text-white/25 truncate mt-0.5 pl-3">{wan.ip}</p>
+        </div>
+
+        {/* Sparkline — desktop only, inline between name and stats */}
+        <div className="hidden sm:block sm:flex-1 min-w-0">
+          {renderChart(gradId + '-d', 'h-14')}
+        </div>
+
+        {/* Stats */}
+        <div className="ml-auto sm:ml-0 flex items-center gap-4 sm:gap-6 flex-shrink-0 text-right">
+          <div>
+            <p className="text-sm font-mono text-white">
+              {wan.status === 'up' && wan.latency_ms != null ? `${wan.latency_ms}ms` : '—'}
+            </p>
+            <p className="text-[10px] text-white/30">latency</p>
+          </div>
+          <div>
+            <p className="text-sm font-mono text-white">{wan.avg_latency != null ? `${wan.avg_latency}ms` : '—'}</p>
+            <p className="text-[10px] text-white/30">avg</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium" style={{ color }}>
+              {wan.uptime_pct != null ? `${wan.uptime_pct}%` : wan.status}
+            </p>
+            <p className="text-[10px] text-white/30">uptime</p>
+          </div>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="flex items-center gap-6 flex-shrink-0 text-right">
-        <div>
-          <p className="text-sm font-mono text-white">
-            {wan.status === 'up' && wan.latency_ms != null ? `${wan.latency_ms}ms` : '—'}
-          </p>
-          <p className="text-[10px] text-white/30">latency</p>
-        </div>
-        <div>
-          <p className="text-sm font-mono text-white">{wan.avg_latency != null ? `${wan.avg_latency}ms` : '—'}</p>
-          <p className="text-[10px] text-white/30">avg</p>
-        </div>
-        <div>
-          <p className="text-sm font-medium" style={{ color }}>
-            {wan.uptime_pct != null ? `${wan.uptime_pct}%` : wan.status}
-          </p>
-          <p className="text-[10px] text-white/30">uptime</p>
-        </div>
+      {/* Row 2: sparkline — mobile only, full width */}
+      <div className="sm:hidden mt-2">
+        {renderChart(gradId + '-m', 'h-10')}
       </div>
     </div>
   )
@@ -240,7 +253,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
           const lineColor = lanNics[0]?.network_color ?? color
           return (
             <div className="h-14 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={1}>
                 <AreaChart data={d.sparkline} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
                   <defs>
                     <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -281,7 +294,7 @@ function DeviceMonitorCard({ d }: { d: any }) {
 
         return (
           <div className="h-14 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={1}>
               <LineChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
                 <XAxis dataKey="t" hide />
                 <Tooltip content={({ active, payload }) => {
@@ -329,6 +342,8 @@ export default function Monitoring() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(sessionStorage.getItem('monitoring-collapsed') ?? '{}') } catch { return {} }
   })
+  const [deviceSearch, setDeviceSearch] = useState('')
+  const [networkFilter, setNetworkFilter] = useState<string | null>(null)
 
   const saveViewMode = (mode: 'grouped' | 'grid') => {
     setViewMode(mode)
@@ -392,8 +407,27 @@ export default function Monitoring() {
       .map(([name, { color, devices }]) => ({ name, color, devices }))
   }, [devices])
 
-  const allCollapsed = groups.length > 0 && groups.every(g => collapsed[g.name])
-  const anyCollapsed = groups.some(g => collapsed[g.name])
+  const searchLower = deviceSearch.toLowerCase()
+  const matchesFilters = (d: any) => {
+    if (networkFilter) {
+      const firstLan = d.nics?.find((n: any) => !n.is_wan_ping)
+      if ((firstLan?.network_name ?? 'Unassigned') !== networkFilter) return false
+    }
+    if (searchLower) {
+      if (!d.name?.toLowerCase().includes(searchLower) && !d.ip?.toLowerCase().includes(searchLower)) return false
+    }
+    return true
+  }
+  const filteredDevices = useMemo(() =>
+    !devices ? [] : devices.filter(matchesFilters),
+  [devices, networkFilter, searchLower])
+  const filteredGroups = useMemo(() =>
+    groups.map(g => ({ ...g, devices: g.devices.filter(matchesFilters) }))
+          .filter(g => g.devices.length > 0),
+  [groups, networkFilter, searchLower])
+
+  const allCollapsed = filteredGroups.length > 0 && filteredGroups.every(g => collapsed[g.name])
+  const anyCollapsed = filteredGroups.some(g => collapsed[g.name])
 
   const collapseAll = () => {
     const next: Record<string, boolean> = {}
@@ -452,17 +486,25 @@ export default function Monitoring() {
 
       {/* Network summary tiles */}
       {summary && summary.length > 0 && (
-        <div className="flex flex-wrap gap-2 justify-center">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:justify-center">
           {summary.map((stat: any) => {
             const uptimePct = stat.total > 0 ? Math.round((stat.online / stat.total) * 100) : 0
             const hasOffline = stat.offline > 0
+            const isActive = networkFilter === stat.network_name
             return (
-              <div
+              <button
+                type="button"
                 key={stat.network_id}
-                className="glass-card px-4 py-2.5 flex items-center gap-4 flex-shrink-0 transition-all"
-                style={hasOffline ? {
+                onClick={() => setNetworkFilter(prev => prev === stat.network_name ? null : stat.network_name)}
+                className={`glass-card px-4 py-2.5 flex items-center gap-3 transition-all text-left ${isActive ? 'ring-1 ring-white/20' : 'opacity-70 hover:opacity-100'}`}
+                style={isActive && hasOffline ? {
                   borderColor: '#ef444455',
                   background: 'linear-gradient(160deg, color-mix(in srgb, #ef4444 8%, var(--card-base-mid)) 0%, var(--card-base-deep) 60%)',
+                } : !isActive && hasOffline ? {
+                  borderColor: '#ef444422',
+                } : isActive ? {
+                  borderColor: `${stat.color}55`,
+                  background: `linear-gradient(160deg, color-mix(in srgb, ${stat.color} 8%, var(--card-base-mid)) 0%, var(--card-base-deep) 60%)`,
                 } : undefined}
               >
                 <div className="flex items-center gap-2">
@@ -472,15 +514,29 @@ export default function Monitoring() {
                 <p className="text-sm font-bold text-white">
                   {stat.online}<span className="text-xs font-normal text-white/30">/{stat.total}</span>
                 </p>
-                <div className="w-20 h-1 rounded-full bg-white/10 overflow-hidden">
+                <div className="flex-1 min-w-0 h-1 rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${uptimePct}%`, backgroundColor: stat.color }} />
                 </div>
                 {stat.offline > 0 && (
                   <span className="text-[10px] text-red-400">{stat.offline} offline</span>
                 )}
-              </div>
+              </button>
             )
           })}
+        </div>
+      )}
+
+      {/* Search + view controls */}
+      {!isLoading && devices && devices.length > 0 && (
+        <div className="relative w-full sm:w-1/3">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search devices…"
+            value={deviceSearch}
+            onChange={e => setDeviceSearch(e.target.value)}
+            className="w-full bg-white/[0.04] border border-glass-border rounded-lg pl-8 pr-3 py-2 text-sm text-white/70 placeholder-white/20 focus:outline-none focus:border-white/20"
+          />
         </div>
       )}
 
@@ -502,7 +558,7 @@ export default function Monitoring() {
             ))}
           </div>
 
-          {viewMode === 'grouped' && (
+          {viewMode === 'grouped' && filteredGroups.length > 0 && (
             <div className="ml-auto flex items-center gap-1">
               {anyCollapsed && (
                 <button type="button" onClick={expandAll}
@@ -542,7 +598,7 @@ export default function Monitoring() {
       {/* Grid view */}
       {!isLoading && devices && devices.length > 0 && viewMode === 'grid' && (
         <div className={CARD_GRID}>
-          {devices.map((d: any) => (
+          {filteredDevices.map((d: any) => (
             <DeviceMonitorCard key={d.device_id} d={d} />
           ))}
         </div>
@@ -551,7 +607,7 @@ export default function Monitoring() {
       {/* Grouped view */}
       {!isLoading && devices && devices.length > 0 && viewMode === 'grouped' && (
         <div className="space-y-4">
-          {groups.map(({ name, color, devices: groupDevices }) => {
+          {filteredGroups.map(({ name, color, devices: groupDevices }) => {
             const isCollapsed = collapsed[name]
             const offlineCount = groupDevices.filter(d => d.status !== 'up').length
             return (

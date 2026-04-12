@@ -68,7 +68,7 @@ export default function Setup() {
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center p-4">
       <div className="w-full max-w-md relative">
-        <img src="/logo.png" alt="MyNet" className="w-[346px] mx-auto absolute bottom-full left-0 right-0 -mb-8" />
+        <img src="/logo.png" alt="MyNet" className="w-[346px] max-w-full mx-auto absolute bottom-full left-0 right-0 -mb-8" />
         <div className="glass-card p-6 space-y-5">
 
           {/* Mode tabs */}

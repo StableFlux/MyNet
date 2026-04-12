@@ -387,7 +387,7 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
       {open && (
         <div className="px-3 pb-3 pt-2 border-t space-y-3" style={{ borderColor: wanPortColor + '33' }}>
           {/* Row 1: ISP Name | Connection Type */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] text-white/40 mb-1">ISP Name</label>
               <input value={form.isp_name} onChange={e => setForm((f: any) => ({ ...f, isp_name: e.target.value }))}
@@ -405,7 +405,7 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
           </div>
 
           {/* Row 2: VLAN ID | MTU */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] text-white/40 mb-1">VLAN ID</label>
               <input type="number" value={form.vlan_id} onChange={e => setForm((f: any) => ({ ...f, vlan_id: e.target.value }))}
@@ -419,7 +419,7 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
           </div>
 
           {/* Row 3: Speed Down (1/4) | Speed Up (1/4) | WAN IP (1/2, non-DHCP only) */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-[10px] text-white/40 mb-1">Speed Down</label>
               <input value={form.speed_down} onChange={e => setForm((f: any) => ({ ...f, speed_down: e.target.value }))}
@@ -441,7 +441,7 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
 
           {/* Static only: Subnet Mask + Gateway */}
           {connType === 'static' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] text-white/40 mb-1">Subnet Mask</label>
                 <input value={form.subnet_mask} onChange={e => setForm((f: any) => ({ ...f, subnet_mask: e.target.value }))}
@@ -456,7 +456,7 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
           )}
 
           {connType === 'pppoe' && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] text-white/40 mb-1">PPPoE Username</label>
                 <input value={form.pppoe_username} onChange={e => setForm((f: any) => ({ ...f, pppoe_username: e.target.value }))}
@@ -470,7 +470,7 @@ function WanPortCard({ portId, portNumber, portName, existing, onSaved, onDelete
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[10px] text-white/40 mb-1">Primary DNS</label>
               <input value={form.dns_primary} onChange={e => setForm((f: any) => ({ ...f, dns_primary: e.target.value }))}
@@ -899,12 +899,12 @@ export default function DeviceForm() {
       )}
 
       {/* ── Three columns: NICs | Identity+Hardware+Software | Sidebar ── */}
-      <div className="grid grid-cols-[1fr_1fr_18rem] gap-4 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_18rem] gap-4 items-start">
 
         {/* Col 2 — Identity, Hardware, Software, VM */}
-        <div className="space-y-4 col-start-2 row-start-1">
+        <div className="space-y-4 md:col-start-2 md:row-start-1">
         <Section title="Identity">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Device Name *" col={2}>
               <TextInput value={form.name} onChange={(v) => set({ name: v })} placeholder="My Desktop" />
             </Field>
@@ -980,7 +980,7 @@ export default function DeviceForm() {
         </Section>
 
         <Section title="Hardware">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Brand">
               <TextInput value={form.brand} onChange={(v) => set({ brand: v })} placeholder="Acme" />
             </Field>
@@ -1079,7 +1079,7 @@ export default function DeviceForm() {
                 className="btn-ghost text-xs py-1 px-2">+ Add Drive</button>
             </div>
             {form.drives.map((drive, i) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-center">
+              <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1.5fr_auto] gap-2 items-center">
                 <input className="glass-input text-sm" placeholder="C: / sda" value={drive.label}
                   onChange={(e) => { const d = [...form.drives]; d[i] = { ...d[i], label: e.target.value }; set({ drives: d }) }} />
                 <input className="glass-input text-sm" placeholder="500GB" value={drive.capacity}
@@ -1118,7 +1118,7 @@ export default function DeviceForm() {
         </Section>
 
         <Section title="Software & Access">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="OS">
               <TextInput value={form.os} onChange={(v) => set({ os: v })} placeholder="Windows 11 Pro" />
             </Field>
@@ -1172,7 +1172,7 @@ export default function DeviceForm() {
                 className="btn-ghost text-xs py-1 px-2">+ Add Service</button>
             </div>
             {form.services.map((svc, i) => (
-              <div key={i} className="grid grid-cols-[1fr_1.5fr_auto_auto] gap-2 items-center">
+              <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_1.5fr_auto_auto] gap-2 items-center">
                 <input className="glass-input text-sm" placeholder="Name" value={svc.name}
                   onChange={(e) => { const s = [...form.services]; s[i] = { ...s[i], name: e.target.value }; set({ services: s }) }} />
                 <input className="glass-input text-sm font-mono" placeholder="http://device.local" value={svc.url}
@@ -1202,7 +1202,7 @@ export default function DeviceForm() {
 
         {(deviceTypes ?? []).find((dt: any) => String(dt.id) === form.device_type_id)?.name === 'Printer (3D)' && (
           <Section title="3D Printer">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Firmware">
                 <select aria-label="Firmware" value={form.firmware_type} onChange={(e) => set({ firmware_type: e.target.value })}
                   className="glass-input w-full text-sm">
@@ -1242,7 +1242,7 @@ export default function DeviceForm() {
         </div>{/* end col 2 */}
 
         {/* Col 1 — Network Configuration */}
-        <div className="space-y-4 col-start-1 row-start-1">
+        <div className="space-y-4 md:col-start-1 md:row-start-1">
 
         {isInfraDevice ? (() => {
           const mgmt = form.nics[0] ?? emptyNic()
@@ -1278,7 +1278,7 @@ export default function DeviceForm() {
 
           return (
             <Section title="Network Configuration">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="MAC Address">
                   <input value={mgmt.mac} onChange={(e) => setMgmt({ mac: e.target.value })}
                     placeholder="aa:bb:cc:dd:ee:ff"
@@ -1359,7 +1359,7 @@ export default function DeviceForm() {
                           <span className="text-[10px] text-white/25">— assign a management port first</span>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1.5">OOB Switch</label>
                           <select value={mgmt.switch_device_id}
@@ -1391,7 +1391,7 @@ export default function DeviceForm() {
                   )
                 })()}
 
-                <div className="col-span-2 border-t border-glass-border pt-3 grid grid-cols-3 gap-3">
+                <div className="col-span-2 border-t border-glass-border pt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[10px] text-white/40 uppercase tracking-wider mb-1.5">Uplink Port (this switch)</label>
                     <select value={form.uplink_port_id} onChange={(e) => set({ uplink_port_id: e.target.value })}
@@ -1483,7 +1483,7 @@ export default function DeviceForm() {
         </div>{/* end col 1 */}
 
         {/* Sidebar — Storage, Services, HA, Pi-hole, Notes */}
-        <div className="space-y-4 col-start-3 row-start-1">
+        <div className="space-y-4 md:col-start-3 md:row-start-1">
         <Section title="Storage">
           <Field label="Storage Location">
             <div ref={storDropRef} className="relative">

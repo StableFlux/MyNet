@@ -92,7 +92,7 @@ export default function UserManagement() {
 
           {editingProfile && (
             <div className="border-t border-glass-border pt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="profile-username" className="text-[10px] text-white/40 block mb-1">Username</label>
                   <input id="profile-username" className="glass-input w-full text-sm opacity-50 cursor-not-allowed" value={me.username} disabled />
@@ -230,7 +230,7 @@ function UserForm({ form, setForm, showUsername = false, prefix = 'uf' }: {
   form: any; setForm: any; showUsername?: boolean; prefix?: string
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {showUsername && (
         <div>
           <label htmlFor={`${prefix}-username`} className="text-[10px] text-white/40 block mb-1">Username</label>

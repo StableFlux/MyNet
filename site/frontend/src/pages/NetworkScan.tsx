@@ -125,7 +125,7 @@ export default function NetworkScan() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-6">
+      <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <button
             type="button"
@@ -141,8 +141,8 @@ export default function NetworkScan() {
           </div>
         </div>
 
-        {/* Expectations card — 1/2 width, top right */}
-        <GlassCard className="w-1/2 flex-shrink-0 flex gap-3 py-3">
+        {/* Expectations card — 1/2 width on desktop, full width on mobile */}
+        <GlassCard className="w-full sm:w-1/2 flex-shrink-0 flex gap-3 py-3">
           <div className="w-7 h-7 rounded-lg bg-indigo-600/15 flex items-center justify-center flex-shrink-0 mt-0.5">
             <Info size={13} className="text-indigo-400" />
           </div>
@@ -161,8 +161,8 @@ export default function NetworkScan() {
 
       {/* Network selection */}
       <GlassCard className="p-0 overflow-hidden">
-        <div className="flex">
-          {/* 5/6 — network selector */}
+        <div className="flex flex-col sm:flex-row">
+          {/* network selector */}
           <div className="flex-1 min-w-0 p-4 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -257,8 +257,9 @@ export default function NetworkScan() {
         )}
           </div>{/* end 5/6 col */}
 
-          {/* 1/6 — scan button */}
-          <div className="w-1/6 flex-shrink-0 flex items-end justify-center p-4" style={{ borderLeft: '1px solid rgb(var(--color-white) / 0.15)' }}>
+          {/* scan button */}
+          <div className="flex-shrink-0 flex items-end justify-center p-4 border-t sm:border-t-0 sm:border-l border-white/[0.15] sm:w-32"
+            style={{ borderColor: 'rgba(255,255,255,0.15)' }}>
             <button
               type="button"
               onClick={runScan}
@@ -340,7 +341,8 @@ export default function NetworkScan() {
 
           {/* Table */}
           <GlassCard className="p-0 overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="border-b border-glass-border text-xs text-white/40 uppercase tracking-widest">
                   <th className="text-left px-4 py-3 font-medium w-8"></th>
@@ -462,6 +464,7 @@ export default function NetworkScan() {
                 })}
               </tbody>
             </table>
+            </div>
           </GlassCard>
         </div>
       )}

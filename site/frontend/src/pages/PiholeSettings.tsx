@@ -117,20 +117,19 @@ export default function PiholeSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex items-center gap-4 flex-1 min-w-0">
-          <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm flex-shrink-0">
-            <ChevronLeft size={14} />
-            Settings
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-white">Pi-hole Integration</h1>
-            <p className="text-sm text-white/40 mt-0.5">DNS filtering stats and device query history.</p>
-          </div>
+      <div className="flex items-center gap-4">
+        <button type="button" onClick={() => navigate('/settings')} className="btn-ghost flex items-center gap-1.5 text-sm flex-shrink-0">
+          <ChevronLeft size={14} />
+          Settings
+        </button>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl font-bold text-white">Pi-hole Integration</h1>
+          <p className="text-sm text-white/40 mt-0.5">DNS filtering stats and device query history.</p>
         </div>
+        {/* Mobile only: status card + configure toggle */}
         {configured && (
-          <div className="flex items-center gap-3">
-            <GlassCard className="flex-1 sm:flex-none sm:w-64 flex items-center gap-3 py-3">
+          <div className="md:hidden flex items-center gap-3 flex-shrink-0">
+            <GlassCard className="flex items-center gap-3 py-3">
               <div className="w-8 h-8 rounded-lg bg-red-600/20 flex items-center justify-center flex-shrink-0">
                 <Wifi size={15} className="text-red-400" />
               </div>
@@ -152,8 +151,9 @@ export default function PiholeSettings() {
         )}
       </div>
 
-      {/* Configuration */}
-      {(!configured || showConfig) && <div className="space-y-3">
+      {/* Configuration — always visible on desktop; toggle-controlled on mobile */}
+      <div className={configured && !showConfig ? 'hidden md:block' : ''}>
+      <div className="space-y-3">
         <h2 className="text-sm font-semibold text-white/60 uppercase tracking-widest">Configuration</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:w-2/3">
 
@@ -253,7 +253,8 @@ export default function PiholeSettings() {
         </GlassCard>
 
         </div>{/* end grid */}
-      </div>}{/* end configuration */}
+      </div>{/* end configuration inner */}
+      </div>{/* end configuration outer */}
 
       {/* Instances */}
       <div className="space-y-3">

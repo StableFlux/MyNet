@@ -179,6 +179,13 @@ def monitored_devices(
     # scheduler restarts or gaps so we always get a full sparkline.
     sparkline_since = datetime.now(timezone.utc) - timedelta(hours=4)
 
+    # SQLite stores datetimes as "YYYY-MM-DD HH:MM:SS.ffffff" (space separator,
+    # no timezone suffix). datetime.isoformat() produces "...T...+00:00" which
+    # compares incorrectly in SQLite's string comparison (space < T).
+    # strftime with %Y-%m-%d %H:%M:%S matches the storage format exactly.
+    since_sql = since.strftime('%Y-%m-%d %H:%M:%S')
+    sparkline_since_sql = sparkline_since.strftime('%Y-%m-%d %H:%M:%S')
+
     # Query 1: devices with nics + networks eagerly loaded (no per-device round trips)
     devices = (
         db.query(Device)
@@ -211,7 +218,7 @@ def monitored_devices(
               AND timestamp >= :since
             GROUP BY device_id, ip_pinged
         """),
-        {"since": since.isoformat()},
+        {"since": since_sql},
     ).fetchall()
 
     # Query 3: last result per (device_id, ip_pinged) for current status + latency
@@ -246,7 +253,7 @@ def monitored_devices(
             WHERE rn <= 48
             ORDER BY device_id, ip_pinged, timestamp ASC
         """),
-        {"sparkline_since": sparkline_since.isoformat()},
+        {"sparkline_since": sparkline_since_sql},
     ).fetchall()
 
     # Index all pre-computed data for O(1) lookup
@@ -395,7 +402,7 @@ def monitored_devices(
             "nics": nic_entries,
         })
 
-    results.sort(key=lambda d: STATUS_ORDER.get(d["status"], 2))
+    results.sort(key=lambda d: d["device_name"].lower())
     return results
 
 

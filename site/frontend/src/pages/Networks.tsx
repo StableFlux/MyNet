@@ -103,12 +103,9 @@ export default function Networks() {
                         </span>
                       )}
                       {n.purpose && (
-                        <span className="hidden md:inline text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded">{n.purpose}</span>
+                        <span className="text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded">{n.purpose}</span>
                       )}
                     </div>
-                    {n.purpose && (
-                      <span className="md:hidden text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded mt-0.5 inline-block">{n.purpose}</span>
-                    )}
                   </div>
                   {/* Actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -138,7 +135,7 @@ export default function Networks() {
                 </div>
 
                 {/* Info grid */}
-                <div className={`grid grid-cols-2 gap-x-4 gap-y-3 pl-4 ${!isExpanded ? 'hidden md:grid' : ''}`}>
+                <div className={`grid grid-cols-2 gap-x-4 gap-y-3 pl-4 ${!isExpanded ? 'max-md:hidden' : ''}`}>
                   {/* IP */}
                   {n.cidr && <InfoItem label="CIDR" value={n.cidr} mono />}
                   {n.gateway && <InfoItem label="Gateway" value={n.gateway} mono />}
@@ -167,7 +164,7 @@ export default function Networks() {
 
                 {/* SSIDs */}
                 {ssids.length > 0 && (
-                  <div className={`pl-4 space-y-1.5 ${!isExpanded ? 'hidden md:block' : ''}`}>
+                  <div className={`pl-4 space-y-1.5 ${!isExpanded ? 'max-md:hidden' : ''}`}>
                     <p className="text-[10px] text-white/30 flex items-center gap-1.5">
                       <Wifi size={10} /> Wireless SSIDs
                     </p>

@@ -665,9 +665,10 @@ async def fetch_pihole_network_devices(db: Session) -> dict[str, dict]:
 async def update_pihole_cache(db: Session):
     """
     Polls all pihole_enabled devices and updates pihole_cache rows.
-    Updates the Pi-hole device's own cache row (for Settings last_polled display)
-    and matches Pi-hole client IPs to device NICs.
+    Uses a single authenticated session per instance and fires all five
+    stat requests concurrently to minimise poll time and HTTP overhead.
     """
+    import asyncio as _asyncio
     from models.pihole import PiHoleCache
     from models.nic import Nic
 
@@ -680,11 +681,57 @@ async def update_pihole_cache(db: Session):
     pihole_device_ids = {device_id for device_id, _, _ in instances}
 
     for device_id, url, password in instances:
-        summary, fetch_error = await _fetch_summary_v6(url, password)
-        top_data = await _fetch_top_clients_v6(url, password)
-        top_blocked = await _fetch_top_blocked_v6(url, password)
-        blocking = await _fetch_blocking_status(url, password)
-        version = await _fetch_version(url, password)
+        summary = None
+        fetch_error = None
+        top_data = None
+        top_blocked = None
+        blocking = None
+        version = None
+
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                async with _pihole_session(client, url, password) as sid:
+                    headers = {"X-FTL-SID": sid} if sid else {}
+                    # Fire all five requests concurrently within one session
+                    results = await _asyncio.gather(
+                        client.get(f"{url}/api/stats/summary", headers=headers, timeout=10),
+                        client.get(f"{url}/api/stats/top_clients", headers=headers, timeout=10),
+                        client.get(f"{url}/api/stats/top_domains", headers=headers,
+                                   params={"blocked": "true"}, timeout=10),
+                        client.get(f"{url}/api/dns/blocking", headers=headers, timeout=10),
+                        client.get(f"{url}/api/info/version", headers=headers, timeout=10),
+                        return_exceptions=True,
+                    )
+            summary_r, top_clients_r, top_blocked_r, blocking_r, version_r = results
+
+            if isinstance(summary_r, Exception):
+                fetch_error = _classify_error(summary_r)
+            else:
+                data = summary_r.json()
+                if "queries" in data:
+                    summary = data
+                else:
+                    fetch_error = "Unexpected response from Pi-hole API"
+
+            if not isinstance(top_clients_r, Exception):
+                top_data = top_clients_r.json()
+
+            if not isinstance(top_blocked_r, Exception):
+                entries = top_blocked_r.json().get("domains") or []
+                top_blocked = [
+                    {"domain": e.get("domain", ""), "count": e.get("count", 0)}
+                    for e in entries if e.get("domain")
+                ][:20]
+
+            if not isinstance(blocking_r, Exception):
+                blocking = blocking_r.json().get("blocking") == "enabled"
+
+            if not isinstance(version_r, Exception):
+                version = version_r.json().get("version", {}).get("core", {}).get("local", {}).get("version")
+
+        except Exception as e:
+            fetch_error = _classify_error(e)
+            log.warning(f"Pi-hole poll failed ({url}): {e}")
 
         # Update the Pi-hole device's own cache row
         pihole_cache = db.query(PiHoleCache).filter(PiHoleCache.device_id == device_id).first()

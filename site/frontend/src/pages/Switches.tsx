@@ -52,9 +52,9 @@ export default function Switches() {
     queryFn: async () => { const { data } = await api.get('/wan-configs'); return data },
   })
   const { data: monitoringDevices = [] } = useQuery({
-    queryKey: ['monitoring-devices'],
+    queryKey: ['monitoring', 'devices'],
     queryFn: async () => { const { data } = await api.get('/monitoring/devices'); return data },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
   const wanStatusByPortId: Record<number, string> = {}
   for (const dev of monitoringDevices) {

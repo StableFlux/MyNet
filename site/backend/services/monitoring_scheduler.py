@@ -371,14 +371,14 @@ def load_all_monitored_devices():
 
     scheduler.add_job(
         run_batch_tick,
-        trigger=IntervalTrigger(seconds=TICK_SECS),
+        trigger=IntervalTrigger(seconds=TICK_SECS, jitter=10),
         id="batch_ping",
         replace_existing=True,
         misfire_grace_time=10,
     )
     scheduler.add_job(
         cleanup_old_results,
-        trigger=IntervalTrigger(hours=2),
+        trigger=IntervalTrigger(hours=2, jitter=300),
         id="monitoring_cleanup",
         replace_existing=True,
     )

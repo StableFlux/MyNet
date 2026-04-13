@@ -1,6 +1,7 @@
 """
 MyNet — FastAPI application entry point.
 """
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -197,7 +198,7 @@ async def lifespan(app: FastAPI):
         _ss_db.close()
     scheduler.add_job(
         _poll_pihole,
-        trigger=IntervalTrigger(seconds=_pihole_interval),
+        trigger=IntervalTrigger(seconds=_pihole_interval, jitter=30),
         id="pihole_poll",
         replace_existing=True,
         misfire_grace_time=60,
@@ -208,7 +209,8 @@ async def lifespan(app: FastAPI):
         from services.conflict_checker import run_conflict_scan
         _db = SessionLocal()
         try:
-            run_conflict_scan(_db)
+            # Run synchronous DB scan in a thread so the event loop stays free
+            await asyncio.to_thread(run_conflict_scan, _db)
         except Exception as _e:
             log.warning(f"Periodic conflict scan failed: {_e}")
         finally:
@@ -216,7 +218,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.add_job(
         _run_conflict_scan,
-        trigger=IntervalTrigger(minutes=10),
+        trigger=IntervalTrigger(minutes=10, jitter=60),
         id="conflict_scan",
         replace_existing=True,
         misfire_grace_time=60,

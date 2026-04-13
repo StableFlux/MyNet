@@ -1,16 +1,35 @@
 [Unit]
-Description=MyNet Backend (FastAPI)
+Description=MyNet — home network manager (FastAPI/uvicorn)
+Documentation=file:///home/pi/MyNet
 After=network.target
 
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/opt/mynet/backend
-ExecStart=/opt/mynet/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
-Restart=always
-RestartSec=5
-Environment=PYTHONUNBUFFERED=1
+Group=pi
+WorkingDirectory=/home/pi/MyNet/site/backend
 EnvironmentFile=/opt/mynet/.env
+
+ExecStart=/opt/mynet/venv/bin/uvicorn main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1 \
+    --log-level info
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mynet
+
+# Grant ICMP capability for device monitoring (ping) — no root required
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+
+# Harden the service
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target

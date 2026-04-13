@@ -118,7 +118,7 @@ export default function Debug() {
 
   const { data: backendDebug, error: backendError, isFetching } = useQuery({
     queryKey: ['__debug__'],
-    queryFn: async () => { const { data } = await api.get('/api/debug'); return data },
+    queryFn: async () => { const { data } = await api.get('/debug'); return data },
     refetchInterval: 15_000,
     retry: false,
   })

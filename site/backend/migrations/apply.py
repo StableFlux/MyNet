@@ -468,6 +468,24 @@ def apply_migrations(engine) -> None:
             conn.commit()
             log.info("apply_migrations: system_settings.unifi_write_enabled added")
 
+        # ── monitoring_results: composite index for fast "latest per IP" queries ─
+        # All three slow endpoints (/monitoring/devices, /monitoring/summary,
+        # /dashboard) run: GROUP BY device_id, ip_pinged, MAX(id)
+        # Without this index SQLite does a full scan of 180k+ rows.
+        # The index also accelerates the sparkline window function partition.
+        existing_indexes = {
+            row[0] for row in conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='index'")
+            )
+        }
+        if "ix_monitoring_results_device_ip_id" not in existing_indexes:
+            conn.execute(text(
+                "CREATE INDEX ix_monitoring_results_device_ip_id "
+                "ON monitoring_results (device_id, ip_pinged, id)"
+            ))
+            conn.commit()
+            log.info("apply_migrations: ix_monitoring_results_device_ip_id created")
+
         # ── drop old audit_log and alerts tables after migration ──────────────
         tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
         if "audit_log" in tables:

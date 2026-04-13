@@ -175,6 +175,9 @@ def monitored_devices(
     from sqlalchemy import text
 
     since = datetime.now(timezone.utc) - timedelta(hours=24)
+    # Sparkline window: 48 pings at 1/min = 48 min, but allow 4h buffer for
+    # scheduler restarts or gaps so we always get a full sparkline.
+    sparkline_since = datetime.now(timezone.utc) - timedelta(hours=4)
 
     # Query 1: devices with nics + networks eagerly loaded (no per-device round trips)
     devices = (
@@ -225,7 +228,8 @@ def monitored_devices(
         """),
     ).fetchall()
 
-    # Query 4: last 48 sparkline points per (device_id, ip_pinged) via window function
+    # Query 4: last 48 sparkline points per (device_id, ip_pinged) via window function.
+    # Bounded to the last 4h so the inner scan covers ~16k rows instead of 184k+.
     sparkline_rows = db.execute(
         text(f"""
             SELECT device_id, ip_pinged, timestamp, latency_ms, status
@@ -237,10 +241,12 @@ def monitored_devices(
                        ) AS rn
                 FROM monitoring_results
                 WHERE device_id IN ({id_list})
+                  AND timestamp >= :sparkline_since
             ) ranked
             WHERE rn <= 48
             ORDER BY device_id, ip_pinged, timestamp ASC
         """),
+        {"sparkline_since": sparkline_since.isoformat()},
     ).fetchall()
 
     # Index all pre-computed data for O(1) lookup

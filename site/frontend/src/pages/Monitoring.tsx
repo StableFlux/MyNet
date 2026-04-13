@@ -63,7 +63,7 @@ function NicRow({ nic, deviceId }: { nic: any; deviceId: number }) {
         {nic.status === 'up' && nic.latency_ms != null ? `${nic.latency_ms}ms` : nic.status}
       </span>
       {/* Sparkline */}
-      <div className="h-5 w-12 flex-shrink-0">
+      <div className="h-5 w-12 flex-shrink-0 ml-2">
         {nic.sparkline && nic.sparkline.length > 1 && (
           <ResponsiveContainer width="100%" height="100%" minWidth={1}>
             <AreaChart data={nic.sparkline} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>

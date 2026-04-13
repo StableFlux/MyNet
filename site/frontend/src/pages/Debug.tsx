@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import api from '../lib/api'
+import { getApiTimings, clearApiTimings } from '../lib/perfCapture'
 
 // ── Error capture (module-level so it runs before first render) ───────────────
 const capturedErrors: { t: string; msg: string }[] = []
@@ -163,16 +164,8 @@ export default function Debug() {
     }))
     .sort((a, b) => a.key.localeCompare(b.key))
 
-  // API timing from browser Performance API — exclude /debug itself (it's noisy)
-  const apiTimings = performance.getEntriesByType('resource')
-    .filter(e => e.name.includes('/api/') && !e.name.includes('/api/debug'))
-    .slice(-60)
-    .map(e => ({
-      url: e.name.replace(window.location.origin, '').replace('/api', ''),
-      ms: Math.round(e.duration),
-      kb: Math.round((e as any).transferSize / 102.4) / 10,
-    }))
-    .reverse()
+  // API timing from persistent capture (survives client-side navigation, up to 500 entries)
+  const apiTimings = getApiTimings()
 
   // Browser memory (Chrome/Edge only)
   const mem = (performance as any).memory
@@ -207,8 +200,8 @@ export default function Debug() {
       `${e.key}\n  ${e.status}/${e.fetchStatus} updated=${e.updatedAt} size=${e.dataKb}kb errors=${e.errorCount}${e.error ? `\n  ERROR: ${e.error}` : ''}`
     ).join('\n'),
     '',
-    '--- API TIMINGS (last 60 requests, excl /debug) ---',
-    apiTimings.map(t => `${t.ms}ms  ${t.kb}kb  ${t.url}`).join('\n'),
+    `--- API TIMINGS (${apiTimings.length} requests captured, excl /debug) ---`,
+    apiTimings.map(t => `[${t.t}] ${t.ms}ms  ${t.kb}kb  ${t.status || '?'}  ${t.url}`).join('\n'),
     '',
     '--- LONG TASKS (>50ms, blocks UI) ---',
     longTasks.length
@@ -371,26 +364,36 @@ export default function Debug() {
       </Section>
 
       {/* API timings */}
-      <Section title="API Timings (last 40 requests, slowest highlighted)">
+      <Section title={`API Timings — ${apiTimings.length} requests captured since page load (excl. /debug)`}>
+        <div style={{ marginBottom: 8 }}>
+          <button onClick={() => { clearApiTimings(); setRefreshKey(k => k + 1) }}
+            style={{ fontSize: 11, padding: '3px 10px', background: '#1e293b', color: '#64748b', border: '1px solid #334155', borderRadius: 4, cursor: 'pointer' }}>
+            Clear timings
+          </button>
+        </div>
         {apiTimings.length === 0 ? (
-          <div style={{ color: '#475569' }}>No API requests recorded yet — navigate around then return here</div>
+          <div style={{ color: '#475569' }}>No API requests captured yet — navigate to Dashboard, Monitoring, Switches etc. then return here</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-            <thead>
-              <tr style={{ color: '#475569', textAlign: 'left' }}>
-                {['ms', 'size', 'endpoint'].map(h => <th key={h} style={{ padding: '2px 8px', fontWeight: 'normal' }}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {apiTimings.map((t, i) => (
-                <tr key={i}>
-                  <td style={{ padding: '2px 8px', color: t.ms > 2000 ? '#f87171' : t.ms > 500 ? '#fbbf24' : '#34d399', width: 60 }}>{t.ms}</td>
-                  <td style={{ padding: '2px 8px', color: '#64748b', width: 60 }}>{t.kb > 0 ? `${t.kb}kb` : '—'}</td>
-                  <td style={{ padding: '2px 8px', color: '#94a3b8' }}>{t.url}</td>
+          <div style={{ maxHeight: 400, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead>
+                <tr style={{ color: '#475569', textAlign: 'left', position: 'sticky', top: 0, background: '#0f172a' }}>
+                  {['time', 'ms', 'size', 'status', 'endpoint'].map(h => <th key={h} style={{ padding: '2px 8px', fontWeight: 'normal' }}>{h}</th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {apiTimings.map((t, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '2px 8px', color: '#475569', width: 80 }}>{t.t}</td>
+                    <td style={{ padding: '2px 8px', color: t.ms > 5000 ? '#f87171' : t.ms > 1000 ? '#fbbf24' : '#34d399', width: 55, fontWeight: t.ms > 1000 ? 700 : 'normal' }}>{t.ms}</td>
+                    <td style={{ padding: '2px 8px', color: '#64748b', width: 55 }}>{t.kb > 0 ? `${t.kb}kb` : '—'}</td>
+                    <td style={{ padding: '2px 8px', color: t.status >= 400 ? '#f87171' : '#64748b', width: 45 }}>{t.status || '—'}</td>
+                    <td style={{ padding: '2px 8px', color: '#94a3b8' }}>{t.url}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Section>
 

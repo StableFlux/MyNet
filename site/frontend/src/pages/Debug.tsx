@@ -163,10 +163,10 @@ export default function Debug() {
     }))
     .sort((a, b) => a.key.localeCompare(b.key))
 
-  // API timing from browser Performance API
+  // API timing from browser Performance API — exclude /debug itself (it's noisy)
   const apiTimings = performance.getEntriesByType('resource')
-    .filter(e => e.name.includes('/api/'))
-    .slice(-40)
+    .filter(e => e.name.includes('/api/') && !e.name.includes('/api/debug'))
+    .slice(-60)
     .map(e => ({
       url: e.name.replace(window.location.origin, '').replace('/api', ''),
       ms: Math.round(e.duration),
@@ -207,7 +207,7 @@ export default function Debug() {
       `${e.key}\n  ${e.status}/${e.fetchStatus} updated=${e.updatedAt} size=${e.dataKb}kb errors=${e.errorCount}${e.error ? `\n  ERROR: ${e.error}` : ''}`
     ).join('\n'),
     '',
-    '--- API TIMINGS (last 40 requests) ---',
+    '--- API TIMINGS (last 60 requests, excl /debug) ---',
     apiTimings.map(t => `${t.ms}ms  ${t.kb}kb  ${t.url}`).join('\n'),
     '',
     '--- LONG TASKS (>50ms, blocks UI) ---',

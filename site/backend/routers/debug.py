@@ -103,7 +103,7 @@ def debug_info(
             import psutil
             proc = psutil.Process()
             return {
-                "cpu_percent_1s": psutil.cpu_percent(interval=1),
+                "cpu_percent": psutil.cpu_percent(interval=None),  # non-blocking; returns value since last call
                 "memory_total_mb": round(psutil.virtual_memory().total / 1024 ** 2),
                 "memory_used_mb": round(psutil.virtual_memory().used / 1024 ** 2),
                 "memory_percent": psutil.virtual_memory().percent,

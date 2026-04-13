@@ -42,6 +42,10 @@ import routers.debug as debug_router
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
+# Attach in-memory WARNING+ log buffer so the debug page can surface backend errors
+from services.log_buffer import install as _install_log_buffer
+_install_log_buffer()
+
 # ---------------------------------------------------------------------------
 # WebSocket connection manager
 # ---------------------------------------------------------------------------

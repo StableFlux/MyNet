@@ -19,6 +19,8 @@
 - [HTTPS Setup](#https-setup)
 - [Uninstalling](#uninstalling)
 
+> **Mobile:** MyNet works on phones and tablets. The layout adapts automatically at 768 px — mobile navigation, collapsible cards, and compact views are built in. See [Mobile & Responsive UI](features/mobile.md).
+
 ---
 
 ## Requirements

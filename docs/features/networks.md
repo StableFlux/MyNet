@@ -96,9 +96,11 @@ The subnet map shows every IP address in the subnet as a grid cell:
 | **Purple** | In DHCP pool — within the configured DHCP range |
 | **Grey** | Free — unassigned and outside the DHCP range |
 
-Click any occupied cell to see the device name, MAC address, DNS entry, location, brand, and model.
+Click any occupied row to navigate to the device page.
 
 > **Large subnets:** The map truncates at 1,024 hosts. For /16 and larger subnets, use the search page to find specific IPs.
+
+> **Mobile:** On small screens the subnet list switches to compact expandable rows — tap a row to reveal MAC, DNS, switch port, and other details. See [Mobile & Responsive UI](mobile.md#subnet-lists).
 
 ---
 

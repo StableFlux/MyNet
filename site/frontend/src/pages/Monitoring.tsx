@@ -414,7 +414,9 @@ export default function Monitoring() {
       if ((firstLan?.network_name ?? 'Unassigned') !== networkFilter) return false
     }
     if (searchLower) {
-      if (!d.name?.toLowerCase().includes(searchLower) && !d.ip?.toLowerCase().includes(searchLower)) return false
+      const nameMatch = d.device_name?.toLowerCase().includes(searchLower)
+      const ipMatch = d.nics?.some((n: any) => n.ip?.toLowerCase().includes(searchLower))
+      if (!nameMatch && !ipMatch) return false
     }
     return true
   }

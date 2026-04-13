@@ -364,15 +364,16 @@ export default function Debug() {
       </Section>
 
       {/* API timings */}
-      <Section title={`API Timings — ${apiTimings.length} requests captured since page load (excl. /debug)`}>
-        <div style={{ marginBottom: 8 }}>
+      <Section title={`API Timings — ${apiTimings.length} requests captured this session (excl. /debug)`}>
+        <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { clearApiTimings(); setRefreshKey(k => k + 1) }}
             style={{ fontSize: 11, padding: '3px 10px', background: '#1e293b', color: '#64748b', border: '1px solid #334155', borderRadius: 4, cursor: 'pointer' }}>
             Clear timings
           </button>
+          <span style={{ fontSize: 11, color: '#475569' }}>Timings persist across page reloads within this tab (stored in sessionStorage)</span>
         </div>
         {apiTimings.length === 0 ? (
-          <div style={{ color: '#475569' }}>No API requests captured yet — navigate to Dashboard, Monitoring, Switches etc. then return here</div>
+          <div style={{ color: '#475569' }}>No API requests captured yet — navigate to other pages then return here. Timings survive page reloads.</div>
         ) : (
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>

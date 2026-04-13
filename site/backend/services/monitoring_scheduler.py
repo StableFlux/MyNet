@@ -75,24 +75,23 @@ def resolve_monitor_ips(device) -> list[str]:
 
 # ── Batch tick ────────────────────────────────────────────────────────────────
 
-async def run_batch_tick():
+def _tick_gather_due() -> tuple[datetime, list, dict, dict, set]:
     """
-    Fires every TICK_SECS. Determines which devices are due for a ping
-    (based on their interval and _last_pinged), pings them all at once,
-    then bulk-inserts results and handles alerts.
+    Phase 1 (sync, runs in thread pool): open a DB session, query which devices
+    are due for a ping, then close the session before returning.
+
+    Returns (now, due, device_map, wan_config_by_key, wan_keys).
+    device_map values are detached Device objects — only .name is accessed later,
+    which is safe because it is a plain column (no lazy-load needed).
     """
     from database import SessionLocal
     from models.device import Device
-    from models.monitoring import MonitoringResult, PingStatus
-    from models.event import Event, EventType
+    from models.wan_config import WanConfig
     from sqlalchemy.orm import joinedload
 
     now = datetime.now(timezone.utc)
-
     db = SessionLocal()
     try:
-        from models.wan_config import WanConfig
-
         devices = (
             db.query(Device)
             .filter(Device.monitoring_enabled.is_(True))
@@ -102,15 +101,12 @@ async def run_batch_tick():
 
         monitored_ids = {d.id for d in devices}
 
-        # Load WAN configs for monitored devices
         wan_configs_for_devices: dict[int, list] = {}
         if monitored_ids:
             for wc in db.query(WanConfig).filter(WanConfig.device_id.in_(monitored_ids)).all():
                 wan_configs_for_devices.setdefault(wc.device_id, []).append(wc)
 
-        # Build a set of WAN ping keys so we can separate them from NIC pings in event handling
         wan_keys: set[tuple[int, str]] = set()
-        # (device_id, switch_port_id) → WanConfig for event messaging
         wan_config_by_key: dict[tuple[int, str], object] = {}
         for device_id, wcs in wan_configs_for_devices.items():
             for wc in wcs:
@@ -119,7 +115,6 @@ async def run_batch_tick():
                     wan_keys.add((device_id, wan_ip))
                     wan_config_by_key[(device_id, wan_ip)] = wc
 
-        # Collect (device_id, ip, interval_secs) for devices that are due
         due: list[tuple[int, str, int]] = []
         for device in devices:
             interval = device.monitor_interval_secs or settings.monitoring_default_interval_secs
@@ -127,7 +122,6 @@ async def run_batch_tick():
                 last = _last_pinged.get((device.id, ip))
                 if last is None or (now - last).total_seconds() >= interval:
                     due.append((device.id, ip, interval))
-            # WAN ping targets
             for wc in wan_configs_for_devices.get(device.id, []):
                 if wc.wan_monitoring_enabled is False:
                     continue
@@ -136,64 +130,68 @@ async def run_batch_tick():
                 if last is None or (now - last).total_seconds() >= interval:
                     due.append((device.id, wan_ip, interval))
 
-        if not due:
-            return
+        device_map = {d.id: d for d in devices}
+        return now, due, device_map, wan_config_by_key, wan_keys
+    finally:
+        db.close()
 
-        # Ping all due IPs in one call — icmplib handles concurrency internally
-        ip_list = [ip for _, ip, _ in due]
-        try:
-            ping_results = await asyncio.to_thread(
-                icmplib.multiping,
-                ip_list,
-                count=1,
-                timeout=2,
-                concurrent_tasks=min(len(ip_list), 150),
-                privileged=True,
-            )
-            result_by_ip = {r.address: r for r in ping_results}
-        except Exception as e:
-            log.error(f"multiping failed: {e}")
-            return
 
-        # Build result rows and update last-pinged cache
-        rows: list[MonitoringResult] = []
-        broadcast_items: list[dict] = []
-        failed_keys: list[tuple[int, str]] = []  # for alert checking
+def _tick_persist(
+    now: datetime,
+    due: list[tuple[int, str, int]],
+    result_by_ip: dict,
+    device_map: dict,
+    wan_config_by_key: dict,
+    wan_keys: set,
+) -> list[dict]:
+    """
+    Phase 3 (sync, runs in thread pool): write ping results to DB, update the
+    last-pinged cache, run event/threshold checks, and commit.
+    Returns broadcast_items for the caller to emit over WebSocket.
+    """
+    from database import SessionLocal
+    from models.monitoring import MonitoringResult, PingStatus
+    from models.event import Event, EventType
 
-        for device_id, ip, _ in due:
-            ping = result_by_ip.get(ip)
-            if ping and ping.is_alive:
-                status, latency = "up", round(ping.avg_rtt, 2)
-            elif ping:
-                status, latency = "down", None
-            else:
-                status, latency = "timeout", None
+    rows: list[MonitoringResult] = []
+    broadcast_items: list[dict] = []
+    failed_keys: list[tuple[int, str]] = []
 
-            _last_pinged[(device_id, ip)] = now
+    for device_id, ip, _ in due:
+        ping = result_by_ip.get(ip)
+        if ping and ping.is_alive:
+            status, latency = "up", round(ping.avg_rtt, 2)
+        elif ping:
+            status, latency = "down", None
+        else:
+            status, latency = "timeout", None
 
-            rows.append(MonitoringResult(
-                device_id=device_id,
-                ip_pinged=ip,
-                status=status,
-                latency_ms=latency,
-                timestamp=now,
-            ))
-            broadcast_items.append({
-                "type": "ping_result",
-                "device_id": device_id,
-                "ip_pinged": ip,
-                "status": status,
-                "latency_ms": latency,
-                "timestamp": now.isoformat(),
-            })
-            if status != "up":
-                failed_keys.append((device_id, ip))
+        _last_pinged[(device_id, ip)] = now
 
+        rows.append(MonitoringResult(
+            device_id=device_id,
+            ip_pinged=ip,
+            status=status,
+            latency_ms=latency,
+            timestamp=now,
+        ))
+        broadcast_items.append({
+            "type": "ping_result",
+            "device_id": device_id,
+            "ip_pinged": ip,
+            "status": status,
+            "latency_ms": latency,
+            "timestamp": now.isoformat(),
+        })
+        if status != "up":
+            failed_keys.append((device_id, ip))
+
+    db = SessionLocal()
+    try:
         db.add_all(rows)
-        db.flush()  # get IDs without committing yet
+        db.flush()
 
         # Event handling — split WAN keys from NIC keys
-        device_map = {d.id: d for d in devices}
         failed_set = set(failed_keys)
         nic_failed = [(did, ip) for did, ip in failed_keys if (did, ip) not in wan_keys]
         wan_failed = [(did, ip) for did, ip in failed_keys if (did, ip) in wan_keys]
@@ -228,7 +226,7 @@ async def run_batch_tick():
         else:
             recent_by_key = {}
 
-        # Open device_offline events (NIC pings only)
+        # Load open offline events for affected devices
         open_device_offline: dict[int, Event] = {}
         open_wan_offline: dict[tuple[int, str], Event] = {}
         if all_event_device_ids:
@@ -296,13 +294,11 @@ async def run_batch_tick():
                 )
                 resolve_events(db, EventType.device_offline, device_id)
 
-        # WAN recoveries → wan_recovered
-        # Keyed by device (not IP) so IP changes don't prevent resolution
+        # WAN recoveries → wan_recovered (keyed by device so IP changes don't block resolution)
         seen_wan_recovered: set[int] = set()
         for device_id, ip in wan_recovered_keys:
             if device_id in seen_wan_recovered:
                 continue
-            # Any open wan_offline event for this device, regardless of which IP it was for
             has_open = any(did == device_id for did, _ in open_wan_offline)
             if has_open:
                 seen_wan_recovered.add(device_id)
@@ -319,17 +315,55 @@ async def run_batch_tick():
                 resolve_events(db, EventType.wan_offline, device_id)
 
         db.commit()
+        return broadcast_items
 
-    except Exception as e:
-        log.exception(f"Batch ping tick failed: {e}")
+    except Exception:
+        log.exception("Batch ping tick phase 3 (persist) failed")
         try:
             db.rollback()
         except Exception:
             pass
+        return []
     finally:
         db.close()
 
-    # Broadcast outside the DB session
+
+async def run_batch_tick():
+    """
+    Fires every TICK_SECS. All three phases are kept off the event loop:
+      1. _tick_gather_due  — DB reads in a thread pool
+      2. icmplib.multiping — already uses asyncio.to_thread
+      3. _tick_persist     — DB writes in a thread pool
+    The event loop is only held for the brief WebSocket broadcast at the end.
+    """
+    try:
+        now, due, device_map, wan_config_by_key, wan_keys = await asyncio.to_thread(_tick_gather_due)
+    except Exception:
+        log.exception("Batch ping tick phase 1 (gather) failed")
+        return
+
+    if not due:
+        return
+
+    ip_list = [ip for _, ip, _ in due]
+    try:
+        ping_results = await asyncio.to_thread(
+            icmplib.multiping,
+            ip_list,
+            count=1,
+            timeout=2,
+            concurrent_tasks=min(len(ip_list), 150),
+            privileged=True,
+        )
+        result_by_ip = {r.address: r for r in ping_results}
+    except Exception as e:
+        log.error(f"multiping failed: {e}")
+        return
+
+    broadcast_items = await asyncio.to_thread(
+        _tick_persist, now, due, result_by_ip, device_map, wan_config_by_key, wan_keys
+    )
+
     if _ws_broadcast_fn:
         for item in broadcast_items:
             await _ws_broadcast_fn(item)

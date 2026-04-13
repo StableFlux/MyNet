@@ -138,6 +138,26 @@ export default function DeviceList() {
     queryFn: async () => { const { data } = await api.get('/locations?flat=true'); return data },
   })
 
+  // Shared batch monitoring query — same key as Monitoring page so the cache is reused.
+  // Replaces the N individual /monitoring/device/{id} calls that DeviceCard used to make.
+  const { data: monitoringDevices = [] } = useQuery({
+    queryKey: ['monitoring', 'devices'],
+    queryFn: async () => { const { data } = await api.get('/monitoring/devices'); return data },
+    refetchInterval: 60_000,
+  })
+
+  const monitoringByDevice = useMemo(() => {
+    const map = new Map<number, Record<string, boolean>>()
+    for (const d of monitoringDevices) {
+      const nicMap: Record<string, boolean> = {}
+      for (const n of d.nics ?? []) {
+        nicMap[n.ip] = n.status === 'up'
+      }
+      map.set(d.device_id, nicMap)
+    }
+    return map
+  }, [monitoringDevices])
+
   const locationTypeMap = useMemo(() =>
     Object.fromEntries(locations.map(l => [l.name, l.type])),
     [locations]
@@ -712,7 +732,7 @@ export default function DeviceList() {
                             {!subCollapsed && (
                               <div className={CARD_GRID}>
                                 {subDevices.map((device: any) => (
-                                  <DeviceCard key={device.id} device={device} />
+                                  <DeviceCard key={device.id} device={device} nicOnlineMap={monitoringByDevice.get(device.id)} />
                                 ))}
                               </div>
                             )}
@@ -740,7 +760,7 @@ export default function DeviceList() {
         /* Flat grid */
         <div className={CARD_GRID}>
           {devices.map((device: any) => (
-            <DeviceCard key={device.id} device={device} />
+            <DeviceCard key={device.id} device={device} nicOnlineMap={monitoringByDevice.get(device.id)} />
           ))}
         </div>
       )}

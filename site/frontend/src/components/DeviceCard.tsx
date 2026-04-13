@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Copy, Check, ArrowLeft, ArrowRight } from 'lucide-react'
 import { DeviceTypeIcon, HARDWARE_TYPE_ICON, NIC_TYPE_ICON, STATUS_ICON } from './DeviceTypeIcon'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Device } from '../types'
 import { NetworkBadge } from './NetworkBadge'
 import { GlassCard } from './GlassCard'
@@ -12,9 +12,11 @@ import api from '../lib/api'
 
 interface Props {
   device: Device
+  /** Per-IP online map from the shared monitoring batch query. Key = IP, value = is_up. */
+  nicOnlineMap?: Record<string, boolean>
 }
 
-export function DeviceCard({ device }: Props) {
+export function DeviceCard({ device, nicOnlineMap = {} }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
@@ -38,22 +40,7 @@ export function DeviceCard({ device }: Props) {
   const isNicMonitored = (nicId: number) =>
     monitoringEnabled && (!monitorNicIds.length || monitorNicIds.includes(nicId))
 
-  const statusClass = `status-${device.status.replace(/_/g, '-')}`
   const accentBar = colors.categoryColor((device as any).device_type_category ?? (device as any).hardware_type)
-
-  const { data: monData } = useQuery({
-    queryKey: ['monitoring', device.id],
-    queryFn: async () => { const { data } = await api.get(`/monitoring/device/${device.id}`); return data ?? null },
-    enabled: monitoringEnabled,
-  })
-
-  const nicOnlineMap = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const nic of (monData?.nics ?? [])) {
-      map[nic.ip] = nic.current_status === 'up'
-    }
-    return map
-  }, [monData])
 
   useEffect(() => {
     if (nicContainerRef.current) {

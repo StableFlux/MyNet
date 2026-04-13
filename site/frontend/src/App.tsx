@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import AdminRoute from './components/AdminRoute'
@@ -31,17 +31,28 @@ import ColourSettings from './pages/ColourSettings'
 import PiholeSettings from './pages/PiholeSettings'
 import NetworkScan from './pages/NetworkScan'
 import UnifiSettings from './pages/UnifiSettings'
+import Debug from './pages/Debug'
 
 function AppInner() {
   const { user, setUser } = useAuthStore()
   const qc = useQueryClient()
   const [loading, setLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
+  // Debounce monitoring invalidation: the scheduler broadcasts one ping_result per
+  // device/IP, so N monitored addresses → N rapid WS messages. Without debouncing
+  // this causes N back-to-back invalidations, re-rendering every monitoring consumer
+  // (Switches DnD context, DeviceList, Monitoring page) simultaneously — which
+  // freezes the UI. Coalescing into a single invalidation 600ms after the last
+  // message matches the actual data cadence (one batch per 60s tick).
+  const monitoringInvalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Handle real-time WebSocket events
   useWebSocket((msg) => {
     if (msg.type === 'ping_result') {
-      qc.invalidateQueries({ queryKey: ['monitoring'] })
+      if (monitoringInvalidateTimer.current) clearTimeout(monitoringInvalidateTimer.current)
+      monitoringInvalidateTimer.current = setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ['monitoring'] })
+      }, 600)
     }
     if (msg.type === 'alert') {
       qc.invalidateQueries({ queryKey: ['events'] })
@@ -115,6 +126,7 @@ function AppInner() {
         <Route path="/settings/label-export" element={<AdminRoute><LabelExport /></AdminRoute>} />
         <Route path="/settings/network-scan" element={<AdminRoute><NetworkScan /></AdminRoute>} />
         <Route path="/settings/unifi" element={<AdminRoute><UnifiSettings /></AdminRoute>} />
+        <Route path="/debug" element={<Debug />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Layout>

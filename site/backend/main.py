@@ -37,6 +37,7 @@ import routers.pihole as pihole_router
 import routers.wan_configs as wan_configs_router
 import routers.scan as scan_router
 import routers.unifi as unifi_router
+import routers.debug as debug_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -307,6 +308,7 @@ app.include_router(pihole_router.router)
 app.include_router(wan_configs_router.router)
 app.include_router(scan_router.router)
 app.include_router(unifi_router.router)
+app.include_router(debug_router.router)
 
 
 # ---------------------------------------------------------------------------

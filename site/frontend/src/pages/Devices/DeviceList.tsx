@@ -82,14 +82,21 @@ export default function DeviceList() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   const copyToClipboard = (text: string, key: string) => {
-    navigator.clipboard.writeText(text).catch(() => {
+    const fallback = () => {
       const el = document.createElement('textarea')
       el.value = text
+      el.style.position = 'fixed'
+      el.style.opacity = '0'
       document.body.appendChild(el)
       el.select()
       document.execCommand('copy')
       document.body.removeChild(el)
-    })
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(fallback)
+    } else {
+      fallback()
+    }
     setCopiedKey(key)
     setTimeout(() => setCopiedKey(null), 1500)
   }

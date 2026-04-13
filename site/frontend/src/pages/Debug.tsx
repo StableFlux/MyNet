@@ -26,14 +26,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function CopyBtn({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [done, setDone] = useState(false)
   const copy = () => {
-    navigator.clipboard.writeText(text).catch(() => {
+    const fallback = () => {
       const el = document.createElement('textarea')
       el.value = text
+      el.style.position = 'fixed'
+      el.style.opacity = '0'
       document.body.appendChild(el)
       el.select()
       document.execCommand('copy')
       document.body.removeChild(el)
-    })
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(fallback)
+    } else {
+      fallback()
+    }
     setDone(true)
     setTimeout(() => setDone(false), 2000)
   }

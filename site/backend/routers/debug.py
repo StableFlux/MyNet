@@ -65,6 +65,9 @@ def debug_info(
         from models.nic import Nic
 
         last_result = db.query(func.max(MonitoringResult.timestamp)).scalar()
+        # SQLite returns naive datetimes; make aware before subtracting from now (UTC-aware)
+        if last_result is not None and last_result.tzinfo is None:
+            last_result = last_result.replace(tzinfo=timezone.utc)
         return {
             "devices_total": db.query(func.count(Device.id)).scalar() or 0,
             "devices_monitored": db.query(func.count(Device.id)).filter(Device.monitoring_enabled.is_(True)).scalar() or 0,

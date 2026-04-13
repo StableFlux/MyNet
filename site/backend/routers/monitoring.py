@@ -186,6 +186,19 @@ def monitored_devices(
     since_sql = since.strftime('%Y-%m-%d %H:%M:%S')
     sparkline_since_sql = sparkline_since.strftime('%Y-%m-%d %H:%M:%S')
 
+    def _utc_iso(dt) -> str | None:
+        """Raw SQL rows return naive datetimes. Add UTC so the browser parses
+        them correctly — without it, browsers in BST interpret the time as local,
+        making 'last seen' appear 1h older than it actually is."""
+        if dt is None:
+            return None
+        if isinstance(dt, str):
+            # Already a string — append +00:00 if no tz info present
+            return dt if ('+' in dt or dt.endswith('Z')) else dt + '+00:00'
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
     # Query 1: devices with nics + networks eagerly loaded (no per-device round trips)
     devices = (
         db.query(Device)
@@ -263,7 +276,7 @@ def monitored_devices(
     for row in sparkline_rows:
         key = (row.device_id, row.ip_pinged)
         sparklines_by_nic.setdefault(key, []).append({
-            "t": row.timestamp if isinstance(row.timestamp, str) else row.timestamp.isoformat(),
+            "t": _utc_iso(row.timestamp),
             "latency": row.latency_ms,
             "status": row.status,
         })
@@ -395,7 +408,7 @@ def monitored_devices(
             "location": device.location,
             "status": last_result.status if last_result else "unknown",
             "latency_ms": last_result.latency_ms if last_result else None,
-            "last_seen": last_result.timestamp if last_result else None,
+            "last_seen": _utc_iso(last_result.timestamp) if last_result else None,
             "uptime_pct": round(dev_up / dev_total * 100, 1) if dev_total > 0 else None,
             "avg_latency": round(sum(dev_latencies) / len(dev_latencies), 2) if dev_latencies else None,
             "sparkline": combined_sparkline,

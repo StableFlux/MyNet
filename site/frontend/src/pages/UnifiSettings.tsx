@@ -5,6 +5,16 @@ import { ChevronLeft, ChevronDown, Router, CheckCircle, XCircle, Loader, Save, F
 import { GlassCard } from '../components/GlassCard'
 import api from '../lib/api'
 
+/** Returns true if `ip` falls within the given CIDR block (e.g. "192.168.1.0/24"). */
+function ipInCidr(ip: string, cidr: string): boolean {
+  try {
+    const [network, prefix] = cidr.split('/')
+    const toInt = (s: string) => s.split('.').reduce((n, o) => (n << 8) | parseInt(o, 10), 0) >>> 0
+    const mask = prefix === '0' ? 0 : (~0 << (32 - parseInt(prefix, 10))) >>> 0
+    return (toInt(ip) & mask) === (toInt(network) & mask)
+  } catch { return false }
+}
+
 const COMP_STATUS: Record<string, { label: string; className: string; icon: React.ElementType }> = {
   match:       { label: 'Match',        className: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle },
   differences: { label: 'Differences', className: 'text-amber-400  bg-amber-500/10  border-amber-500/20',   icon: AlertTriangle },
@@ -99,6 +109,28 @@ export default function UnifiSettings() {
     enabled: false,
     retry: false,
   })
+
+  /** Build the URL params for the /devices/new wizard pre-filled from a UniFi row. */
+  function buildAddToMyNetParams(unifi: any): string {
+    const params = new URLSearchParams()
+    if (unifi?.name)        params.set('name',       unifi.name)
+    if (unifi?.mac)         params.set('mac',        unifi.mac)
+    if (unifi?.ip)          params.set('ip',         unifi.ip)
+    if (unifi?.hostname)    params.set('hostname',   unifi.hostname)
+    if (unifi?.local_dns)   params.set('dns_entry',  unifi.local_dns)
+    if (unifi?.is_wireless) params.set('is_wireless', 'true')
+    if (unifi?.ssid)        params.set('ssid',       unifi.ssid)
+    // Infer the MyNet network from the device's IP address
+    if (unifi?.ip && comparison?.networks) {
+      for (const net of comparison.networks) {
+        if (net.mynet_network_id && net.mynet_cidr && ipInCidr(unifi.ip, net.mynet_cidr)) {
+          params.set('network', String(net.mynet_network_id))
+          break
+        }
+      }
+    }
+    return params.toString()
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (mac: string) => api.delete(`/unifi/clients/${encodeURIComponent(mac)}`),
@@ -1091,7 +1123,7 @@ export default function UnifiSettings() {
                                           const isDeleting = deleteMutation.isPending && confirmDeleteMac === mac
                                           return (
                                             <>
-                                              <button type="button" onClick={() => { const params = new URLSearchParams(); if (row.unifi?.name) params.set('name', row.unifi.name); if (row.unifi?.mac) params.set('mac', row.unifi.mac); if (row.unifi?.ip) params.set('ip', row.unifi.ip); if (row.unifi?.hostname) params.set('hostname', row.unifi.hostname); if (row.unifi?.local_dns) params.set('dns_entry', row.unifi.local_dns); if (row.unifi?.is_wireless) params.set('is_wireless', 'true'); if (row.unifi?.ssid) params.set('ssid', row.unifi.ssid); navigate(`/devices/new?${params.toString()}`) }} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"><Plus size={9} />Add to MyNet</button>
+                                              <button type="button" onClick={() => navigate(`/devices/new?${buildAddToMyNetParams(row.unifi)}`)} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"><Plus size={9} />Add to MyNet</button>
                                               {!isInfra && (isConfirming ? (
                                                 <div className="flex items-center gap-1">
                                                   <button type="button" onClick={() => deleteMutation.mutate(mac)} disabled={isDeleting} className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 transition-colors disabled:opacity-50">{isDeleting ? <Loader size={9} className="animate-spin" /> : <Trash2 size={9} />}{isDeleting ? '…' : 'Confirm'}</button>
@@ -1278,17 +1310,7 @@ export default function UnifiSettings() {
                                           const isDeleting = deleteMutation.isPending && confirmDeleteMac === mac
                                           return (
                                             <div className="flex gap-1 justify-center">
-                                              <button type="button" onClick={() => {
-                                                const params = new URLSearchParams()
-                                                if (row.unifi?.name)       params.set('name',       row.unifi.name)
-                                                if (row.unifi?.mac)        params.set('mac',        row.unifi.mac)
-                                                if (row.unifi?.ip)         params.set('ip',         row.unifi.ip)
-                                                if (row.unifi?.hostname)   params.set('hostname',   row.unifi.hostname)
-                                                if (row.unifi?.local_dns)  params.set('dns_entry',  row.unifi.local_dns)
-                                                if (row.unifi?.is_wireless) params.set('is_wireless', 'true')
-                                                if (row.unifi?.ssid)       params.set('ssid',       row.unifi.ssid)
-                                                navigate(`/devices/new?${params.toString()}`)
-                                              }} className="flex items-center justify-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium whitespace-nowrap text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-colors">
+                                              <button type="button" onClick={() => navigate(`/devices/new?${buildAddToMyNetParams(row.unifi)}`)} className="flex items-center justify-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium whitespace-nowrap text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-colors">
                                                 <Plus size={8} />Add to MyNet
                                               </button>
                                               {!isInfra && (isConfirming ? (

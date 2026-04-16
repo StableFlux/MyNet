@@ -130,11 +130,13 @@ def _calc_nic_diffs(nic: Nic, unifi: dict, dev: Device | None = None) -> list[di
     """
     diffs = []
 
-    # MAC address — only differs when matched by IP (MAC-matched entries are always equal)
+    # MAC address — differs when: (a) matched by IP and MyNet has no MAC, or
+    # (b) matched by IP and both sides have a MAC but they differ.
+    # MAC-matched entries are always equal so this never fires for them.
     mynet_mac = (nic.mac or "").lower().strip()
     unifi_mac  = (unifi.get("mac") or "").lower().strip()
-    if mynet_mac and unifi_mac and mynet_mac != unifi_mac:
-        diffs.append({"field": "MAC Address", "mynet": mynet_mac, "unifi": unifi_mac})
+    if unifi_mac and mynet_mac != unifi_mac:
+        diffs.append({"field": "MAC Address", "mynet": mynet_mac or None, "unifi": unifi_mac})
 
     # IP address — flag if either side has a static IP and they differ
     mynet_ip = (nic.ip_address or "").strip()

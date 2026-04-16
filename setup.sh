@@ -205,12 +205,18 @@ success "System packages installed"
 # ── Node.js 20 ────────────────────────────────────────────────────────────────
 step "Installing Node.js 20"
 
-if command -v node &>/dev/null && node --version | grep -q '^v2[0-9]'; then
+if command -v node &>/dev/null && node --version | grep -q '^v2[0-9]' && command -v npm &>/dev/null; then
     success "Node.js $(node --version) already installed"
 else
     info "Adding NodeSource repository..."
     spin_run "Configuring NodeSource repository..." bash -c 'curl -fsSL https://deb.nodesource.com/setup_20.x | bash -'
     spin_run "Installing Node.js..." apt-get install -y -qq nodejs
+    # Ubuntu's nodejs package doesn't always bundle npm — install it explicitly
+    if ! command -v npm &>/dev/null; then
+        spin_run "Installing npm..." apt-get install -y -qq npm
+    fi
+    # Refresh shell's command cache so npm/node are found immediately
+    hash -r 2>/dev/null || true
     success "Node.js $(node --version) installed"
 fi
 

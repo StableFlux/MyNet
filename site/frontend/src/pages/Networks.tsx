@@ -32,6 +32,7 @@ export default function Networks() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['networks'] })
       qc.invalidateQueries({ queryKey: ['subnet-map'] })
+      qc.invalidateQueries({ queryKey: ['unifi-comparison'] })
     },
     onError: (err: any) => alert(`Delete failed: ${err?.response?.data?.detail ?? err?.message ?? 'Unknown error'}`),
   })

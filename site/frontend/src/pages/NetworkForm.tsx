@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import api from '../lib/api'
@@ -169,8 +169,46 @@ export default function NetworkForm() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
 
-  const [form, setForm] = useState<FormState>(emptyForm())
+  // Pre-fill from URL params (UniFi "Add to MyNet" — see buildAddNetworkToMyNetParams
+  // in UnifiSettings.tsx for the producer side). Only applies to create mode; edit
+  // mode overwrites from the fetched network below.
+  const [form, setForm] = useState<FormState>(() => {
+    if (isEdit) return emptyForm()
+    const f = emptyForm()
+    const name       = searchParams.get('name')
+    const vlanId     = searchParams.get('vlan_id')
+    const cidr       = searchParams.get('cidr')
+    const gateway    = searchParams.get('gateway')
+    const dhcpStart  = searchParams.get('dhcp_start')
+    const dhcpEnd    = searchParams.get('dhcp_end')
+    const dns        = searchParams.get('dns')
+    if (name)      f.name = name
+    if (vlanId)    f.vlan_id = vlanId
+    if (cidr)      f.cidr = cidr
+    if (gateway)   f.gateway = gateway
+    if (dhcpStart) f.dhcp_range_start = dhcpStart
+    if (dhcpEnd)   f.dhcp_range_end = dhcpEnd
+    if (dns) {
+      const servers = dns.split(',').map((s) => s.trim()).filter(Boolean)
+      if (servers.length > 0) {
+        f.dns_servers = [servers[0] ?? '', servers[1] ?? '', ...servers.slice(2)]
+      }
+    }
+    const ssidsParam = searchParams.get('ssids')
+    if (ssidsParam) {
+      try {
+        const parsed = JSON.parse(ssidsParam)
+        if (Array.isArray(parsed)) {
+          f.ssids = parsed.map(normaliseSsid)
+        }
+      } catch {
+        // Ignore malformed input — user still gets the other pre-filled fields.
+      }
+    }
+    return f
+  })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Fetch existing network when editing
@@ -193,6 +231,10 @@ export default function NetworkForm() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['networks'] })
       qc.invalidateQueries({ queryKey: ['subnet-map'] })
+      // UniFi comparison is a derived view of networks — creating or editing
+      // one here means the comparison table's match/unifi_only/mynet_only
+      // buckets are stale, so invalidate it too.
+      qc.invalidateQueries({ queryKey: ['unifi-comparison'] })
       if (isEdit) qc.invalidateQueries({ queryKey: ['network', id] })
       navigate('/networks')
     },
@@ -394,7 +436,7 @@ export default function NetworkForm() {
       </Section>
 
       {/* SSIDs */}
-      <Section title="Wireless SSIDs" defaultOpen={false}>
+      <Section title="Wireless SSIDs" defaultOpen={true}>
         <div className="space-y-3">
           {form.ssids.map((entry, i) => (
             <div key={i} className="p-3 rounded-lg bg-white/[0.03] border border-glass-border space-y-2">

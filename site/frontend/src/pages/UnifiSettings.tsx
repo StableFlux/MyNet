@@ -52,6 +52,99 @@ function SummaryBar({ rows, activeKeys }: { rows: any[]; activeKeys?: Set<string
   )
 }
 
+// SSID rows rendered inline in the parent network <tbody>. Each SSID is one
+// <tr> using the same 8-column layout as the network rows, so the SSID data
+// slots under the parent's column headers: Name → SSID name, CIDR → Bands,
+// Gateway → Security, DHCP → Hidden, Status → status badge, Actions → sync
+// buttons. VLAN/Source columns hold a nesting indicator instead of new values.
+function SsidRows({
+  row, canWrite, syncingKey,
+  onUseUnifi, onUseMyNet, onAddToMyNet, onDeleteFromMyNet, onDeleteFromUnifi,
+}: {
+  row: any
+  canWrite: boolean
+  syncingKey: string | null
+  onUseUnifi: (s: any) => void
+  onUseMyNet: (s: any) => void
+  onAddToMyNet: (s: any) => void
+  onDeleteFromMyNet: (s: any) => void
+  onDeleteFromUnifi: (s: any) => void
+}) {
+  const mynetNetworkExists = row.mynet_network_id != null
+  const renderBands = (bands: any) => Array.isArray(bands) && bands.length ? bands.join(', ') : '—'
+  const sideValue = (s: any, field: 'bands' | 'security' | 'hidden') => {
+    const mn = s.mynet
+    const un = s.unifi
+    const fmt = (v: any) => field === 'bands' ? renderBands(v) : field === 'hidden' ? (v ? 'yes' : 'no') : (v || '—')
+    if (s.status === 'differ') {
+      const diffs = new Set<string>(s.differences ?? [])
+      if (!diffs.has(field)) return <span className="text-white/55">{fmt(mn?.[field] ?? un?.[field])}</span>
+      return (
+        <span className="flex flex-col leading-tight">
+          <span className="text-white/55"><span className="text-white/25">M:</span> {fmt(mn?.[field])}</span>
+          <span className="text-amber-400"><span className="text-white/25">U:</span> {fmt(un?.[field])}</span>
+        </span>
+      )
+    }
+    return <span className="text-white/55">{fmt((un ?? mn)?.[field])}</span>
+  }
+
+  return (
+    <>
+      {row.ssids.map((s: any, idx: number) => {
+        const diffs = new Set<string>(s.differences ?? [])
+        const key = `${row.row_key}-${s.ssid}-${idx}`
+        const isBusy = syncingKey !== null
+        // Subtle inset background + a left indent on the name cell visually
+        // groups the SSID rows with the parent network without looking like a
+        // standalone table.
+        return (
+          <tr key={key} className="bg-white/[0.012] border-t border-white/[0.03]">
+            <td className="pl-4 pr-2 py-1 text-[10px] uppercase tracking-wider text-white/25 align-middle">
+              {idx === 0 ? 'SSID' : ''}
+            </td>
+            <td className="px-3 py-1 text-center align-middle text-white/20">↳</td>
+            <td className="pl-4 pr-2 py-1 font-mono align-middle">
+              <span className="text-white/80">{s.ssid}</span>
+              {diffs.has('password') && <span className="ml-2 text-[10px] text-amber-400 font-sans">password differs</span>}
+            </td>
+            <td className="pl-4 pr-2 py-1 font-mono text-[11px] align-middle">{sideValue(s, 'bands')}</td>
+            <td className="pl-4 pr-2 py-1 font-mono text-[11px] align-middle">{sideValue(s, 'security')}</td>
+            <td className="pl-4 pr-2 py-1 font-mono text-[11px] align-middle">{sideValue(s, 'hidden')}</td>
+            <td className="pl-4 pr-2 py-1 align-middle">
+              <StatusBadge status={s.status === 'differ' ? 'differences' : s.status} />
+            </td>
+            <td className="pl-4 pr-2 py-1 align-middle whitespace-nowrap">
+              <div className="flex items-center gap-1 justify-end">
+                {s.status === 'differ' && (
+                  <>
+                    <button type="button" disabled={isBusy} onClick={() => onUseUnifi(s)} title="Overwrite MyNet SSID with UniFi values" className="inline-flex items-center justify-center gap-0.5 w-20 py-0.5 rounded text-[10px] font-medium text-indigo-300 bg-indigo-500/20 border border-indigo-500/40 hover:bg-indigo-500/30 transition-colors disabled:opacity-40">Use UniFi</button>
+                    <button type="button" disabled={isBusy || !canWrite} onClick={() => onUseMyNet(s)} title={!canWrite ? 'Enable write access to UniFi in settings to use this' : 'Push MyNet SSID values to UniFi'} className="inline-flex items-center justify-center gap-0.5 w-20 py-0.5 rounded text-[10px] font-medium text-[#3ea99e] bg-[#3ea99e]/10 border border-[#3ea99e]/30 hover:bg-[#3ea99e]/20 transition-colors disabled:opacity-40">Use MyNet</button>
+                  </>
+                )}
+                {s.status === 'unifi_only' && (
+                  <>
+                    {mynetNetworkExists && (
+                      <button type="button" disabled={isBusy} onClick={() => onAddToMyNet(s)} title="Add this SSID to the MyNet network" className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors disabled:opacity-40"><Plus size={9} />Add to MyNet</button>
+                    )}
+                    <button type="button" disabled={isBusy || !canWrite} onClick={() => onDeleteFromUnifi(s)} title={!canWrite ? 'Enable write access to UniFi in settings to use this' : 'Delete this WLAN from UniFi'} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"><Trash2 size={9} />Delete from UniFi</button>
+                  </>
+                )}
+                {s.status === 'mynet_only' && (
+                  <>
+                    <span className="text-[10px] text-white/30 italic mr-1">Add to UniFi — coming soon</span>
+                    <button type="button" disabled={isBusy} onClick={() => onDeleteFromMyNet(s)} title="Remove this SSID from the MyNet network" className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors disabled:opacity-40"><Trash2 size={9} />Delete from MyNet</button>
+                  </>
+                )}
+              </div>
+            </td>
+          </tr>
+        )
+      })}
+    </>
+  )
+}
+
 export default function UnifiSettings() {
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -110,6 +203,18 @@ export default function UnifiSettings() {
     retry: false,
   })
 
+  // The comparison query is opt-in (enabled:false) so invalidation alone won't
+  // trigger a refetch. When we navigate back here after creating/editing/
+  // deleting a network elsewhere, the query is marked invalidated — pick that
+  // up on mount and refetch so the table reflects the new state instead of
+  // still showing "UniFi only".
+  useEffect(() => {
+    const state = qc.getQueryState(['unifi-comparison'])
+    if (state?.isInvalidated && state.data) {
+      refetchComparison()
+    }
+  }, [])
+
   /** Build the URL params for the /devices/new wizard pre-filled from a UniFi row. */
   function buildAddToMyNetParams(unifi: any): string {
     const params = new URLSearchParams()
@@ -128,6 +233,35 @@ export default function UnifiSettings() {
           break
         }
       }
+    }
+    return params.toString()
+  }
+
+  /** Build the URL params for the /networks/new form pre-filled from a UniFi network row. */
+  function buildAddNetworkToMyNetParams(row: any): string {
+    const params = new URLSearchParams()
+    if (row?.unifi_name)                         params.set('name',       row.unifi_name)
+    if (row?.unifi_vlan_id != null)              params.set('vlan_id',    String(row.unifi_vlan_id))
+    if (row?.unifi_cidr)                         params.set('cidr',       row.unifi_cidr)
+    if (row?.unifi_gateway)                      params.set('gateway',    row.unifi_gateway)
+    if (row?.unifi_dhcp_start)                   params.set('dhcp_start', row.unifi_dhcp_start)
+    if (row?.unifi_dhcp_end)                     params.set('dhcp_end',   row.unifi_dhcp_end)
+    if (Array.isArray(row?.unifi_dns_servers) && row.unifi_dns_servers.length) {
+      params.set('dns', row.unifi_dns_servers.join(','))
+    }
+    // SSIDs — JSON-encoded so names containing commas/spaces round-trip cleanly.
+    // For a unifi_only network, every ssid row's .unifi carries the WLAN payload.
+    if (Array.isArray(row?.ssids) && row.ssids.length) {
+      const payload = row.ssids
+        .filter((s: any) => s.unifi)
+        .map((s: any) => ({
+          ssid:     s.unifi.name,
+          password: s.unifi.password ?? '',
+          hidden:   !!s.unifi.hidden,
+          bands:    Array.isArray(s.unifi.bands) ? s.unifi.bands : [],
+          security: s.unifi.security ?? '',
+        }))
+      if (payload.length) params.set('ssids', JSON.stringify(payload))
     }
     return params.toString()
   }
@@ -221,6 +355,32 @@ export default function UnifiSettings() {
   const syncNetworkToUnifiMutation = useMutation({
     mutationFn: ({ unifiNetworkId, fields }: { unifiNetworkId: string; fields: Record<string, string | number> }) =>
       api.patch(`/unifi/networks/${encodeURIComponent(unifiNetworkId)}/fields`, { fields }),
+    onSettled: () => { setSyncingKey(null); refetchComparison() },
+  })
+
+  // ── SSID-level mutations ───────────────────────────────────────────────────
+  // MyNet side writes network.ssids JSON directly; UniFi side goes through the
+  // centralised WLAN endpoints (delete / patch fields).
+  const upsertSsidInMyNetMutation = useMutation({
+    mutationFn: ({ networkId, index, ssid }: { networkId: number; index: number | null; ssid: any }) =>
+      api.put(`/unifi/networks/${networkId}/ssids`, { index, ssid }),
+    onSettled: () => { setSyncingKey(null); refetchComparison() },
+  })
+
+  const deleteSsidFromMyNetMutation = useMutation({
+    mutationFn: ({ networkId, index }: { networkId: number; index: number }) =>
+      api.delete(`/unifi/networks/${networkId}/ssids/${index}`),
+    onSettled: () => { setSyncingKey(null); refetchComparison() },
+  })
+
+  const deleteUnifiWlanMutation = useMutation({
+    mutationFn: (wlanId: string) => api.delete(`/unifi/wlans/${encodeURIComponent(wlanId)}`),
+    onSettled: () => { setSyncingKey(null); refetchComparison() },
+  })
+
+  const syncSsidToUnifiMutation = useMutation({
+    mutationFn: ({ wlanId, fields }: { wlanId: string; fields: Record<string, any> }) =>
+      api.patch(`/unifi/wlans/${encodeURIComponent(wlanId)}/fields`, { fields }),
     onSettled: () => { setSyncingKey(null); refetchComparison() },
   })
 
@@ -868,7 +1028,7 @@ export default function UnifiSettings() {
                                       return (
                                         <>
                                           <div className="flex gap-1 items-center">
-                                            <button type="button" onClick={() => { const p = new URLSearchParams(); if (row.unifi_name) p.set('name', row.unifi_name); if (row.unifi_vlan_id) p.set('vlan_id', String(row.unifi_vlan_id)); if (row.unifi_cidr) p.set('cidr', row.unifi_cidr); if (row.unifi_gateway) p.set('gateway', row.unifi_gateway); navigate(`/networks/new?${p.toString()}`) }} className="flex items-center justify-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium whitespace-nowrap text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-colors">
+                                            <button type="button" onClick={() => navigate(`/networks/new?${buildAddNetworkToMyNetParams(row)}`)} className="flex items-center justify-center gap-1 px-2 py-0.5 rounded text-[9px] font-medium whitespace-nowrap text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-colors">
                                               <Plus size={8} />Add to MyNet
                                             </button>
                                             {isConfirming ? (
@@ -968,6 +1128,42 @@ export default function UnifiSettings() {
                                   }
                                 </td>
                               </tr>
+                              {Array.isArray(row.ssids) && row.ssids.length > 0 && (
+                                <SsidRows
+                                  row={row}
+                                  canWrite={canWrite}
+                                  syncingKey={syncingKey}
+                                  onUseUnifi={(s) => {
+                                    const mid = row.mynet_network_id
+                                    if (!mid || !s.unifi) return
+                                    setSyncingKey(`ssid-use-unifi-${row.row_key}-${s.ssid}`)
+                                    upsertSsidInMyNetMutation.mutate({ networkId: mid, index: s.mynet_index, ssid: s.unifi })
+                                  }}
+                                  onUseMyNet={(s) => {
+                                    if (!s.unifi_wlan_id || !s.mynet) return
+                                    const { password, hidden, bands, security } = s.mynet
+                                    setSyncingKey(`ssid-use-mynet-${row.row_key}-${s.ssid}`)
+                                    syncSsidToUnifiMutation.mutate({ wlanId: s.unifi_wlan_id, fields: { password, hidden, bands, security } })
+                                  }}
+                                  onAddToMyNet={(s) => {
+                                    const mid = row.mynet_network_id
+                                    if (!mid || !s.unifi) return
+                                    setSyncingKey(`ssid-add-mynet-${row.row_key}-${s.ssid}`)
+                                    upsertSsidInMyNetMutation.mutate({ networkId: mid, index: null, ssid: s.unifi })
+                                  }}
+                                  onDeleteFromMyNet={(s) => {
+                                    const mid = row.mynet_network_id
+                                    if (!mid || s.mynet_index == null) return
+                                    setSyncingKey(`ssid-del-mynet-${row.row_key}-${s.ssid}`)
+                                    deleteSsidFromMyNetMutation.mutate({ networkId: mid, index: s.mynet_index })
+                                  }}
+                                  onDeleteFromUnifi={(s) => {
+                                    if (!s.unifi_wlan_id) return
+                                    setSyncingKey(`ssid-del-unifi-${row.row_key}-${s.ssid}`)
+                                    deleteUnifiWlanMutation.mutate(s.unifi_wlan_id)
+                                  }}
+                                />
+                              )}
                             </Fragment>
                           )
                         })}

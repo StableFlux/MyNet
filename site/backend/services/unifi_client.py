@@ -56,6 +56,18 @@ _credentials_cache: dict[tuple[str, str], tuple[dict, str, float]] = {}
 _CREDENTIALS_TTL = 600  # seconds — reuse session for up to 10 minutes
 
 
+def clear_credentials_cache() -> None:
+    """Drop all cached UniFi login sessions. Called after factory reset or when
+    credentials are cleared so stale cookies/CSRF tokens don't linger."""
+    _credentials_cache.clear()
+
+
+# Self-register with the factory-reset hook registry so factory_reset doesn't
+# need to know about UniFi internals. Adding more in-memory state? Register it here.
+from services.factory_reset import register_reset_hook  # noqa: E402
+register_reset_hook(clear_credentials_cache)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _build_url(host: str) -> str:
@@ -348,6 +360,88 @@ def _map_network(n: dict) -> dict | None:
         "dhcp_start":  n.get("dhcpd_start"),
         "dhcp_end":    n.get("dhcpd_stop"),
         "dns_servers": dns_servers,
+    }
+
+
+def _map_wlan_security(raw: str | None) -> str:
+    """Normalise UniFi's security string to MyNet's canonical values."""
+    if not raw:
+        return ""
+    r = raw.lower()
+    # Legacy UniFi values: 'open', 'wpapsk', 'wpaeap' (+ wpa2/wpa3 variants on x_security)
+    if r in ("open", "none"):
+        return "Open"
+    if "wpa3" in r and "wpa2" in r:
+        return "WPA2/WPA3"
+    if "wpa3" in r:
+        return "WPA3-Enterprise" if "eap" in r or "enterprise" in r else "WPA3"
+    if "wpa2" in r or r == "wpapsk":
+        return "WPA2-Enterprise" if "eap" in r or "enterprise" in r else "WPA2"
+    if r == "wpaeap":
+        return "WPA2-Enterprise"
+    return ""
+
+
+def _map_wlan_bands(raw_band: str | None, raw_radios: list | None) -> list[str]:
+    """Normalise UniFi's radio selection to MyNet's bands list: '2.4GHz', '5GHz', '6GHz'."""
+    bands: list[str] = []
+    if isinstance(raw_radios, list) and raw_radios:
+        for r in raw_radios:
+            rv = (r or "").lower()
+            if rv in ("ng", "2g", "2.4g"): bands.append("2.4GHz")
+            elif rv in ("na", "5g"):        bands.append("5GHz")
+            elif rv in ("6e", "6g"):        bands.append("6GHz")
+    elif raw_band:
+        b = raw_band.lower()
+        if b == "both":
+            bands = ["2.4GHz", "5GHz"]
+        elif b in ("ng", "2g", "2.4g"):
+            bands = ["2.4GHz"]
+        elif b in ("na", "5g"):
+            bands = ["5GHz"]
+        elif b in ("6e", "6g"):
+            bands = ["6GHz"]
+    # Dedupe while preserving order
+    seen: set[str] = set()
+    return [b for b in bands if not (b in seen or seen.add(b))]
+
+
+def _map_wlan(w: dict, auth_type: str) -> dict:
+    """Normalise a raw UniFi WLAN record to a canonical shape used by the
+    comparison endpoint. Returns the same dict keys for both auth modes so
+    the router never branches on auth_type.
+
+    Fields:
+        id           — UniFi WLAN _id
+        name         — SSID string
+        password     — PSK (empty string if unavailable via API key auth)
+        hidden       — hide_ssid flag
+        bands        — normalised MyNet bands list, e.g. ['2.4GHz','5GHz']
+        security     — MyNet-canonical security string
+        enabled      — WLAN enabled flag
+        network_id   — UniFi networkconf_id this WLAN is bound to, or "" if any
+    """
+    if auth_type == "credentials":
+        return {
+            "id":         w.get("_id", ""),
+            "name":       w.get("name") or "",
+            "password":   w.get("x_passphrase") or "",
+            "hidden":     bool(w.get("hide_ssid", False)),
+            "bands":      _map_wlan_bands(w.get("wlan_band"), w.get("radio_bands") or w.get("wlan_bands")),
+            "security":   _map_wlan_security(w.get("x_security") or w.get("security")),
+            "enabled":    bool(w.get("enabled", True)),
+            "network_id": w.get("networkconf_id") or "",
+        }
+    # API-key / integration API — passphrase is usually omitted
+    return {
+        "id":         w.get("id", ""),
+        "name":       w.get("name") or "",
+        "password":   w.get("passphrase") or "",
+        "hidden":     bool(w.get("hideSsid", False)),
+        "bands":      _map_wlan_bands(None, w.get("bandSelection") or w.get("radioBands")),
+        "security":   _map_wlan_security(w.get("security") or w.get("securityProtocol")),
+        "enabled":    bool(w.get("enabled", True)),
+        "network_id": w.get("networkId") or w.get("networkConfId") or "",
     }
 
 
@@ -647,6 +741,49 @@ async def _fetch_networks_api_key(cfg: dict) -> list[dict]:
         return []
 
 
+async def _fetch_wlans_credentials(cfg: dict) -> list[dict]:
+    """Legacy API: /rest/wlanconf — returns full WLAN records including x_passphrase."""
+    url = cfg["url"]
+    try:
+        async with _credentials_session(url, cfg["username"], cfg["password"]) as client:
+            r = await client.get(f"{url}{_LEGACY_BASE}/rest/wlanconf")
+            r.raise_for_status()
+        return [_map_wlan(w, "credentials") for w in r.json().get("data", [])]
+    except Exception as e:
+        log.warning(f"UniFi WLAN fetch (credentials) failed: {e}")
+        return []
+
+
+async def _fetch_wlans_api_key(cfg: dict) -> list[dict]:
+    """Integration API: WLANs endpoint. Passphrase is typically not returned."""
+    headers = {"X-API-KEY": cfg["api_key"], "Accept": "application/json"}
+    try:
+        site_uuid = await _resolve_site_uuid(cfg["url"], cfg["api_key"])
+        base = f"{cfg['url']}{_INTEGRATION_BASE}/sites/{site_uuid}"
+        async with httpx.AsyncClient(verify=False, follow_redirects=True,
+                                     timeout=_TIMEOUT) as client:
+            r = await client.get(f"{base}/wlans", headers=headers)
+            if r.status_code == 404:
+                # Older controllers may not expose WLANs via integration API
+                log.info("UniFi integration API does not expose /wlans — SSID comparison unavailable on this controller")
+                return []
+            r.raise_for_status()
+        return [_map_wlan(w, "api_key") for w in r.json().get("data", [])]
+    except Exception as e:
+        log.warning(f"UniFi WLAN fetch (api_key) failed: {e}")
+        return []
+
+
+async def fetch_unifi_wlans(db: Session) -> list[dict]:
+    """Fetch UniFi WLANs. Used by endpoints outside the comparison flow."""
+    cfg = _get_unifi_config(db)
+    if not cfg:
+        return []
+    if cfg["auth_type"] == "credentials":
+        return await _fetch_wlans_credentials(cfg)
+    return await _fetch_wlans_api_key(cfg)
+
+
 async def fetch_unifi_devices(db: Session) -> list[dict]:
     """
     Fetch UniFi infrastructure devices (APs, switches, gateways).
@@ -732,10 +869,12 @@ async def get_wifi_associations(db: Session) -> dict[str, str]:
 
 # ── Comparison fetch — single session for credentials ─────────────────────────
 
-async def fetch_all_for_comparison(db: Session) -> tuple[list[dict], list[dict], list[dict]]:
+async def fetch_all_for_comparison(
+    db: Session,
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     """
-    Fetch clients, infrastructure devices, and networks in one operation.
-    Returns (clients, infra_devices, networks).
+    Fetch clients, infrastructure devices, networks, and WLANs in one operation.
+    Returns (clients, infra_devices, networks, wlans).
 
     Credentials auth: single login session for all requests, avoiding the
     429 Too Many Requests error from multiple rapid login attempts.
@@ -744,15 +883,16 @@ async def fetch_all_for_comparison(db: Session) -> tuple[list[dict], list[dict],
     """
     cfg = _get_unifi_config(db)
     if not cfg:
-        return [], [], []
+        return [], [], [], []
 
     if cfg["auth_type"] != "credentials":
-        clients, devices, networks = await asyncio.gather(
+        clients, devices, networks, wlans = await asyncio.gather(
             _fetch_clients_api_key(cfg),
             _fetch_devices_api_key(cfg),
             _fetch_networks_api_key(cfg),
+            _fetch_wlans_api_key(cfg),
         )
-        return clients, devices, networks
+        return clients, devices, networks, wlans
 
     # Credentials: single session, sequential requests
     url = cfg["url"]
@@ -781,6 +921,11 @@ async def fetch_all_for_comparison(db: Session) -> tuple[list[dict], list[dict],
             r_net = await client.get(f"{url}{_LEGACY_BASE}/rest/networkconf")
             r_net.raise_for_status()
 
+            r_wlan = await client.get(f"{url}{_LEGACY_BASE}/rest/wlanconf")
+            raw_wlan = r_wlan.json().get("data", []) if r_wlan.status_code == 200 else []
+            if r_wlan.status_code not in (200, 403):
+                log.warning(f"UniFi rest/wlanconf returned HTTP {r_wlan.status_code}")
+
         clients = _merge_client_sources(
             r_alluser.json().get("data", []),
             r_user.json().get("data", []),
@@ -788,16 +933,18 @@ async def fetch_all_for_comparison(db: Session) -> tuple[list[dict], list[dict],
         )
         devices  = [_map_infra_device(d, "credentials") for d in raw_dev]
         networks = [m for n in r_net.json().get("data", []) if (m := _map_network(n))]
+        wlans    = [_map_wlan(w, "credentials") for w in raw_wlan]
 
         log.debug(
             f"UniFi single-session fetch: {len(clients)} clients, "
-            f"{len(raw_sta)} active (sta), {len(devices)} infra, {len(networks)} networks"
+            f"{len(raw_sta)} active (sta), {len(devices)} infra, "
+            f"{len(networks)} networks, {len(wlans)} wlans"
         )
-        return clients, devices, networks
+        return clients, devices, networks, wlans
 
     except Exception as e:
         log.warning(f"UniFi single-session fetch failed: {e}")
-        return [], [], []
+        return [], [], [], []
 
 
 async def forget_client(db: Session, mac: str) -> None:
@@ -1185,6 +1332,127 @@ async def delete_unifi_network(db: Session, unifi_network_id: str) -> None:
             raise RuntimeError(
                 f"UniFi rejected network delete — {msg or f'HTTP {r.status_code}'}"
             )
+
+
+# ── WLAN write operations ─────────────────────────────────────────────────────
+
+def _reverse_map_wlan_bands(bands: list[str]) -> tuple[str | None, list[str] | None]:
+    """MyNet canonical bands → UniFi (wlan_band, radio_bands). Returns (None,None)
+    when bands is empty. Controllers accept either field depending on version;
+    we send both."""
+    if not bands:
+        return None, None
+    has_24 = "2.4GHz" in bands
+    has_5  = "5GHz" in bands
+    has_6  = "6GHz" in bands
+    radio: list[str] = []
+    if has_24: radio.append("ng")
+    if has_5:  radio.append("na")
+    if has_6:  radio.append("6e")
+    if has_24 and has_5 and not has_6:
+        return "both", radio
+    if has_24 and not has_5:
+        return "ng", radio
+    if has_5 and not has_24:
+        return "na", radio
+    # 6GHz-only or any 6GHz combo: leave wlan_band unset, controller picks from radio_bands
+    return None, radio
+
+
+def _reverse_map_wlan_security(sec: str) -> str | None:
+    """MyNet canonical security → UniFi x_security. Returns None for unknown."""
+    s = (sec or "").strip()
+    return {
+        "":                   None,
+        "Open":                "open",
+        "WPA2":                "wpapsk",
+        "WPA3":                "wpa3",
+        "WPA2/WPA3":           "wpapsk",  # controllers vary — wpapsk with wpa3 flag on newer FW
+        "WPA2-Enterprise":     "wpaeap",
+        "WPA3-Enterprise":     "wpa3eap",
+    }.get(s)
+
+
+async def delete_unifi_wlan(db: Session, wlan_id: str) -> None:
+    """Delete a WLAN from UniFi via DELETE /rest/wlanconf/{id}. Credentials auth only."""
+    cfg = _get_unifi_config(db)
+    if not cfg:
+        raise ValueError("UniFi is not configured")
+    if cfg["auth_type"] != "credentials":
+        raise ValueError(
+            "Deleting WLANs requires Username & Password auth — switch auth type in settings"
+        )
+    url = cfg["url"]
+    async with _credentials_session(url, cfg["username"], cfg["password"]) as client:
+        try:
+            r = await client.delete(f"{url}{_LEGACY_BASE}/rest/wlanconf/{wlan_id}")
+        except Exception:
+            return
+        if r.status_code not in (200, 204):
+            msg = ""
+            try:
+                msg = r.json().get("meta", {}).get("msg", "")
+            except Exception:
+                pass
+            raise RuntimeError(f"UniFi rejected WLAN delete — {msg or f'HTTP {r.status_code}'}")
+
+
+async def update_unifi_wlan_fields(db: Session, wlan_id: str, fields: dict) -> None:
+    """Push MyNet SSID field values into an existing UniFi WLAN. Credentials auth only.
+
+    Accepted fields (MyNet canonical):
+        password  — PSK, maps to x_passphrase
+        hidden    — maps to hide_ssid
+        bands     — list, maps to wlan_band / radio_bands
+        security  — maps to x_security
+        enabled   — maps to enabled
+    """
+    cfg = _get_unifi_config(db)
+    if not cfg:
+        raise ValueError("UniFi is not configured")
+    if cfg["auth_type"] != "credentials":
+        raise ValueError(
+            "Updating WLANs requires Username & Password auth — switch auth type in settings"
+        )
+
+    payload: dict = {}
+    if "password" in fields:
+        payload["x_passphrase"] = fields["password"] or ""
+    if "hidden" in fields:
+        payload["hide_ssid"] = bool(fields["hidden"])
+    if "enabled" in fields:
+        payload["enabled"] = bool(fields["enabled"])
+    if "bands" in fields:
+        wlan_band, radio = _reverse_map_wlan_bands(fields["bands"] or [])
+        if wlan_band is not None:
+            payload["wlan_band"] = wlan_band
+        if radio is not None:
+            payload["radio_bands"] = radio
+    if "security" in fields:
+        sec = _reverse_map_wlan_security(fields["security"])
+        if sec is not None:
+            payload["x_security"] = sec
+
+    if not payload:
+        raise ValueError("No recognised fields to update")
+
+    url = cfg["url"]
+    async with _credentials_session(url, cfg["username"], cfg["password"]) as client:
+        try:
+            r = await client.put(
+                f"{url}{_LEGACY_BASE}/rest/wlanconf/{wlan_id}", json=payload,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Network error updating WLAN — {str(e)[:120]}")
+        if r.status_code == 404:
+            raise LookupError("WLAN not found on UniFi")
+        if r.status_code not in (200, 201):
+            msg = ""
+            try:
+                msg = r.json().get("meta", {}).get("msg", "")
+            except Exception:
+                pass
+            raise RuntimeError(f"UniFi rejected WLAN update — {msg or f'HTTP {r.status_code}'}")
 
 
 async def create_unifi_network(

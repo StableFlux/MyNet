@@ -24,6 +24,17 @@ const NAV_ITEMS = [
   { to: '/stock', icon: Package, label: 'Stock & Undeployed' },
 ]
 
+const ICON_SIZE_EXPANDED = 16
+const ICON_SIZE_COLLAPSED = 16
+
+// Collapsed-mode sidebar rows use a uniform slot: fixed height, no horizontal
+// padding (that would shrink the icon via flexbox), centered icon with shrink-0.
+// Expanded mode uses icon+label rows with gap/padding for typographic rhythm.
+const COLLAPSED_SLOT = 'flex items-center justify-center h-10 mx-2 rounded-lg transition-all border border-transparent'
+const COLLAPSED_ACTIVE = 'bg-indigo-600/20 nav-item-active border-indigo-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]'
+const COLLAPSED_INACTIVE = 'nav-item-inactive hover:text-white/90 hover:bg-white/[0.05]'
+const COLLAPSED_MUTED = 'text-white/40 hover:text-white hover:bg-white/5'
+
 interface Props {
   children: ReactNode
 }
@@ -121,6 +132,24 @@ export function Layout({ children }: Props) {
           )}
         </div>
 
+        {/* Collapse/expand toggle — desktop only, sits at the top of the menu */}
+        {!expanded && (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className={
+              collapsed
+                ? clsx(COLLAPSED_SLOT, COLLAPSED_MUTED, 'mt-2')
+                : 'flex items-center justify-end gap-2 mx-2 mt-2 px-3 py-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-all text-xs'
+            }
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed
+              ? <ChevronRight size={ICON_SIZE_COLLAPSED} className="shrink-0" />
+              : <><span>Collapse</span><ChevronLeft size={14} /></>}
+          </button>
+        )}
+
         {/* Nav */}
         <nav
           className="flex-1 py-3 overflow-y-auto relative"
@@ -148,95 +177,84 @@ export function Layout({ children }: Props) {
               end={to === '/'}
               title={!showLabels ? label : undefined}
               className={({ isActive }) =>
-                clsx(
-                  'flex items-center mx-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border',
-                  showLabels ? 'gap-3' : 'justify-center',
-                  isActive
-                    ? 'bg-indigo-600/20 nav-item-active border-indigo-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]'
-                    : 'nav-item-inactive hover:text-white/90 hover:bg-white/[0.05] border-transparent'
-                )
+                showLabels
+                  ? clsx(
+                      'flex items-center gap-3 mx-2 px-3 py-2 rounded-lg text-sm font-medium transition-all border',
+                      isActive
+                        ? 'bg-indigo-600/20 nav-item-active border-indigo-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]'
+                        : 'nav-item-inactive hover:text-white/90 hover:bg-white/[0.05] border-transparent'
+                    )
+                  : clsx(COLLAPSED_SLOT, isActive ? COLLAPSED_ACTIVE : COLLAPSED_INACTIVE)
               }
             >
-              <Icon size={16} />
+              <Icon size={showLabels ? ICON_SIZE_EXPANDED : ICON_SIZE_COLLAPSED} className="shrink-0" />
               {showLabels && label}
             </NavLink>
           ))}
         </nav>
 
         {/* Bottom: user + admin + collapse toggle */}
-        <div className="border-t p-3 space-y-1" style={{ borderTopColor: 'var(--sidebar-border)' }}>
+        <div
+          className={clsx('border-t space-y-1', showLabels ? 'p-3' : 'py-3')}
+          style={{ borderTopColor: 'var(--sidebar-border)' }}
+        >
           {user?.role === 'admin' && (
             <NavLink
               to="/settings"
               title={!showLabels ? 'Settings' : undefined}
               className={({ isActive }) =>
-                clsx(
-                  'flex items-center px-3 py-2 rounded-lg text-sm transition-all w-full',
-                  showLabels ? 'gap-3' : 'justify-center',
-                  isActive
-                    ? 'bg-indigo-600/20 nav-item-active'
-                    : 'text-white/40 hover:text-white hover:bg-white/5'
-                )
+                showLabels
+                  ? clsx(
+                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all w-full',
+                      isActive ? 'bg-indigo-600/20 nav-item-active' : 'text-white/40 hover:text-white hover:bg-white/5'
+                    )
+                  : clsx(COLLAPSED_SLOT, isActive ? COLLAPSED_ACTIVE : COLLAPSED_MUTED)
               }
             >
-              <Settings size={15} />
+              <Settings size={showLabels ? ICON_SIZE_EXPANDED : ICON_SIZE_COLLAPSED} className="shrink-0" />
               {showLabels && 'Settings'}
             </NavLink>
           )}
 
-          <div className={clsx('flex items-center px-3 py-2', showLabels ? 'gap-2' : 'justify-center')}>
-            <div
-              className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-xs text-indigo-300 font-bold uppercase flex-shrink-0"
-              title={!showLabels ? (user?.display_name ?? undefined) : undefined}
-            >
-              {user?.display_name?.[0] ?? '?'}
+          {showLabels ? (
+            <div className="flex items-center gap-2 px-3 py-2">
+              <div
+                className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-xs text-indigo-300 font-bold uppercase shrink-0"
+              >
+                {user?.display_name?.[0] ?? '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-white truncate">{user?.display_name}</p>
+                <p className="text-[10px] text-white/40 capitalize">{user?.role}</p>
+              </div>
+              {authRequired && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-white/30 hover:text-white/70 transition-colors"
+                  title="Logout"
+                >
+                  <LogOut size={14} />
+                </button>
+              )}
             </div>
-            {showLabels && (
-              <>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-white truncate">{user?.display_name}</p>
-                  <p className="text-[10px] text-white/40 capitalize">{user?.role}</p>
-                </div>
-                {authRequired && (
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="text-white/30 hover:text-white/70 transition-colors"
-                    title="Logout"
-                  >
-                    <LogOut size={14} />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
+          ) : (
+            <div className={COLLAPSED_SLOT} title={user?.display_name ?? undefined}>
+              <div className="w-7 h-7 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-xs text-indigo-300 font-bold uppercase shrink-0">
+                {user?.display_name?.[0] ?? '?'}
+              </div>
+            </div>
+          )}
 
           {/* Logout when collapsed on desktop */}
           {!showLabels && authRequired && (
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center justify-center w-full px-3 py-2 rounded-lg text-white/30 hover:text-white/70 transition-colors"
+              className={clsx(COLLAPSED_SLOT, COLLAPSED_MUTED)}
               title="Logout"
             >
-              <LogOut size={14} />
-            </button>
-          )}
-
-          {/* Collapse toggle — desktop only */}
-          {!expanded && (
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              className={clsx(
-                'flex items-center w-full px-3 py-2 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5 transition-all text-xs',
-                collapsed ? 'justify-center' : 'gap-2'
-              )}
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {collapsed
-                ? <ChevronRight size={14} />
-                : <><ChevronLeft size={14} /><span>Collapse</span></>}
+              <LogOut size={ICON_SIZE_COLLAPSED} className="shrink-0" />
             </button>
           )}
         </div>

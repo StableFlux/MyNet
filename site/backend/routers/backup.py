@@ -300,24 +300,20 @@ def factory_reset(
         db.query(User).delete(synchronize_session=False)
         db.flush()
 
-        # Reset system settings to defaults
+        # Reset system settings to defaults (driven by the model so new columns
+        # are covered automatically without revisiting this function)
         s = db.query(SystemSettings).first()
         if not s:
             s = SystemSettings(id=1)
             db.add(s)
-        s.system_name = "MyNet"
-        s.auth_required = True
-        s.encryption_enabled = False
-        s.encryption_salt = None
-        s.encryption_verification = None
-        s.pihole_poll_interval_secs = 300
-        s.dns_domain = None
-        s.location_type_colors = None
-        s.device_category_colors = None
-        s.device_status_colors = None
-        s.wan_port_color = None
+        s.reset_to_defaults()
 
         db.commit()
+
+        # Run service-level in-memory cleanup (UniFi session cache, etc.).
+        # Services register via services.factory_reset.register_reset_hook.
+        from services.factory_reset import run_reset_hooks
+        run_reset_hooks()
 
         # Re-seed the standard device types so they're available immediately
         seed_device_types(db)

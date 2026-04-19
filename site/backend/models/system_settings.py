@@ -64,3 +64,16 @@ class SystemSettings(Base):
     unifi_password = Column(String, nullable=True)       # encrypted; for credentials auth
     unifi_write_enabled = Column(Boolean, nullable=False, default=False)  # when False, integration is read-only
     # https:// is always used; SSL verification is always disabled (local self-signed cert)
+
+    def reset_to_defaults(self) -> None:
+        """Restore every column (except the primary key) to the value a freshly
+        inserted row would have. Keeps factory-reset in lock-step with the schema:
+        adding a new column with a default automatically participates in the reset,
+        so we can't silently skip a setting like we did with the UniFi credentials."""
+        for col in self.__table__.columns:
+            if col.primary_key:
+                continue
+            if col.default is not None and getattr(col.default, "is_scalar", False):
+                setattr(self, col.name, col.default.arg)
+            else:
+                setattr(self, col.name, None)

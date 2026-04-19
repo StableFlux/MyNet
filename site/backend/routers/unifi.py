@@ -31,6 +31,8 @@ from services.unifi_client import (
     update_network_fields,
     delete_unifi_network,
     create_unifi_network,
+    delete_unifi_wlan,
+    update_unifi_wlan_fields,
 )
 
 log = logging.getLogger(__name__)
@@ -605,6 +607,126 @@ async def sync_unifi_network_fields(
     return {"ok": True}
 
 
+# ── SSID sync endpoints ───────────────────────────────────────────────────────
+# MyNet-side operations manipulate Network.ssids JSON. UniFi-side operations
+# (delete, update fields) go through the centralised unifi_client service.
+# Add-to-UniFi (POST WLAN) is deferred — it requires AP-group discovery and
+# site-specific WLAN creation logic that lives on a follow-up.
+
+class SsidEntryBody(BaseModel):
+    name: str
+    password: str | None = ""
+    hidden: bool = False
+    bands: list[str] = []
+    security: str = ""
+
+
+class NetworkSsidUpsert(BaseModel):
+    index: int | None = None       # None = append, int = replace at position
+    ssid: SsidEntryBody
+
+
+def _ssid_entry_to_stored(entry: SsidEntryBody) -> dict:
+    """Shape a validated SSID body to the on-disk JSON shape used by NetworkForm."""
+    return {
+        "ssid":     entry.name,
+        "password": entry.password or "",
+        "hidden":   bool(entry.hidden),
+        "bands":    list(entry.bands or []),
+        "security": entry.security or "",
+    }
+
+
+@router.put("/networks/{network_id}/ssids")
+def upsert_mynet_network_ssid(
+    network_id: int,
+    body: NetworkSsidUpsert,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Add or replace an SSID entry on a MyNet network. Used by the Use-UniFi
+    and Copy-UniFi-SSID actions in the comparison view."""
+    net = db.query(Network).filter(Network.id == network_id).first()
+    if not net:
+        raise HTTPException(status_code=404, detail="Network not found")
+    ssids = list(net.ssids) if isinstance(net.ssids, list) else []
+    entry = _ssid_entry_to_stored(body.ssid)
+    if body.index is None:
+        ssids.append(entry)
+    else:
+        if body.index < 0 or body.index >= len(ssids):
+            raise HTTPException(status_code=400, detail="index out of range")
+        ssids[body.index] = entry
+    net.ssids = ssids
+    db.commit()
+    return {"ok": True, "ssids": ssids}
+
+
+@router.delete("/networks/{network_id}/ssids/{index}")
+def delete_mynet_network_ssid(
+    network_id: int,
+    index: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Remove an SSID entry from a MyNet network by 0-based index."""
+    net = db.query(Network).filter(Network.id == network_id).first()
+    if not net:
+        raise HTTPException(status_code=404, detail="Network not found")
+    ssids = list(net.ssids) if isinstance(net.ssids, list) else []
+    if index < 0 or index >= len(ssids):
+        raise HTTPException(status_code=400, detail="index out of range")
+    ssids.pop(index)
+    net.ssids = ssids
+    db.commit()
+    return {"ok": True, "ssids": ssids}
+
+
+@router.delete("/wlans/{wlan_id}", status_code=204)
+async def delete_unifi_wlan_endpoint(
+    wlan_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Delete a WLAN from UniFi. Credentials auth only."""
+    try:
+        await delete_unifi_wlan(db, wlan_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        log.warning(f"UniFi delete_wlan unexpected error: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to contact UniFi: {str(e)[:120]}")
+
+
+class WlanFieldsSyncRequest(BaseModel):
+    fields: dict
+
+
+@router.patch("/wlans/{wlan_id}/fields")
+async def sync_unifi_wlan_fields(
+    wlan_id: str,
+    body: WlanFieldsSyncRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Push MyNet SSID field values into the matching UniFi WLAN record. Used
+    by the Use-MyNet action on differing SSID rows."""
+    try:
+        await update_unifi_wlan_fields(db, wlan_id, body.fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        log.warning(f"UniFi sync_wlan_fields unexpected error: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to contact UniFi: {str(e)[:120]}")
+    return {"ok": True}
+
+
 # ── Comparison endpoints ──────────────────────────────────────────────────────
 
 @router.get("/comparison")
@@ -624,10 +746,102 @@ async def get_comparison(
         return {"status": "unconfigured"}
 
     # Single session for credentials; concurrent requests for API key
-    unifi_clients, unifi_infra, unifi_networks = await fetch_all_for_comparison(db)
+    unifi_clients, unifi_infra, unifi_networks, unifi_wlans = await fetch_all_for_comparison(db)
 
     # ── Networks ──────────────────────────────────────────────────────────────
     mynet_networks = db.query(Network).all()
+
+    def _normalise_mynet_ssid(raw) -> dict | None:
+        """Canonicalise a MyNet network.ssids JSON entry (string legacy or dict)."""
+        if isinstance(raw, str):
+            name = raw.strip()
+            return None if not name else {
+                "name": name, "password": "", "hidden": False,
+                "bands": [], "security": "", "enabled": True,
+            }
+        if not isinstance(raw, dict):
+            return None
+        name = (raw.get("ssid") or raw.get("name") or "").strip()
+        if not name:
+            return None
+        bands = raw.get("bands")
+        if not isinstance(bands, list):
+            bands = [raw["band"]] if raw.get("band") else []
+        return {
+            "name":     name,
+            "password": raw.get("password") or "",
+            "hidden":   bool(raw.get("hidden", False)),
+            "bands":    bands,
+            "security": raw.get("security") or "",
+            "enabled":  True,
+        }
+
+    def _ssid_diffs(mn_s: dict, un_s: dict) -> list[str]:
+        diffs: list[str] = []
+        # Password: only flag if either side has one — API-key auth returns empty
+        # so we'd otherwise false-positive every WLAN as "differ".
+        if (mn_s["password"] or un_s["password"]) and mn_s["password"] != un_s["password"]:
+            diffs.append("password")
+        if mn_s["hidden"] != un_s["hidden"]:
+            diffs.append("hidden")
+        if set(mn_s["bands"]) != set(un_s["bands"]):
+            diffs.append("bands")
+        if (mn_s["security"] or "") != (un_s["security"] or ""):
+            diffs.append("security")
+        return diffs
+
+    def _ssid_rows_for_network(mn, un) -> list[dict]:
+        mynet_raw = (mn.ssids if isinstance(mn.ssids, list) else []) if mn else []
+        mynet_ssids = [(i, n) for i, raw in enumerate(mynet_raw) if (n := _normalise_mynet_ssid(raw))]
+        un_id = un.get("id") if un else None
+        wlans_here = [w for w in unifi_wlans if un_id and w.get("network_id") == un_id]
+
+        rows: list[dict] = []
+        matched_mn: set[int] = set()
+        matched_un: set[str] = set()
+
+        # Match by SSID name (case-sensitive — WiFi SSIDs are)
+        for idx, m in mynet_ssids:
+            for w in wlans_here:
+                if w["id"] in matched_un:
+                    continue
+                if m["name"] == w["name"]:
+                    un_s = {k: w[k] for k in ("name", "password", "hidden", "bands", "security", "enabled")}
+                    diffs = _ssid_diffs(m, un_s)
+                    rows.append({
+                        "status":        "differ" if diffs else "match",
+                        "ssid":          m["name"],
+                        "mynet_index":   idx,
+                        "unifi_wlan_id": w["id"],
+                        "differences":   diffs,
+                        "mynet":         m,
+                        "unifi":         un_s,
+                    })
+                    matched_mn.add(idx)
+                    matched_un.add(w["id"])
+                    break
+
+        for idx, m in mynet_ssids:
+            if idx in matched_mn:
+                continue
+            rows.append({
+                "status": "mynet_only", "ssid": m["name"],
+                "mynet_index": idx, "unifi_wlan_id": None,
+                "differences": [], "mynet": m, "unifi": None,
+            })
+
+        for w in wlans_here:
+            if w["id"] in matched_un:
+                continue
+            un_s = {k: w[k] for k in ("name", "password", "hidden", "bands", "security", "enabled")}
+            rows.append({
+                "status": "unifi_only", "ssid": w["name"],
+                "mynet_index": None, "unifi_wlan_id": w["id"],
+                "differences": [], "mynet": None, "unifi": un_s,
+            })
+
+        rows.sort(key=lambda r: (r["ssid"] or "").lower())
+        return rows
 
     def _net_row(mn, un) -> dict:
         diffs: list[str] = []
@@ -664,6 +878,18 @@ async def get_comparison(
             status = "mynet_only"
         else:
             status = "differences" if diffs else "match"
+        ssid_rows = _ssid_rows_for_network(mn, un)
+        # Summary status for the network's SSIDs — drives the collapsed row badge
+        if not ssid_rows:
+            ssid_status = "none"
+        elif all(r["status"] == "match" for r in ssid_rows):
+            ssid_status = "match"
+        elif all(r["status"] == "mynet_only" for r in ssid_rows):
+            ssid_status = "mynet_only"
+        elif all(r["status"] == "unifi_only" for r in ssid_rows):
+            ssid_status = "unifi_only"
+        else:
+            ssid_status = "differences"
         return {
             "status": status,
             "vlan_id": vlan_id,
@@ -684,6 +910,8 @@ async def get_comparison(
             "unifi_dhcp_end": un.get("dhcp_end") if un else None,
             "unifi_dns_servers": un.get("dns_servers", []) if un else [],
             "differences": diffs,
+            "ssids": ssid_rows,
+            "ssid_status": ssid_status,
         }
 
     matched_mn_ids: set[int] = set()

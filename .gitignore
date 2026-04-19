@@ -52,3 +52,6 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code — local per-dev overrides (team settings in .claude/settings.json)
+.claude/settings.local.json

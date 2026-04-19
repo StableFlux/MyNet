@@ -19,6 +19,7 @@
 - [Adding Devices from UniFi](#adding-devices-from-unifi)
 - [Managing UniFi Clients](#managing-unifi-clients)
 - [Managing UniFi Networks](#managing-unifi-networks)
+- [SSID Reconciliation](#ssid-reconciliation)
 - [WiFi Path Association](#wifi-path-association)
 - [Auth Types: API Key vs Credentials](#auth-types-api-key-vs-credentials)
 
@@ -211,6 +212,68 @@ Click **Delete from UniFi** on a UniFi-only or matched network. This removes the
 
 > Deleting a network from UniFi does not delete the corresponding network in MyNet.
 
+### Add a UniFi-only network to MyNet
+
+For a **UniFi-only** network, click **Add to MyNet**. This opens the [Network Form](networks.md) pre-filled with the UniFi values: name, VLAN ID, CIDR, gateway, DHCP range, DNS servers — and every SSID bound to that network on UniFi (name, password, hidden flag, radio bands, security). Review the form and save.
+
+After saving, the comparison table auto-refreshes on your next visit so the network shows as **Matched** instead of **UniFi only**.
+
+---
+
+## SSID Reconciliation
+
+Underneath each network row in the comparison view, MyNet lists every SSID bound to that network on UniFi alongside the SSIDs configured in MyNet. SSIDs are matched by name (case-sensitive) and each row carries its own status and sync controls.
+
+### SSID statuses
+
+| Status | Meaning |
+|---|---|
+| **Matched** | Same SSID name on both sides, all fields agree |
+| **Differences** | Same SSID name, but one or more fields differ |
+| **MyNet only** | Defined in MyNet but no matching UniFi WLAN |
+| **UniFi only** | Configured on UniFi but not yet in MyNet's network |
+
+### Tracked fields
+
+For each SSID MyNet compares:
+
+- **Password** (PSK) — only compared when both sides have a value; API Key auth omits passphrases, so an empty UniFi password is treated as "unavailable", not a difference
+- **Hidden** — whether the SSID is broadcast
+- **Bands** — 2.4GHz, 5GHz, 6GHz (set comparison; order doesn't matter)
+- **Security** — Open, WPA2, WPA3, WPA2/WPA3, WPA2-Enterprise, WPA3-Enterprise
+
+### Per-SSID actions
+
+Each SSID has its own buttons based on its status:
+
+| Status | Available actions |
+|---|---|
+| **Differences** | **Use UniFi** (overwrite MyNet's SSID with UniFi values) · **Use MyNet** (push MyNet's password, hidden flag, bands, and security to UniFi) |
+| **UniFi only** | **Add to MyNet** (copy the UniFi SSID into MyNet's network) · **Delete from UniFi** (remove the WLAN from the controller) |
+| **MyNet only** | **Delete from MyNet** (remove the SSID from MyNet's network). *Creating a WLAN on UniFi from a MyNet-only SSID is not yet supported — it requires AP group discovery and is tracked as a follow-up.* |
+
+> Write operations to UniFi (**Use MyNet**, **Delete from UniFi**) require **write access enabled** and **Credentials auth**.
+
+### Band and security mapping
+
+MyNet's canonical values are mapped to UniFi's internal fields on the fly:
+
+| MyNet bands | UniFi `wlan_band` / `radio_bands` |
+|---|---|
+| `2.4GHz` | `ng` |
+| `5GHz` | `na` |
+| `2.4GHz + 5GHz` | `both` / `[ng, na]` |
+| `6GHz` | `[6e]` |
+
+| MyNet security | UniFi `x_security` |
+|---|---|
+| Open | `open` |
+| WPA2 | `wpapsk` |
+| WPA3 | `wpa3` |
+| WPA2/WPA3 | `wpapsk` (with controller auto-upgrading) |
+| WPA2-Enterprise | `wpaeap` |
+| WPA3-Enterprise | `wpa3eap` |
+
 ---
 
 ## WiFi Path Association
@@ -229,12 +292,14 @@ API Key auth does not support the association endpoint — credential auth is re
 |---|---|---|
 | Fetch clients | ✓ | ✓ |
 | Fetch networks | ✓ | ✓ |
+| Fetch SSIDs | ✓ (names only) | ✓ (full, incl. passphrases) |
 | Compare MyNet ↔ UniFi | ✓ | ✓ |
 | Read WiFi associations | — | ✓ |
 | Create / update clients | — | ✓ |
 | Delete clients | — | ✓ |
 | Create / delete networks | — | ✓ |
 | Sync fields to UniFi | — | ✓ |
+| Update / delete WLANs | — | ✓ |
 
 Use **API Key** for a safe, read-only integration. Use **Credentials** for full bidirectional sync and precise WiFi topology.
 

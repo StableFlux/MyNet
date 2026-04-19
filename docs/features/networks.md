@@ -116,7 +116,7 @@ For full DNS management with Pi-hole, see [Pi-hole Integration](pihole.md).
 
 ## SSIDs / Wireless Networks
 
-Each network can have one or more SSIDs associated with it. This is informational — it helps you know which WiFi network maps to which VLAN.
+Each network can have one or more SSIDs associated with it. The Wireless SSIDs section is expanded by default when adding or editing a network.
 
 Each SSID entry has:
 
@@ -125,8 +125,16 @@ Each SSID entry has:
 | **SSID** | The WiFi network name |
 | **Password** | Optional, stored for reference (encrypted if encryption is enabled) |
 | **Hidden** | Whether the SSID is broadcast or hidden |
+| **Bands** | Radio bands the SSID runs on — any combination of 2.4GHz, 5GHz, 6GHz |
+| **Security** | Open, WPA2, WPA3, WPA2/WPA3, WPA2-Enterprise, or WPA3-Enterprise |
 
 These SSIDs appear on the network detail and are shown when editing devices that use a WiFi NIC on this network.
+
+### UniFi sync
+
+When [UniFi integration](unifi.md) is configured, MyNet pulls WLANs from the controller, matches them to networks by `networkconf_id`, and reconciles each SSID against the network's `ssids` list. The comparison view provides per-SSID actions to copy UniFi values into MyNet, push MyNet values to UniFi, or delete from either side. See [SSID Reconciliation](unifi.md#ssid-reconciliation) for details.
+
+Creating a network via UniFi's **Add to MyNet** button pre-fills the Wireless SSIDs section with every SSID bound to that network on UniFi, so you don't have to re-enter them manually.
 
 ---
 

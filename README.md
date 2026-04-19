@@ -32,7 +32,7 @@ Designed to run on a Raspberry Pi or any Linux server on your LAN.
 | **Events & alerts** | Unified audit log, conflict detection, offline alerts, acknowledgement |
 | **Locations** | Hierarchical location tree (building → floor → room → rack) |
 | **Pi-hole** | Live stats, DNS record sync, query history, blocking control |
-| **UniFi** | Client discovery, network sync, side-by-side comparison |
+| **UniFi** | Client discovery, network and SSID sync, side-by-side comparison |
 | **QR & labels** | Printable device labels with QR codes linking to device pages |
 | **Network scan** | Live ping sweep to discover unknown devices on your subnets |
 | **Backup & restore** | Full JSON export/import, factory reset |
@@ -101,7 +101,7 @@ You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also
 | [Users & Roles](docs/features/users.md) | User management, permissions, authentication |
 | [Settings](docs/features/settings.md) | System config, appearance, encryption |
 | [Pi-hole Integration](docs/features/pihole.md) | Stats, DNS sync, query history |
-| [UniFi Integration](docs/features/unifi.md) | Client discovery, network sync |
+| [UniFi Integration](docs/features/unifi.md) | Client discovery, network and SSID sync |
 | [QR Codes & Labels](docs/features/qr-labels.md) | Printable labels, QR code generation |
 | [Network Scanner](docs/features/network-scan.md) | Live subnet ping sweep |
 

@@ -110,6 +110,7 @@ The restore runs before any users are created, so the restored users (including 
 
 After reset:
 - All devices, networks, locations, users, and settings are deleted
+- **Integration credentials are cleared** — UniFi (host, API key, username, password, write-enabled flag) and Pi-hole passwords are wiped, and any in-memory session caches held by those integrations are dropped
 - Standard device types are re-seeded
 - The system returns to the first-run setup state
 - You are logged out

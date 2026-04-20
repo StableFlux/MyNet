@@ -48,6 +48,47 @@ MOUNT_POINT = Path("/mnt/mynet-storage")
 HELPER_PATH = "/usr/local/bin/mynet-storage"
 SERVICE_NAME = "mynet.service"
 
+
+def _chown_to_service_user(path: Path) -> None:
+    """Transfer ownership of `path` to the mynet service user.
+
+    The migration worker runs as root (via systemd-run), so any file it
+    creates (the USB DB copy, SD snapshots, restored DB on migrate-back)
+    inherits root ownership. The service then runs as an unprivileged
+    user (`pi` by default) and can't write to its own DB → startup
+    migrations fail with "attempt to write a readonly database" and the
+    service crashloops.
+
+    Called after every file creation in the migration/snapshot paths.
+    No-op when not running as root or when the service itself runs as
+    root (no permission mismatch).
+    """
+    try:
+        if os.geteuid() != 0:
+            return
+        import pwd
+        result = subprocess.run(
+            ["systemctl", "show", "-p", "User", "--value", SERVICE_NAME],
+            capture_output=True, text=True, timeout=5,
+        )
+        user_name = (result.stdout or "").strip()
+        if not user_name or user_name == "root":
+            return
+        pw = pwd.getpwnam(user_name)
+        os.chown(path, pw.pw_uid, pw.pw_gid)
+    except Exception as e:
+        log.warning(f"chown {path} to service user failed: {e}")
+
+
+def _chown_sqlite_file_and_siblings(db_path: Path) -> None:
+    """Chown a SQLite DB file plus its -shm / -wal / -journal siblings.
+    SQLite creates those lazily on open; any of them could be owned by
+    whichever process first wrote them."""
+    for suffix in ("", "-shm", "-wal", "-journal"):
+        p = db_path.with_name(db_path.name + suffix) if suffix else db_path
+        if p.exists():
+            _chown_to_service_user(p)
+
 SNAPSHOT_CURRENT = SNAPSHOTS_DIR / "mynet-current.db"
 SNAPSHOT_PREVIOUS = SNAPSHOTS_DIR / "mynet-previous.db"
 SNAPSHOT_TMP_SUFFIX = ".tmp"
@@ -401,6 +442,10 @@ def take_snapshot() -> dict:
         SNAPSHOT_CURRENT.replace(SNAPSHOT_PREVIOUS)
     tmp.replace(SNAPSHOT_CURRENT)
 
+    # Ownership first, then mode — if we run as root (from the migration
+    # worker) the file would otherwise stay root-owned and the service user
+    # can't read it on the next snapshot/restore/download.
+    _chown_to_service_user(SNAPSHOT_CURRENT)
     os.chmod(SNAPSHOT_CURRENT, 0o600)
     return {
         "current": {"size_bytes": SNAPSHOT_CURRENT.stat().st_size, "modified_at": int(time.time())},
@@ -494,6 +539,12 @@ async def migrate_sd_to_usb(usb_uuid: str) -> dict:
         if usb_db.exists():
             usb_db.unlink()
         _sqlite_online_backup(PRE_MIGRATION_DB, usb_db)
+
+        # The worker runs as root via systemd-run, so files it creates would
+        # otherwise be root:root. Chown to the service user BEFORE mode change
+        # so the service can actually open its own DB after the swap.
+        _chown_sqlite_file_and_siblings(usb_db)
+        os.chmod(usb_db, 0o600)
 
         # Integrity check on the destination before we commit to it
         await emit("migration.phase", phase=PHASE_VERIFY_DEST)
@@ -594,6 +645,8 @@ async def migrate_usb_to_sd() -> dict:
         # becomes a secondary safety net until its 24h auto-delete.
         run_helper("remove-symlink")
         incoming.replace(DB_PATH)
+        # Same chown rationale as SD→USB: worker is root, service is pi.
+        _chown_sqlite_file_and_siblings(DB_PATH)
         os.chmod(DB_PATH, 0o600)
 
         # Remove the mount-dependency drop-in and unmount the USB
@@ -661,6 +714,7 @@ async def _rollback_to_sd() -> None:
     if PRE_MIGRATION_DB.exists():
         try:
             PRE_MIGRATION_DB.replace(DB_PATH)
+            _chown_sqlite_file_and_siblings(DB_PATH)
             os.chmod(DB_PATH, 0o600)
         except OSError as e:
             log.error(f"rollback: failed to restore pre-migration DB: {e}")

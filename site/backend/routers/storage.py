@@ -115,6 +115,9 @@ def recover_revert_to_sd():
         tmp.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail="restored snapshot failed integrity_check")
     tmp.replace(storage.DB_PATH)
+    # Make sure the service user can write the restored DB — this endpoint may
+    # be invoked from the degraded-mode recovery where things got root-owned.
+    storage._chown_sqlite_file_and_siblings(storage.DB_PATH)
     os.chmod(storage.DB_PATH, 0o600)
     cfg = storage.load_config()
     cfg.mode = storage.MODE_SD

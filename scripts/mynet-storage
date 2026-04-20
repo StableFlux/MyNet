@@ -283,6 +283,43 @@ cmd_disable_mount_dependency() {
     json_out '{ok: true}'
 }
 
+cmd_run_migration() {
+    # Spawn the Python migration worker as a detached systemd transient unit so
+    # it survives `systemctl stop mynet.service` mid-migration. Without this
+    # the service stop would kill the migration midway — the classic
+    # "process tries to stop the service that contains it" deadlock.
+    local direction="${1:-}"
+    local uuid="${2:-}"
+    case "$direction" in
+        usb)
+            [[ -z "$uuid" ]] && die "usage: run-migration usb <uuid>"
+            require_uuid "$uuid"
+            ;;
+        sd) ;;
+        *)  die "usage: run-migration <usb|sd> [uuid]" ;;
+    esac
+
+    local worker_py="/opt/mynet/venv/bin/python"
+    [[ -x "$worker_py" ]] || die "Python interpreter not found at $worker_py"
+    local backend_dir="/opt/mynet/site/backend"
+    [[ -d "$backend_dir" ]] || die "Backend dir not found at $backend_dir"
+
+    # --collect removes the transient unit once it exits; --quiet suppresses
+    # the "Running as unit:" line; a predictable unit name is handy for
+    # debugging via `journalctl -u mynet-storage-migrate.service`.
+    systemd-run \
+        --unit="mynet-storage-migrate" \
+        --collect \
+        --quiet \
+        --property="WorkingDirectory=$backend_dir" \
+        --property="StandardOutput=journal" \
+        --property="StandardError=journal" \
+        "$worker_py" -m services.storage_migrate_worker "$direction" "$uuid"
+
+    json_out --arg direction "$direction" --arg uuid "$uuid" \
+        '{ok: true, direction: $direction, uuid: $uuid, detached: true}'
+}
+
 cmd_status() {
     # Non-privileged read — but still under sudo because it shares the script.
     # Reports enough for the backend to build the Settings Storage panel
@@ -368,5 +405,6 @@ case "$sub" in
     service)                     require_root; cmd_service "$@" ;;
     enable-mount-dependency)     require_root; cmd_enable_mount_dependency "$@" ;;
     disable-mount-dependency)    require_root; cmd_disable_mount_dependency "$@" ;;
+    run-migration)               require_root; cmd_run_migration "$@" ;;
     *) die "unknown subcommand: $sub" ;;
 esac

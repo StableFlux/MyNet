@@ -162,7 +162,7 @@ def initialise(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/migrate")
+@router.post("/migrate", status_code=202)
 async def migrate(
     body: dict = Body(...),
     _: User = Depends(require_admin),
@@ -171,31 +171,42 @@ async def migrate(
 
     Body: {target: "usb"|"sd", confirm: "MIGRATE", usb_uuid?: "…"}
     (usb_uuid required when target=usb.)
+
+    Returns 202 Accepted and spawns a detached worker via the helper's
+    `run-migration` subcommand. The worker runs in a systemd-run transient
+    unit outside mynet.service's cgroup so it survives the service stop/start
+    the migration performs mid-flight. Frontend polls /api/storage/status
+    (which reads migration_state.json) to track progress.
     """
     _require_platform()
     if body.get("confirm") != "MIGRATE":
         raise HTTPException(status_code=400, detail='type "MIGRATE" to confirm')
+
+    if storage.is_migration_in_progress():
+        raise HTTPException(status_code=409, detail="a migration is already in progress")
 
     target = body.get("target")
     if target == storage.MODE_USB:
         uuid = (body.get("usb_uuid") or "").strip()
         if not uuid:
             raise HTTPException(status_code=400, detail="usb_uuid is required when target=usb")
-        # Must mount the USB first. The helper validates the UUID format.
+        # Mount the USB before kicking off the worker so the helper's
+        # validation sees a mountable partition and so the worker can
+        # write to /mnt/mynet-storage/ immediately.
         try:
             storage.run_helper("mount", uuid)
         except storage.HelperError as e:
             raise HTTPException(status_code=400, detail=f"mount failed: {e}")
         try:
-            return await storage.migrate_sd_to_usb(uuid)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return storage.run_helper("run-migration", "usb", uuid)
+        except storage.HelperError as e:
+            raise HTTPException(status_code=500, detail=f"failed to spawn migration worker: {e}")
 
     if target == storage.MODE_SD:
         try:
-            return await storage.migrate_usb_to_sd()
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return storage.run_helper("run-migration", "sd")
+        except storage.HelperError as e:
+            raise HTTPException(status_code=500, detail=f"failed to spawn migration worker: {e}")
 
     raise HTTPException(status_code=400, detail='target must be "usb" or "sd"')
 
@@ -288,6 +299,14 @@ def unmount(_: User = Depends(require_admin)):
         return storage.run_helper("unmount")
     except storage.HelperError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/migration-state/dismiss")
+def dismiss_migration_state(_: User = Depends(require_admin)):
+    """Clear a lingering migration_state.json entry — used by the UI's
+    Dismiss button after a failed migration. No-op if no state present."""
+    storage.clear_migration_state()
+    return {"ok": True}
 
 
 @router.patch("/snapshot-interval")

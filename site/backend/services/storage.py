@@ -548,7 +548,10 @@ async def migrate_sd_to_usb(usb_uuid: str) -> dict:
         save_migration_state(state)
         await emit("migration.phase", phase=PHASE_ROLLING_BACK, error=str(exc))
         await _rollback_to_sd()
-        clear_migration_state()
+        # Intentionally DO NOT clear migration_state here. The frontend needs
+        # to be able to render the failure reason after the worker exits;
+        # the user dismisses it explicitly via the API. The next migration
+        # attempt overwrites this state anyway.
         raise
     finally:
         lock.release()
@@ -630,12 +633,12 @@ async def migrate_usb_to_sd() -> dict:
         save_migration_state(state)
         await emit("migration.phase", phase=PHASE_ROLLING_BACK, error=str(exc))
         # Minimal rollback: leave the symlink pointing at USB if it still does,
-        # restart the service, surface the error.
+        # restart the service, surface the error. migration_state is left for
+        # the frontend to display; user dismisses it explicitly.
         try:
             run_helper("service", "start")
         except HelperError:
             pass
-        clear_migration_state()
         raise
     finally:
         lock.release()

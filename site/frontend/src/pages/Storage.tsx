@@ -193,6 +193,11 @@ export default function Storage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['storage-status'] }),
   })
 
+  const dismissMutation = useMutation({
+    mutationFn: async () => (await api.post('/storage/migration-state/dismiss')).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['storage-status'] }),
+  })
+
   // Server-sent phase updates via the existing WebSocket
   const [phase, setPhase] = useState<string | null>(null)
   const [phaseError, setPhaseError] = useState<string | null>(null)
@@ -290,29 +295,41 @@ export default function Storage() {
             <HardDrive size={24} className={isUSB ? 'text-amber-400' : 'text-white/30'} />
           </div>
 
-          {/* Migration status / result — lives here so the user sees it
-              in their natural focus area rather than below the USB picker. */}
+          {/* Migration status / result — backend-driven so it survives the
+              service restart that happens mid-migration. */}
           {status.migration_in_progress && (
             <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
               <Loader size={14} className="animate-spin flex-shrink-0" />
               <div>
-                <strong>Migration in progress:</strong> {phase ? PHASE_LABELS[phase] ?? phase : (status.migration_state?.phase ?? 'starting')}
-                {phaseError && <span className="ml-2 text-red-400">({phaseError})</span>}
+                <strong>Migration in progress:</strong> {(() => {
+                  const p = phase ?? status.migration_state?.phase ?? 'starting'
+                  return PHASE_LABELS[p] ?? p
+                })()}
+                <span className="ml-2 text-white/40">— the service will restart; you'll briefly lose the connection, then need to log back in.</span>
               </div>
             </div>
           )}
-          {!status.migration_in_progress && migrateMutation.isError && (
+          {!status.migration_in_progress && status.migration_state && status.migration_state.phase === 'rolling_back' && (
             <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
               <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-              <div>
-                <strong>Migration failed:</strong> {(migrateMutation.error as any)?.response?.data?.detail ?? String(migrateMutation.error)}
+              <div className="flex-1">
+                <strong>Migration failed and rolled back.</strong>
+                {status.migration_state.error && <div className="mt-1 text-red-400/90 font-mono text-[10px] break-all">{status.migration_state.error}</div>}
               </div>
+              <button
+                type="button"
+                onClick={() => dismissMutation.mutate()}
+                disabled={dismissMutation.isPending}
+                className="text-[10px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40 flex-shrink-0"
+              >
+                Dismiss
+              </button>
             </div>
           )}
-          {!status.migration_in_progress && migrateMutation.isSuccess && (
-            <div className="p-3 rounded border border-emerald-500/30 bg-emerald-500/[0.08] text-xs text-emerald-400 flex items-start gap-2">
-              <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />
-              <div>Migration complete. If encryption is enabled, you'll need to unlock again.</div>
+          {!status.migration_in_progress && migrateMutation.isSuccess && !status.migration_state && (
+            <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
+              <Loader size={14} className="animate-spin flex-shrink-0" />
+              <div>Migration handed off to background worker. Service will restart shortly; after ~10 seconds you'll be asked to log in again.</div>
             </div>
           )}
 

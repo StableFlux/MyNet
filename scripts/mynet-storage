@@ -110,10 +110,22 @@ cmd_init() {
     local device="${1:-}"
     [[ -z "$device" ]] && die "usage: init <device>"
     require_device_partition "$device"
-    # Refuse if the target is currently mounted
-    if findmnt -n "$device" >/dev/null 2>&1; then
-        die "device $device is currently mounted; unmount first"
+
+    # Desktop automounters (udisks2 / gvfs) attach a drive to /media/<user>/...
+    # the moment it's plugged in. mkfs.ext4 refuses to write to a mounted
+    # filesystem. Mirror the `mount` subcommand's auto-unmount: prefer
+    # udisksctl (respects the automounter session) then fall back to umount.
+    local existing
+    existing="$(findmnt -n -o TARGET "$device" 2>/dev/null || true)"
+    if [[ -n "$existing" ]]; then
+        if command -v udisksctl >/dev/null 2>&1; then
+            udisksctl unmount -b "$device" >/dev/null 2>&1 || true
+        fi
+        if findmnt -n "$device" >/dev/null 2>&1; then
+            umount "$device" || die "device is mounted at $existing and could not be unmounted"
+        fi
     fi
+
     # Format as ext4 with the MyNet label. -F forces over existing filesystem.
     mkfs.ext4 -F -L "$LABEL" "$device" >/dev/null
     # Emit the resulting UUID so the caller can persist it

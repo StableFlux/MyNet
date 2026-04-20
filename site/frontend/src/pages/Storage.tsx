@@ -419,6 +419,30 @@ export default function Storage() {
               </button>
             </div>
 
+            {/* Initialise progress / error banner */}
+            {initialiseMutation.isPending && (
+              <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
+                <Loader size={14} className="animate-spin" />
+                <div>
+                  <strong>Initialising drive</strong> — unmounting any existing filesystem, then formatting as ext4. This can take 10–30 seconds on a USB stick.
+                </div>
+              </div>
+            )}
+            {initialiseMutation.isError && (
+              <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
+                <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+                <div>
+                  <strong>Initialisation failed:</strong> {(initialiseMutation.error as any)?.response?.data?.detail ?? String(initialiseMutation.error)}
+                </div>
+              </div>
+            )}
+            {initialiseMutation.isSuccess && !initialiseMutation.isPending && (
+              <div className="p-3 rounded border border-emerald-500/30 bg-emerald-500/[0.08] text-xs text-emerald-400 flex items-start gap-2">
+                <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />
+                <div>Drive initialised and selected. You can now migrate the database.</div>
+              </div>
+            )}
+
             {(!candidatesData || candidatesData.candidates.length === 0) ? (
               <p className="text-xs text-white/40 italic">No USB partitions detected. Insert a drive and click Rescan.</p>
             ) : (

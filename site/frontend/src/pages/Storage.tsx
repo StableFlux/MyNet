@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -180,6 +180,34 @@ export default function Storage() {
     return () => clearTimeout(t)
   }, [handoffPending])
 
+  // Auto-redirect when a migration completes successfully. The user has
+  // been staring at a phase-progress banner for 30s+ while the service
+  // restarted; leaving them static on the Storage page afterwards makes
+  // them wonder whether anything actually finished. Once we observe the
+  // migration_in_progress flag transition from true → false AND there's
+  // no rollback state, show a brief "complete" banner and reload to / ,
+  // which takes them through login (service restart may have invalidated
+  // their session state, and if encryption is enabled they need to unlock
+  // again anyway).
+  const wasMigratingRef = useRef(false)
+  const [migrationJustCompleted, setMigrationJustCompleted] = useState(false)
+  useEffect(() => {
+    if (status?.migration_in_progress) {
+      wasMigratingRef.current = true
+      return
+    }
+    if (!wasMigratingRef.current) return
+    // Just transitioned from in-progress → idle
+    wasMigratingRef.current = false
+    if (status && !status.migration_state) {
+      // Clean completion — no rolling_back state left behind. Redirect.
+      setMigrationJustCompleted(true)
+      const t = setTimeout(() => { window.location.href = '/' }, 2500)
+      return () => clearTimeout(t)
+    }
+    // Otherwise the rolling_back banner in the normal render handles it.
+  }, [status?.migration_in_progress, status?.migration_state, status])
+
   const { data: candidatesData, refetch: rescan, isFetching: scanning } = useQuery<{ candidates: Candidate[] }>({
     queryKey: ['storage-candidates'],
     queryFn: async () => (await api.post('/storage/scan')).data,
@@ -348,7 +376,19 @@ export default function Storage() {
         </div>
       )}
 
-      {/* 4. Worker finished and rolled back after an error — persists until
+      {/* 4. Migration completed cleanly. Brief display before the auto-
+          redirect kicks in — gives the user confirmation something
+          finished, rather than the page quietly going blank. */}
+      {migrationJustCompleted && (
+        <div className="p-3 rounded border border-emerald-500/30 bg-emerald-500/[0.08] text-xs text-emerald-400 flex items-center gap-2">
+          <CheckCircle size={14} className="flex-shrink-0" />
+          <div>
+            <strong>Migration complete.</strong> Taking you to the login page…
+          </div>
+        </div>
+      )}
+
+      {/* 5. Worker finished and rolled back after an error — persists until
           dismissed. Next migration attempt also clears it. */}
       {!status.migration_in_progress && status.migration_state && status.migration_state.phase === 'rolling_back' && (
         <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">

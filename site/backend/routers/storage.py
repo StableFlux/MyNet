@@ -156,7 +156,8 @@ def initialise(
     if not device:
         raise HTTPException(status_code=400, detail="device is required")
     try:
-        return storage.run_helper("init", device)
+        # mkfs.ext4 on a multi-GB USB can take minutes on a Pi. 600s ceiling.
+        return storage.run_helper("init", device, timeout=600)
     except storage.HelperError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

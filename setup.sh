@@ -336,6 +336,19 @@ server {
     gzip_types      text/plain text/css text/javascript application/javascript
                     application/json application/xml image/svg+xml;
 
+    # USB Storage endpoints — mkfs, migration, and snapshot restore can
+    # legitimately take minutes on a Pi. Must come BEFORE the generic /api/
+    # block so nginx matches the more-specific prefix first.
+    location /api/storage/ {
+        proxy_pass         http://mynet_backend;
+        proxy_set_header   Host              \$host;
+        proxy_set_header   X-Real-IP         \$remote_addr;
+        proxy_set_header   X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
     # API proxy → FastAPI backend
     location /api/ {
         proxy_pass         http://mynet_backend;

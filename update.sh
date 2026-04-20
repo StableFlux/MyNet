@@ -6,9 +6,10 @@
 # =============================================================================
 set -euo pipefail
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 info()    { echo -e "${CYAN}[INFO]${RESET}  $*"; }
 success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 die()     { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}━━━  $*  ━━━${RESET}"; }
 
@@ -153,6 +154,40 @@ fi
 
 if [ "$UNIT_CHANGED" -eq 1 ]; then
     systemctl daemon-reload
+fi
+
+# Nginx — inject a dedicated /api/storage/ location with a 600s timeout so
+# long-running operations (mkfs, migrate) don't hit the default 30s /api/
+# timeout and return 504. Idempotent: only runs if the block isn't present.
+NGINX_CONF="/etc/nginx/sites-available/mynet"
+if [ -f "$NGINX_CONF" ] && ! grep -q "location /api/storage/" "$NGINX_CONF"; then
+    cp "$NGINX_CONF" "$NGINX_CONF.before-storage"
+    awk '
+        /^    location \/api\/ \{/ && !done {
+            print "    # USB Storage endpoints — mkfs, migration, and snapshot restore can"
+            print "    # legitimately take minutes on a Pi. Keep them separate from the"
+            print "    # general API timeout."
+            print "    location /api/storage/ {"
+            print "        proxy_pass         http://mynet_backend;"
+            print "        proxy_set_header   Host              $host;"
+            print "        proxy_set_header   X-Real-IP         $remote_addr;"
+            print "        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;"
+            print "        proxy_set_header   X-Forwarded-Proto $scheme;"
+            print "        proxy_read_timeout 600s;"
+            print "        proxy_send_timeout 600s;"
+            print "    }"
+            print ""
+            done=1
+        }
+        { print }
+    ' "$NGINX_CONF.before-storage" > "$NGINX_CONF"
+    if nginx -t >/dev/null 2>&1; then
+        rm -f "$NGINX_CONF.before-storage"
+        success "Added /api/storage/ nginx location with 600s timeout"
+    else
+        warn "nginx config test failed after adding storage location — reverting"
+        mv "$NGINX_CONF.before-storage" "$NGINX_CONF"
+    fi
 fi
 
 # ── Restart ──────────────────────────────────────────────────────────────────

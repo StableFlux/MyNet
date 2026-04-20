@@ -41,7 +41,7 @@ Designed to run on a Raspberry Pi, Ubuntu, or Debian server on your LAN.
 | **QR & labels** | Printable device labels with QR codes linking to device pages |
 | **Network scan** | Live ping sweep to discover unknown devices on your subnets |
 | **Backup & restore** | Full JSON export/import, factory reset |
-| **USB Storage** | Move the live DB to a USB drive to reduce SD-card wear; automatic hourly SD snapshots protect against drive failure |
+| **USB Storage** | Move the live DB to a dedicated external drive (USB, SSD, NVMe); hourly snapshots on the host filesystem protect against drive failure. Reduces SD-card wear on Pi; isolates DB I/O on Debian/Ubuntu servers |
 | **Users & roles** | Admin / Editor / Viewer with JWT auth and login rate limiting |
 | **Encryption** | Optional passphrase-based encryption for stored credentials |
 

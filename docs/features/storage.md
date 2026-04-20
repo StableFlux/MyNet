@@ -4,7 +4,7 @@
 
 # Storage
 
-> Move MyNet's database to a dedicated USB drive to reduce SD-card write wear on Raspberry Pi installs. Automatic hourly snapshots to the SD card protect against USB failure or accidental removal.
+> Move MyNet's database onto a dedicated external drive, with automatic hourly snapshots on the host filesystem as a safety net. On Raspberry Pi installs this reduces SD-card write wear; on Debian/Ubuntu servers it isolates DB I/O to its own device or makes the database portable between hosts.
 
 ---
 
@@ -24,9 +24,14 @@
 
 ## Why
 
-At 85 monitored devices MyNet's scheduler writes roughly **70–100 MB/day** to SQLite. On a Raspberry Pi, the SD card absorbs all of that. Standard SD cards tolerate 2–4 years of this before write wear becomes a risk; high-endurance cards last longer but still degrade.
+At 85 monitored devices MyNet's scheduler writes roughly **70–100 MB/day** to SQLite. Depending on where you've installed MyNet the motivation differs:
 
-Moving the database to a USB drive shifts the write load onto hardware that's easy to replace, and keeps the SD card read-mostly (Linux + MyNet code + hourly snapshots).
+- **Raspberry Pi** — the SD card absorbs all of that. Standard SD cards tolerate 2–4 years before write wear becomes a risk; high-endurance cards last longer but still degrade. Moving the DB to USB shifts the writes onto hardware that's easy to replace and keeps the SD read-mostly (Linux + MyNet code + hourly snapshots).
+- **Debian / Ubuntu server** — the motivation is less about wear and more about separation: isolating the DB onto its own dedicated disk (external SSD, NVMe, or USB) simplifies backups, lets you move the database between hosts without re-importing, and keeps the root filesystem untouched when you want to wipe or reinstall the OS.
+
+The SD-card snapshot layer protects against drive failure or accidental removal regardless of platform — whatever your host filesystem is, the snapshots land there.
+
+> **Tested platforms:** end-to-end validated on Raspberry Pi OS (64-bit, Pi 3B+/4/5). The feature is platform-neutral (relies only on systemd + standard util-linux/e2fsprogs tools) and should behave identically on Debian 12+ and Ubuntu 22.04+, but those haven't been exercised on real hardware yet.
 
 ---
 
@@ -66,7 +71,7 @@ A privileged helper (`/usr/local/bin/mynet-storage`) handles the mount / format 
 4. Click **Move database to USB…**
 5. Read the warning modal. Type `MIGRATE` in the confirmation box, then click **Start migration**.
 6. Watch the live status: snapshot → copy → verify → swap → restart. Each phase is shown in a banner above the Current Storage card.
-7. When migration completes, MyNet automatically redirects you to the login page. Log in again (and unlock the encryption passphrase if encryption is enabled).
+7. When migration completes, MyNet refreshes the app. You may be prompted to log in again (and to unlock the encryption passphrase if encryption is enabled); if your session is still valid you'll land back on the dashboard.
 
 After migration:
 - The SD card now holds only snapshots + MyNet's own files.
@@ -121,7 +126,7 @@ The Degraded Mode screen is what you see instead of the normal UI. The exact opt
 *Symptom:* Headline "Database unavailable". Error detail typically "database symlink target is missing (USB unmounted?)".
 
 1. **Retry** (primary button). Plug the drive back in first, then click Retry. MyNet stops the service, cleans up the stale mount entry, re-mounts the drive, and restarts the service. The button label reads "Recovering — restarting service…" for ~5–10 s, then you drop back into the normal UI.
-2. **Restore from snapshot and switch back to SD card** (secondary button). Use this when the drive has failed or you don't have it to hand. Restores the latest SD snapshot onto the SD card directly, removes the USB symlink and mount dependency, restarts the service in SD mode. Worst-case data loss equals one snapshot interval (default 1 hour).
+2. **Restore from snapshot and switch back to SD card** (secondary button). Use this when the drive has failed or you don't have it to hand. Restores the latest SD snapshot onto the SD card directly, removes the USB symlink and mount dependency, wipes the database file from the USB drive (if it comes back), and restarts the service in SD mode. Worst-case data loss equals one snapshot interval (default 1 hour).
 
 ### Scenario 2 — USB present but database corrupt
 
@@ -129,7 +134,7 @@ The Degraded Mode screen is what you see instead of the normal UI. The exact opt
 
 1. **Restore from snapshot (Nm ago)** (primary button). Overwrites the corrupt DB **in place**, keeping USB mode. Stops the service, copies the current snapshot onto the USB file, chowns it correctly, drops any stale `-shm`/`-wal` siblings, restarts.
 2. **Restore from previous snapshot** (secondary, only visible when both snapshots exist). Use if the current snapshot also appears corrupt — e.g., the corruption began before the most recent snapshot was taken.
-3. **Restore from snapshot and move database to SD card** (fallback). Same as Scenario 1's secondary action — gives up on the USB and reverts to SD mode.
+3. **Restore from snapshot and move database to SD card** (fallback). Same as Scenario 1's secondary action — gives up on the USB, wipes the DB file from it, and reverts to SD mode.
 
 ### Scenario 3 — No snapshots available
 
@@ -138,8 +143,8 @@ If both SD snapshots are missing (fresh install that's never run a snapshot cycl
 ### Behind the scenes
 
 - The pull detector runs a 1-second `/proc/mounts` + device-UUID poll. Loss is detected within ~1 s.
-- Recovery runs in a transient `systemd-run` scope (e.g., `mynet-storage-remount-recovery.service`, `mynet-storage-restore-snapshot.service`), **outside mynet.service's cgroup**, so it can safely stop and restart the main service as part of the recovery dance. If you watch `journalctl` during a recovery click you'll briefly see these units appear and then disappear — that's normal.
-- The monitoring scheduler pauses automatically whenever the detector reports the USB gone, so nothing tries to write to a zombie filesystem.
+- Recovery runs in a transient `systemd-run` scope (e.g., `mynet-storage-remount-recovery.service`, `mynet-storage-restore-snapshot.service`, `mynet-storage-revert-to-sd.service`), **outside mynet.service's cgroup**, so it can safely stop and restart the main service as part of the recovery dance. If you watch `journalctl` during a recovery click you'll briefly see these units appear and then disappear — that's normal.
+- The monitoring scheduler, Pi-hole poller, conflict scanner, and cleanup job all skip their ticks whenever the USB is gone (or a migration is in progress), so nothing tries to write to a zombie filesystem. This is gated by a single `should_pause_db_access()` helper in `services/storage.py`.
 
 ---
 
@@ -148,7 +153,7 @@ If both SD snapshots are missing (fresh install that's never run a snapshot cycl
 1. Navigate to **Settings → Storage**.
 2. Click **Move database back to SD card…**.
 3. Confirm with `MIGRATE`.
-4. MyNet snapshots the USB, copies it to the SD card, removes the symlink, unmounts the USB, and restarts the service.
+4. MyNet snapshots the USB, copies it to the SD card, removes the symlink, wipes the database file from the USB drive, unmounts it, and restarts the service. The SD pre-migration anchor (24h safety net) and hourly snapshots remain if you need to roll back.
 5. The USB can now be safely removed.
 
 ---

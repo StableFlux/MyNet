@@ -16,7 +16,7 @@
 
 MyNet is a self-hosted web application for managing every device on your home network. Track hardware inventory, map subnets, monitor uptime, visualise network topology, manage switch ports, and integrate with Pi-hole and UniFi — all from a single, locally-hosted interface.
 
-Designed to run on a Raspberry Pi or any Linux server on your LAN.
+Designed to run on a Raspberry Pi, Ubuntu, or Debian server on your LAN.
 
 <p align="center">
   If this app is useful to you, a coffee is always appreciated ❤<br><br>

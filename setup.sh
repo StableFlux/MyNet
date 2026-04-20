@@ -421,13 +421,18 @@ SyslogIdentifier=mynet
 
 # Grant ICMP capability for device monitoring (ping) — no root required
 AmbientCapabilities=CAP_NET_RAW
-CapabilityBoundingSet=CAP_NET_RAW
+# NOTE: CapabilityBoundingSet is intentionally NOT set. The USB Storage feature
+# needs the backend to sudo into /usr/local/bin/mynet-storage via a narrow
+# sudoers drop-in, and sudo's setuid-root escalation needs CAP_SETUID /
+# CAP_SETGID / CAP_AUDIT_WRITE — all bounded away if we cap to CAP_NET_RAW.
+# AmbientCapabilities above still limits what the Python service itself starts
+# with; sudoers still gates which command can be run with elevated rights.
 
 # Harden the service.
 # NOTE: NoNewPrivileges=yes is intentionally NOT set here. The USB Storage
-# feature (USB_STORAGE_DESIGN.md § 3.2) requires the backend to `sudo` into
-# /usr/local/bin/mynet-storage via a narrow sudoers drop-in. Setting this flag
-# would block that. ProtectSystem=full and PrivateTmp=yes remain.
+# feature (docs/features/storage.md) requires the backend to sudo into the
+# helper via a narrow sudoers drop-in. Setting this flag would block that.
+# ProtectSystem=full and PrivateTmp=yes remain.
 PrivateTmp=yes
 ProtectSystem=full
 

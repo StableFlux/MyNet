@@ -107,6 +107,16 @@ if [ -f "$SERVICE_FILE" ] && grep -q '^NoNewPrivileges=yes' "$SERVICE_FILE"; the
     success "Removed NoNewPrivileges=yes from systemd unit (required by USB Storage helper)"
 fi
 
+# CapabilityBoundingSet=CAP_NET_RAW caps the service (and sudo children) to that
+# single capability, which breaks sudo's setuid-root escalation ("unable to
+# change to root gid"). AmbientCapabilities=CAP_NET_RAW stays — that's what
+# grants ICMP. Same helper-access rationale as NoNewPrivileges above.
+if [ -f "$SERVICE_FILE" ] && grep -q '^CapabilityBoundingSet=' "$SERVICE_FILE"; then
+    sed -i '/^CapabilityBoundingSet=/d' "$SERVICE_FILE"
+    UNIT_CHANGED=1
+    success "Removed CapabilityBoundingSet from systemd unit (required by USB Storage helper)"
+fi
+
 # Ensure jq + helper dependencies are installed (no-op when already present)
 if ! command -v jq >/dev/null 2>&1; then
     spin_run "Installing jq (required by USB Storage helper)..." apt-get install -y -qq jq

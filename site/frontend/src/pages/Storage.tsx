@@ -100,6 +100,7 @@ function MigrationModal({
               <ul className="list-disc list-inside space-y-1 text-white/60">
                 <li>The service will restart during migration.</li>
                 <li>If encryption is enabled, you'll need to re-enter your passphrase afterwards.</li>
+                <li>Once the SD copy is verified, the database file is <strong className="text-amber-400">wiped from the USB drive</strong>. A 24-hour safety anchor and the hourly snapshots remain on SD.</li>
                 <li>The USB drive will be unmounted once the move completes — you can then safely remove it.</li>
               </ul>
             </>
@@ -346,7 +347,7 @@ export default function Storage() {
         <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
           <Loader size={14} className="animate-spin flex-shrink-0" />
           <div>
-            <strong>Starting migration…</strong> spinning up the background worker. The service will restart in a few seconds; you'll be asked to log in again once it's done.
+            <strong>Starting migration…</strong> spinning up the background worker. The service will restart in a few seconds; you may be asked to log in again once it's done.
           </div>
         </div>
       )}
@@ -383,7 +384,7 @@ export default function Storage() {
         <div className="p-3 rounded border border-emerald-500/30 bg-emerald-500/[0.08] text-xs text-emerald-400 flex items-center gap-2">
           <CheckCircle size={14} className="flex-shrink-0" />
           <div>
-            <strong>Migration complete.</strong> Taking you to the login page…
+            <strong>Migration complete.</strong> Refreshing the app…
           </div>
         </div>
       )}

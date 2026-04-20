@@ -157,52 +157,31 @@ def recover_remount():
         raise HTTPException(status_code=502, detail=f"failed to spawn recovery worker: {e}")
 
 
-@router.post("/recover/revert-to-sd")
+@router.post("/recover/revert-to-sd", status_code=202)
 def recover_revert_to_sd():
     """Degraded-mode recovery: remove the USB symlink + drop-in, restore the
     latest snapshot to the SD card, and restart the service in SD mode.
 
     Unauthenticated (no DB → no auth), but gated on the DB actually being
-    unreachable so this can't be abused to force a revert on a healthy install.
+    unreachable or corrupt so this can't be abused to force a revert on a
+    healthy install.
+
+    The whole flow is dispatched to a detached systemd-run scope via the
+    helper. Running it in-process (as this did previously) raced the
+    service restart's SIGTERM against the HTTP response, so the client saw
+    "helper service failed" even when the flow had succeeded. The detached
+    scope pattern matches /recover/remount and /recover/restore-snapshot.
     """
     _require_db_unreachable()
     if not storage.is_platform_supported():
         raise HTTPException(status_code=501, detail=storage.platform_unsupported_reason())
-    src = storage.SNAPSHOT_CURRENT if storage.SNAPSHOT_CURRENT.exists() else storage.SNAPSHOT_PREVIOUS if storage.SNAPSHOT_PREVIOUS.exists() else None
-    if src is None:
+    which = "current" if storage.SNAPSHOT_CURRENT.exists() else "previous" if storage.SNAPSHOT_PREVIOUS.exists() else None
+    if which is None:
         raise HTTPException(status_code=404, detail="no snapshot available to restore from")
     try:
-        storage.run_helper("remove-symlink")
-    except storage.HelperError:
-        pass
-    try:
-        storage.run_helper("disable-mount-dependency")
-    except storage.HelperError:
-        pass
-    try:
-        storage.run_helper("unmount")
-    except storage.HelperError:
-        pass
-    # Copy snapshot to DB_PATH via sqlite3 online backup
-    tmp = storage.DB_PATH.with_suffix(storage.DB_PATH.suffix + ".recover-tmp")
-    storage._sqlite_online_backup(src, tmp)
-    if not storage._integrity_check(tmp):
-        tmp.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="restored snapshot failed integrity_check")
-    tmp.replace(storage.DB_PATH)
-    # Make sure the service user can write the restored DB — this endpoint may
-    # be invoked from the degraded-mode recovery where things got root-owned.
-    storage._chown_sqlite_file_and_siblings(storage.DB_PATH)
-    os.chmod(storage.DB_PATH, 0o600)
-    cfg = storage.load_config()
-    cfg.mode = storage.MODE_SD
-    cfg.usb_uuid = ""
-    storage.save_config(cfg)
-    try:
-        storage.run_helper("service", "restart")
+        return storage.run_helper("run-revert-to-sd", which)
     except storage.HelperError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    return {"ok": True, "restored_from": "current" if src == storage.SNAPSHOT_CURRENT else "previous"}
+        raise HTTPException(status_code=502, detail=f"failed to spawn revert worker: {e}")
 
 
 @router.get("/status")

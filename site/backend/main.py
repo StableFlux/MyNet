@@ -225,6 +225,8 @@ async def lifespan(app: FastAPI):
 
     # Schedule PiHole polling — interval read from DB so Settings UI changes take effect on restart
     async def _poll_pihole():
+        if _storage.should_pause_db_access():
+            return
         db = SessionLocal()
         try:
             await update_pihole_cache(db)
@@ -249,6 +251,8 @@ async def lifespan(app: FastAPI):
 
     # Schedule conflict scan every 10 minutes
     async def _run_conflict_scan():
+        if _storage.should_pause_db_access():
+            return
         from services.conflict_checker import run_conflict_scan
         _db = SessionLocal()
         try:

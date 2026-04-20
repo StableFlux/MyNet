@@ -475,6 +475,34 @@ def _sqlite_online_backup(source: Path, dest: Path) -> None:
         src_conn.close()
 
 
+def _drain_wal_and_consolidate(db: Path) -> None:
+    """Merge any WAL sidecar into the main file and remove -wal/-shm siblings.
+
+    Must run with the service stopped — we need to be the only writer.
+
+    Rationale: migration and snapshot code flows rename the main DB file
+    while the -wal/-shm sidecars keep their original names. A rename of
+    `foo.db` → `foo.db.staging` leaves `foo.db-wal` orphaned at the old
+    path; SQLite opening `foo.db.staging` will look for `foo.db.staging-wal`,
+    find nothing, and silently discard any uncheckpointed transactions
+    from the stranded sidecar. A clean service shutdown SHOULD checkpoint,
+    but it's not guaranteed (other connections, abnormal exit). Calling
+    PRAGMA journal_mode=DELETE is the bulletproof way to force a checkpoint
+    and remove the sidecars, leaving `db` fully self-contained.
+    """
+    if not db.exists() or db.is_symlink():
+        return
+    try:
+        conn = sqlite3.connect(str(db))
+        try:
+            conn.execute("PRAGMA journal_mode=DELETE").fetchall()
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        log.warning(f"WAL drain on {db} failed: {e}")
+
+
 def _integrity_check(db: Path) -> bool:
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
@@ -599,6 +627,10 @@ async def migrate_sd_to_usb(usb_uuid: str) -> dict:
         state.phase = PHASE_STOP_SERVICE; save_migration_state(state)
         run_helper("service", "stop")
 
+        # Drain any WAL data into the main file so the upcoming rename
+        # doesn't strand -wal/-shm sidecars (see _drain_wal_and_consolidate).
+        _drain_wal_and_consolidate(DB_PATH)
+
         # Preserve the SD DB as rollback anchor
         if DB_PATH.exists() and not DB_PATH.is_symlink():
             DB_PATH.rename(PRE_MIGRATION_DB)
@@ -698,9 +730,20 @@ async def migrate_usb_to_sd() -> dict:
         run_helper("service", "stop")
 
         usb_db = MOUNT_POINT / "mynet.db"
+        # Drain the live USB's WAL so our online backup reads a consistent
+        # source with no uncheckpointed data hiding in the sidecars.
+        _drain_wal_and_consolidate(usb_db)
+
         incoming = DATA_DIR / "mynet.db.incoming"
         if incoming.exists():
             incoming.unlink()
+        # Clear any orphaned -incoming sidecars from a prior run — if they
+        # survive into the post-rename SD file they'd confuse SQLite's WAL
+        # recovery when the renamed incoming.db becomes the live mynet.db.
+        for suffix in ("-wal", "-shm"):
+            leftover = DATA_DIR / f"mynet.db.incoming{suffix}"
+            if leftover.exists():
+                leftover.unlink()
 
         await emit("migration.phase", phase=PHASE_COPY)
         state.phase = PHASE_COPY; save_migration_state(state)
@@ -719,6 +762,21 @@ async def migrate_usb_to_sd() -> dict:
         # Same chown rationale as SD→USB: worker is root, service is pi.
         _chown_sqlite_file_and_siblings(DB_PATH)
         os.chmod(DB_PATH, 0o600)
+
+        # Delete the USB-resident copy now that the SD copy is live and
+        # verified. Rationale: (a) the user has explicitly migrated AWAY
+        # from USB mode, so a stale DB on the drive serves no purpose;
+        # (b) leaving a full copy of ciphertext passwords on a removable
+        # drive is a quiet data-exposure surface if the drive is later
+        # lost or repurposed. The SD pre-migration anchor + hourly
+        # snapshots remain as recovery paths. Must happen BEFORE unmount
+        # while the path is still writable.
+        for p in (usb_db, usb_db.with_name(usb_db.name + "-wal"), usb_db.with_name(usb_db.name + "-shm")):
+            if p.exists():
+                try:
+                    p.unlink()
+                except OSError as e:
+                    log.warning(f"failed to delete {p} from USB: {e}")
 
         # Remove the mount-dependency drop-in and unmount the USB
         run_helper("disable-mount-dependency")
@@ -806,6 +864,22 @@ def resume_or_rollback_on_startup() -> None:
     """
     state = load_migration_state()
     if state is None:
+        cleanup_pre_migration_if_old()
+        return
+
+    # If the migration lock is currently held by a live worker, THIS service
+    # start is the worker's own `service start` call, not a crash recovery.
+    # Rolling back here would silently undo the migration the worker just
+    # performed (unlink the new symlink, move the pre-migration anchor back,
+    # flip cfg to SD). The worker would then probe the restored SD DB,
+    # see tables, and report success — while the system is actually in SD
+    # mode. Skip and let the worker finish; it'll clear state on completion
+    # or run its own rollback on failure.
+    if is_migration_in_progress():
+        log.info(
+            f"migration worker is live (phase={state.phase}) — "
+            "skipping resume/rollback and letting the worker drive"
+        )
         cleanup_pre_migration_if_old()
         return
 
@@ -969,15 +1043,30 @@ class PullDetector:
 pull_detector = PullDetector()
 
 
+# ── Shared "should pause DB writes?" helper ───────────────────────────────────
+
+def should_pause_db_access() -> bool:
+    """True when scheduled DB-touching jobs should skip their tick.
+
+    Two situations warrant skipping: (1) an active migration holds the DB
+    file mid-swap, so any concurrent write risks corruption of the source
+    or destination; (2) the USB backing the DB has been pulled, so writes
+    would either hit a read-only remount-ro filesystem or a zombie mount
+    point and get logged as "database disk image is malformed" noise.
+
+    The monitoring scheduler, Pi-hole poller, conflict scanner, cleanup
+    job, and snapshot job all call this before opening a session.
+    """
+    return is_migration_in_progress() or pull_detector.usb_lost
+
+
 # ── Snapshot scheduler hook ──────────────────────────────────────────────────
 
 async def snapshot_job() -> None:
-    """APScheduler-invoked. Skips when a migration holds the lock."""
-    if is_migration_in_progress():
-        log.info("snapshot tick skipped — migration in progress")
-        return
-    if pull_detector.usb_lost:
-        log.info("snapshot tick skipped — USB is lost")
+    """APScheduler-invoked. Skips when a migration holds the lock or the
+    USB is gone."""
+    if should_pause_db_access():
+        log.info("snapshot tick skipped — DB unavailable (migration or USB lost)")
         return
     try:
         info = take_snapshot()

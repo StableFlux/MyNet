@@ -77,7 +77,7 @@ export default function DegradedMode({ health, onRetry }: { health: DegradedHeal
   }
 
   const handleRevert = async () => {
-    if (!confirm('Restore the latest snapshot to the SD card and restart MyNet in SD mode? This disconnects the USB and resumes from the most recent hourly snapshot.')) return
+    if (!confirm('Restore the latest snapshot to the SD card and restart MyNet in SD mode?\n\nThis disconnects the USB, wipes the database file from it, and resumes from the most recent hourly snapshot.')) return
     setReverting(true)
     setRevertError('')
     try {

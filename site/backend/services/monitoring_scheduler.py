@@ -336,6 +336,12 @@ async def run_batch_tick():
       3. _tick_persist     — DB writes in a thread pool
     The event loop is only held for the brief WebSocket broadcast at the end.
     """
+    # Skip the tick when the DB is unavailable (migration in flight or USB
+    # pulled) — otherwise SQLite reads through the zombie device return
+    # garbage which SQLAlchemy surfaces as "database disk image is malformed".
+    from services import storage as _storage
+    if _storage.should_pause_db_access():
+        return
     try:
         now, due, device_map, wan_config_by_key, wan_keys = await asyncio.to_thread(_tick_gather_due)
     except Exception:
@@ -376,6 +382,10 @@ async def cleanup_old_results():
     """
     from database import SessionLocal
     from models.monitoring import MonitoringResult
+    from services import storage as _storage
+
+    if _storage.should_pause_db_access():
+        return
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
     db = SessionLocal()

@@ -373,6 +373,72 @@ cmd_run_restore_snapshot() {
     json_out --arg which "$which" '{ok: true, which: $which, detached: true}'
 }
 
+cmd_run_revert_to_sd() {
+    # Full "restore snapshot and move DB to SD" flow, run in a detached scope.
+    # Called by /api/storage/recover/revert-to-sd. Must survive the service
+    # restart at the end — the in-process version raced the SIGTERM against
+    # the HTTP response, leaving the client with "helper service failed"
+    # even though the flow had actually succeeded.
+    local which="${1:-current}"
+    case "$which" in
+        current|previous) ;;
+        *) die "usage: run-revert-to-sd <current|previous>" ;;
+    esac
+
+    local snapshot="$SNAPSHOTS_DIR/mynet-${which}.db"
+    [[ -f "$snapshot" ]] || die "snapshot $which does not exist at $snapshot"
+
+    local service_user
+    service_user="$(systemctl show -p User --value "$SERVICE_NAME" 2>/dev/null || true)"
+    [[ -z "$service_user" ]] && service_user="root"
+    local service_group
+    service_group="$(id -gn "$service_user" 2>/dev/null || echo root)"
+
+    local escaped
+    escaped="$(systemd-escape -p --suffix=mount "$MOUNT_POINT")"
+
+    # shellcheck disable=SC2016
+    systemd-run \
+        --unit="mynet-storage-revert-to-sd" \
+        --collect \
+        --quiet \
+        bash -c "
+            set -x
+            systemctl stop mynet.service
+            sleep 1
+            # Tear the USB symlink out of the way first, so the snapshot
+            # rename lands as a plain file on SD rather than through the link.
+            if [[ -L '$DB_PATH' ]]; then
+                rm -f '$DB_PATH'
+            fi
+            cp '$snapshot' '$DB_PATH.revert-tmp'
+            chown '$service_user:$service_group' '$DB_PATH.revert-tmp'
+            chmod 600 '$DB_PATH.revert-tmp'
+            mv -Tf '$DB_PATH.revert-tmp' '$DB_PATH'
+            rm -f '$DB_PATH-shm' '$DB_PATH-wal' 2>/dev/null || true
+            # Wipe the (possibly corrupt) DB copy off the USB before we
+            # unmount — consistent with the normal USB→SD migration path.
+            # User has explicitly abandoned this drive for MyNet; leaving a
+            # stale or corrupt DB on a removable drive is a data-exposure
+            # surface and serves no purpose. Must happen before unmount
+            # while the mountpoint is still writable.
+            rm -f '$MOUNT_POINT/mynet.db' '$MOUNT_POINT/mynet.db-wal' '$MOUNT_POINT/mynet.db-shm' 2>/dev/null || true
+            # Remove the mount dependency drop-in.
+            rm -f '$DROPIN_FILE'
+            rmdir '$DROPIN_DIR' 2>/dev/null || true
+            systemctl daemon-reload
+            # Unmount USB — service is stopped so fds are released now.
+            systemctl stop '$escaped' 2>/dev/null || true
+            umount -l '$MOUNT_POINT' 2>/dev/null || true
+            # Reset storage config so the service boots in SD mode.
+            printf '%s' '{\"mode\":\"sd\",\"usb_uuid\":\"\",\"snapshot_interval_secs\":3600}' > '$DATA_DIR/storage_config.json'
+            chown '$service_user:$service_group' '$DATA_DIR/storage_config.json'
+            systemctl start mynet.service
+        "
+
+    json_out --arg which "$which" '{ok: true, which: $which, detached: true}'
+}
+
 cmd_run_remount_recovery() {
     # Remount recovery (called by /api/storage/recover/remount) has to
     # survive stopping mynet.service — the service holds file descriptors
@@ -536,5 +602,6 @@ case "$sub" in
     run-migration)               require_root; cmd_run_migration "$@" ;;
     run-remount-recovery)        require_root; cmd_run_remount_recovery "$@" ;;
     run-restore-snapshot)        require_root; cmd_run_restore_snapshot "$@" ;;
+    run-revert-to-sd)            require_root; cmd_run_revert_to_sd "$@" ;;
     *) die "unknown subcommand: $sub" ;;
 esac

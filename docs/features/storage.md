@@ -65,8 +65,8 @@ A privileged helper (`/usr/local/bin/mynet-storage`) handles the mount / format 
    - If it's a different filesystem (exFAT, NTFS, FAT32), click **Initialise (erase)** to format it as ext4. *All existing data on the drive is destroyed.*
 4. Click **Move database to USB…**
 5. Read the warning modal. Type `MIGRATE` in the confirmation box, then click **Start migration**.
-6. Watch the live status: snapshot → copy → verify → swap → restart.
-7. The service restarts during the swap. If encryption is enabled you'll be prompted to unlock.
+6. Watch the live status: snapshot → copy → verify → swap → restart. Each phase is shown in a banner above the Current Storage card.
+7. When migration completes, MyNet automatically redirects you to the login page. Log in again (and unlock the encryption passphrase if encryption is enabled).
 
 After migration:
 - The SD card now holds only snapshots + MyNet's own files.
@@ -112,15 +112,34 @@ Snapshots skip themselves when a migration is in progress or when the USB has be
 
 ## Recovery
 
-If the USB drive is pulled, fails, or simply isn't mounted when the server starts, MyNet enters **degraded mode**:
+MyNet watches the USB drive at two levels: the underlying block device (via `/dev/disk/by-uuid/<uuid>`, the authoritative "drive is physically present" signal) and the mount state. When either fails, the backend emits a `usb_lost` event over the WebSocket, the frontend flips the entire app into **Degraded Mode**, and a cleanup pass runs to unmount any stale kernel entry so reinsertion can remount cleanly.
 
-- The UI shows a single "Database unavailable" screen instead of the normal application.
-- Three recovery options are offered:
-  - **Retry** — MyNet re-checks whether the drive has been re-inserted. Use this first; most accidental pulls can be fixed by plugging the drive back in and retrying.
-  - **Restore from snapshot** — copies the most recent SD snapshot to the SD card, removes the USB symlink and mount dependency, and restarts MyNet in SD mode. At most one snapshot interval of data is lost.
-  - *Manual recovery* — for situations where both the USB and the SD snapshots are unavailable, SSH to the server and restore a JSON backup through the setup wizard.
+The Degraded Mode screen is what you see instead of the normal UI. The exact options shown depend on *which* kind of failure MyNet detected.
 
-MyNet also detects USB removal **while running** via `/proc/mounts` polling. When the drive disappears, the monitoring scheduler pauses and a banner appears in the UI until the drive is re-inserted or the user chooses to restore from snapshot.
+### Scenario 1 — USB removed (or not mounted at boot)
+
+*Symptom:* Headline "Database unavailable". Error detail typically "database symlink target is missing (USB unmounted?)".
+
+1. **Retry** (primary button). Plug the drive back in first, then click Retry. MyNet stops the service, cleans up the stale mount entry, re-mounts the drive, and restarts the service. The button label reads "Recovering — restarting service…" for ~5–10 s, then you drop back into the normal UI.
+2. **Restore from snapshot and switch back to SD card** (secondary button). Use this when the drive has failed or you don't have it to hand. Restores the latest SD snapshot onto the SD card directly, removes the USB symlink and mount dependency, restarts the service in SD mode. Worst-case data loss equals one snapshot interval (default 1 hour).
+
+### Scenario 2 — USB present but database corrupt
+
+*Symptom:* Headline "Database corrupted". Detail shows the SQLite `PRAGMA quick_check` error. MyNet runs this integrity check on every startup; if it fails, the service refuses to touch the DB and goes straight into Degraded Mode.
+
+1. **Restore from snapshot (Nm ago)** (primary button). Overwrites the corrupt DB **in place**, keeping USB mode. Stops the service, copies the current snapshot onto the USB file, chowns it correctly, drops any stale `-shm`/`-wal` siblings, restarts.
+2. **Restore from previous snapshot** (secondary, only visible when both snapshots exist). Use if the current snapshot also appears corrupt — e.g., the corruption began before the most recent snapshot was taken.
+3. **Restore from snapshot and move database to SD card** (fallback). Same as Scenario 1's secondary action — gives up on the USB and reverts to SD mode.
+
+### Scenario 3 — No snapshots available
+
+If both SD snapshots are missing (fresh install that's never run a snapshot cycle, or SD failure), Degraded Mode says so and tells you to SSH to the server. Recovery then means reinstalling and restoring a JSON backup through the first-run wizard.
+
+### Behind the scenes
+
+- The pull detector runs a 1-second `/proc/mounts` + device-UUID poll. Loss is detected within ~1 s.
+- Recovery runs in a transient `systemd-run` scope (e.g., `mynet-storage-remount-recovery.service`, `mynet-storage-restore-snapshot.service`), **outside mynet.service's cgroup**, so it can safely stop and restart the main service as part of the recovery dance. If you watch `journalctl` during a recovery click you'll briefly see these units appear and then disappear — that's normal.
+- The monitoring scheduler pauses automatically whenever the detector reports the USB gone, so nothing tries to write to a zombie filesystem.
 
 ---
 
@@ -149,7 +168,8 @@ If you uninstall MyNet while USB storage is active, `uninstall.sh` asks what to 
 - **ext4 only.** exFAT / NTFS / FAT32 are rejected because SQLite's write semantics aren't safe on those filesystems. Drives in those formats can be initialised as ext4 from Settings (erasing existing data).
 - **Single drive.** MyNet uses one dedicated USB drive per install.
 - **Feature disabled outside systemd Linux.** Docker dev environments and non-systemd hosts hide the Storage section entirely.
-- **Creating a WLAN from a MyNet-only SSID on UniFi** — unrelated to Storage; noted here because the two features occupy similar mental space. The UniFi "Add to UniFi" button for SSIDs is still a follow-up; see [UniFi Integration](unifi.md).
+- **Pull mid-write has a small corruption window.** MyNet quiesces writers the moment the drive is detected as gone, but anything already in-flight to the kernel's page cache at that instant can't be taken back. The hourly SD snapshot is what covers this case — worst case you revert to the snapshot and lose ≤ 1 snapshot interval of data.
+- **Reinsertion may need a moment.** If the filesystem was mid-write when pulled, the ext4 journal can take a few seconds to settle on reinsert; the Retry button polls for up to 25 s before giving up. If Retry times out, plug the drive into a desktop machine briefly to let it fsck, then try again.
 
 ---
 

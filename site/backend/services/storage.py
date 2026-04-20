@@ -841,45 +841,58 @@ class PullDetector:
         # disk image is malformed" to SQLite). udev, however, removes
         # /dev/disk/by-uuid/<uuid> the moment the USB is pulled — that's
         # the authoritative "device is gone" signal.
+        lost_reason: Optional[str] = None
+        # Whether to actively clean up the stale mount entry. Without this,
+        # reinsertion hits "Input/output error" on the mountpoint and the
+        # user has to SSH in and run `umount -l` by hand.
+        should_force_unmount = False
+
         if cfg.usb_uuid:
             device_node = Path(f"/dev/disk/by-uuid/{cfg.usb_uuid}")
             if not device_node.exists():
-                if not self._lost:
-                    self._lost = True
-                    log.warning(f"USB device {cfg.usb_uuid} gone — emitting usb_lost")
-                    await emit("usb_lost", reason="device_gone")
-                return
+                lost_reason = "device_gone"
+                should_force_unmount = True
 
-        # Belt-and-braces: also watch for ext4 remounting read-only after
-        # I/O errors (errors=remount-ro in the mount unit) and for the
-        # mount being cleanly unmounted.
-        try:
-            raw = Path("/proc/mounts").read_text()
-        except OSError:
+        if lost_reason is None:
+            # Belt-and-braces: also watch for ext4 remounting read-only after
+            # I/O errors (errors=remount-ro in the mount unit) and for the
+            # mount being cleanly unmounted.
+            try:
+                raw = Path("/proc/mounts").read_text()
+            except OSError:
+                return
+            mount_line = None
+            for line in raw.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == str(MOUNT_POINT):
+                    mount_line = parts
+                    break
+            if mount_line is None:
+                lost_reason = "mount_missing"
+                # Nothing to force-unmount when the mount is already gone.
+            else:
+                opts = mount_line[3] if len(mount_line) > 3 else ""
+                if "ro" in opts.split(","):
+                    lost_reason = "mounted_read_only"
+                    should_force_unmount = True
+
+        if lost_reason is None:
+            # All clear. Reset the flag so a re-insertion (after Retry
+            # triggers a remount) returns the app to normal mode.
+            if self._lost:
+                self._lost = False
             return
-        mount_line = None
-        for line in raw.splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[1] == str(MOUNT_POINT):
-                mount_line = parts
-                break
-        if mount_line is None:
-            if not self._lost:
-                self._lost = True
-                log.warning("USB mount point missing — emitting usb_lost")
-                await emit("usb_lost", reason="mount_missing")
-            return
-        opts = mount_line[3] if len(mount_line) > 3 else ""
-        if "ro" in opts.split(","):
-            if not self._lost:
-                self._lost = True
-                log.warning("USB mount is read-only — emitting usb_lost")
-                await emit("usb_lost", reason="mounted_read_only")
-            return
-        # All clear. Reset the flag so a re-insertion (after Retry triggers a
-        # remount) returns the app to normal mode.
-        if self._lost:
-            self._lost = False
+
+        if not self._lost:
+            self._lost = True
+            log.warning(f"USB unavailable ({lost_reason}) — emitting usb_lost")
+            await emit("usb_lost", reason=lost_reason)
+            if should_force_unmount:
+                try:
+                    run_helper("force-unmount-stale", timeout=10)
+                    log.info("force-unmount-stale: cleaned up stale mount entry")
+                except Exception as e:
+                    log.warning(f"force-unmount-stale failed: {e}")
 
 
 pull_detector = PullDetector()

@@ -222,6 +222,22 @@ cmd_unmount() {
     json_out '{ok: true}'
 }
 
+cmd_force_unmount_stale() {
+    # Called by the pull detector when it notices the USB device has
+    # disappeared (udev removed /dev/disk/by-uuid/<uuid>) or the mount
+    # has gone read-only. umount -l (lazy) because reads/writes are
+    # returning I/O errors and a blocking umount would hang indefinitely.
+    #
+    # Crucially, we do NOT remove the mount unit file or the mountpoint
+    # directory — the user may reinsert the drive and the existing mount
+    # unit needs to be there so `systemctl start` or the helper's
+    # `mount <uuid>` reattaches cleanly.
+    if findmnt -n "$MOUNT_POINT" >/dev/null 2>&1; then
+        umount -l "$MOUNT_POINT" 2>/dev/null || true
+    fi
+    json_out '{ok: true}'
+}
+
 cmd_swap_symlink() {
     local target="${1:-}"
     [[ -z "$target" ]] && die "usage: swap-symlink <target>"
@@ -413,6 +429,7 @@ case "$sub" in
     init)                        require_root; cmd_init "$@" ;;
     mount)                       require_root; cmd_mount "$@" ;;
     unmount)                     require_root; cmd_unmount "$@" ;;
+    force-unmount-stale)         require_root; cmd_force_unmount_stale "$@" ;;
     swap-symlink)                require_root; cmd_swap_symlink "$@" ;;
     remove-symlink)              require_root; cmd_remove_symlink "$@" ;;
     service)                     require_root; cmd_service "$@" ;;

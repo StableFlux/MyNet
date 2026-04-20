@@ -41,6 +41,7 @@ Designed to run on a Raspberry Pi, Ubuntu, or Debian server on your LAN.
 | **QR & labels** | Printable device labels with QR codes linking to device pages |
 | **Network scan** | Live ping sweep to discover unknown devices on your subnets |
 | **Backup & restore** | Full JSON export/import, factory reset |
+| **USB Storage** | Move the live DB to a USB drive to reduce SD-card wear; automatic hourly SD snapshots protect against drive failure |
 | **Users & roles** | Admin / Editor / Viewer with JWT auth and login rate limiting |
 | **Encryption** | Optional passphrase-based encryption for stored credentials |
 
@@ -103,6 +104,7 @@ You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also
 | [Locations](docs/features/locations.md) | Hierarchical location tree |
 | [Search & Filtering](docs/features/search.md) | Full-text search, filters, subnet map |
 | [Backup & Restore](docs/features/backup-restore.md) | Export, import, factory reset |
+| [Storage](docs/features/storage.md) | USB storage for the database, hourly SD snapshots, degraded-mode recovery |
 | [Users & Roles](docs/features/users.md) | User management, permissions, authentication |
 | [Settings](docs/features/settings.md) | System config, appearance, encryption |
 | [Pi-hole Integration](docs/features/pihole.md) | Stats, DNS sync, query history |
@@ -129,7 +131,7 @@ You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also
 
 **Ping monitoring scale (Pi 3B+):** Safe ceiling is ~300 monitored devices before the 60-second scheduler tick becomes noticeably slow. Raise `concurrent_tasks` in `services/monitoring_scheduler.py` from 150 to 256 if monitoring more than 150 devices.
 
-**SD card write wear:** At 85 devices the scheduler writes ~70–100 MB/day to SQLite. Standard SD cards may last 2–4 years; high-endurance cards (Samsung Pro Endurance, SanDisk High Endurance) are strongly recommended. To reduce wear: move `DB_PATH` in `.env` to a USB drive, or increase `TICK_SECS` in `services/monitoring_scheduler.py` from 60s to 120s.
+**SD card write wear:** At 85 devices the scheduler writes ~70–100 MB/day to SQLite. Standard SD cards may last 2–4 years; high-endurance cards (Samsung Pro Endurance, SanDisk High Endurance) are strongly recommended. The simplest wear-reduction option is to move the database to a dedicated USB drive via the built-in **[Storage](docs/features/storage.md)** feature (Settings → Storage) — automatic hourly SD snapshots keep recovery easy. A slower workaround is to raise `TICK_SECS` in `services/monitoring_scheduler.py` from 60s to 120s.
 
 ---
 

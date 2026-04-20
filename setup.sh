@@ -184,6 +184,9 @@ if [ "$PYTHON_BIN" = "python3" ]; then
         "curl"
         "git"
         "ca-certificates"
+        "jq"                   # required by the USB Storage helper (scripts/mynet-storage)
+        "util-linux"           # lsblk, blkid, findmnt, systemd-escape — helper dependencies
+        "e2fsprogs"            # mkfs.ext4 — used by the helper's "init" subcommand
     )
 else
     PKGS=(
@@ -196,6 +199,9 @@ else
         "curl"
         "git"
         "ca-certificates"
+        "jq"
+        "util-linux"
+        "e2fsprogs"
     )
 fi
 
@@ -417,8 +423,11 @@ SyslogIdentifier=mynet
 AmbientCapabilities=CAP_NET_RAW
 CapabilityBoundingSet=CAP_NET_RAW
 
-# Harden the service
-NoNewPrivileges=yes
+# Harden the service.
+# NOTE: NoNewPrivileges=yes is intentionally NOT set here. The USB Storage
+# feature (USB_STORAGE_DESIGN.md § 3.2) requires the backend to `sudo` into
+# /usr/local/bin/mynet-storage via a narrow sudoers drop-in. Setting this flag
+# would block that. ProtectSystem=full and PrivateTmp=yes remain.
 PrivateTmp=yes
 ProtectSystem=full
 
@@ -429,6 +438,42 @@ SERVICE
 # Ownership
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 chmod 750 "$DATA_DIR"
+
+# ── USB Storage feature — install helper + sudoers + snapshots dir ───────────
+# See USB_STORAGE_DESIGN.md § 15.1. Feature is opt-in (default SD mode), but
+# the supporting files are installed on every fresh install so the Settings
+# page can activate USB mode without re-running setup.
+step "Installing USB Storage helper"
+
+mkdir -p "$DATA_DIR/snapshots"
+chown "$SERVICE_USER:$SERVICE_GROUP" "$DATA_DIR/snapshots"
+chmod 750 "$DATA_DIR/snapshots"
+success "Created $DATA_DIR/snapshots"
+
+if [ -f "$REPO_ROOT/scripts/mynet-storage" ]; then
+    install -m 755 -o root -g root "$REPO_ROOT/scripts/mynet-storage" /usr/local/bin/mynet-storage
+    success "Installed /usr/local/bin/mynet-storage"
+else
+    warn "scripts/mynet-storage not found in repo — USB Storage feature will be disabled"
+fi
+
+# Sudoers drop-in — validated with visudo before committing, so a bad edit
+# never leaves the system in a state where sudo refuses all drop-ins.
+SUDOERS_TMP="$(mktemp)"
+cat > "$SUDOERS_TMP" <<SUDOERS
+# Installed by MyNet setup.sh for the USB Storage feature.
+# Grants the mynet service user permission to run the storage helper only.
+# See USB_STORAGE_DESIGN.md § 3.2.
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/local/bin/mynet-storage
+SUDOERS
+chmod 0440 "$SUDOERS_TMP"
+if visudo -c -f "$SUDOERS_TMP" >/dev/null; then
+    install -m 0440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/mynet-storage
+    success "Installed /etc/sudoers.d/mynet-storage"
+else
+    warn "Sudoers validation failed — USB Storage feature will be disabled"
+fi
+rm -f "$SUDOERS_TMP"
 
 systemctl daemon-reload
 systemctl enable mynet

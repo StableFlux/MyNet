@@ -1,0 +1,352 @@
+#!/usr/bin/env bash
+# =============================================================================
+# mynet-storage — privileged helper for the MyNet USB Storage feature.
+#
+# Invoked by the MyNet backend through sudo. The sudoers drop-in at
+# /etc/sudoers.d/mynet-storage grants NOPASSWD for this exact script only.
+# Every subcommand validates its arguments strictly and refuses to touch
+# the root filesystem or paths outside its allowlist.
+#
+# See USB_STORAGE_DESIGN.md § 3 for the design this implements.
+# =============================================================================
+set -euo pipefail
+
+# Pinned PATH — sudo resets environment
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+
+# ── Version ──────────────────────────────────────────────────────────────────
+# update.sh compares this to the installed copy to decide whether to re-copy.
+VERSION="1"
+
+# ── Constants ────────────────────────────────────────────────────────────────
+INSTALL_DIR="/opt/mynet"
+DATA_DIR="$INSTALL_DIR/data"
+DB_PATH="$DATA_DIR/mynet.db"
+SNAPSHOTS_DIR="$DATA_DIR/snapshots"
+MOUNT_POINT="/mnt/mynet-storage"
+DROPIN_DIR="/etc/systemd/system/mynet.service.d"
+DROPIN_FILE="$DROPIN_DIR/storage.conf"
+MOUNT_UNIT_NAME='mnt-mynet\x2dstorage.mount'
+MOUNT_UNIT_FILE="/etc/systemd/system/$MOUNT_UNIT_NAME"
+SERVICE_NAME="mynet.service"
+LABEL="MYNET-STORAGE"
+
+# Device path whitelist — USB / eMMC / NVMe partitions only
+DEVICE_RE='^/dev/(sd[a-z][0-9]+|mmcblk[0-9]+p[0-9]+|nvme[0-9]+n[0-9]+p[0-9]+)$'
+
+# UUID format (case-insensitive hex with dashes)
+UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+die() { echo "error: $*" >&2; exit 1; }
+
+require_root() {
+    [[ $EUID -eq 0 ]] || die "must be run as root (via sudo)"
+}
+
+require_device_partition() {
+    local d="$1"
+    [[ "$d" =~ $DEVICE_RE ]] || die "not a permitted device path: $d"
+    [[ -b "$d" ]] || die "not a block device: $d"
+    local rootdev
+    rootdev="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+    [[ -n "$rootdev" && "$d" == "$rootdev" ]] && die "refusing to operate on the root filesystem partition"
+    local parent
+    parent="$(lsblk -no PKNAME "$d" 2>/dev/null || true)"
+    if [[ -n "$parent" && -n "$rootdev" ]]; then
+        local rootparent
+        rootparent="$(lsblk -no PKNAME "$rootdev" 2>/dev/null || true)"
+        [[ "$parent" == "$rootparent" ]] && die "refusing to format a partition on the root disk"
+    fi
+}
+
+require_uuid() {
+    [[ "$1" =~ $UUID_RE ]] || die "not a valid UUID: $1"
+}
+
+# jq must be present — see setup.sh / update.sh (installs it if missing)
+have_jq() {
+    command -v jq >/dev/null 2>&1
+}
+
+json_out() {
+    if have_jq; then
+        jq -n "$@"
+    else
+        die "jq is required but not installed"
+    fi
+}
+
+# ── Subcommands ──────────────────────────────────────────────────────────────
+
+cmd_version() {
+    echo "$VERSION"
+}
+
+cmd_detect() {
+    # List removable partitions as JSON. Includes: device, uuid, size, fstype,
+    # label, mountpoint. Consumed by the backend for the USB picker UI and
+    # for first-run auto-detection.
+    local raw
+    raw="$(lsblk -J -b -o NAME,PATH,SIZE,FSTYPE,LABEL,UUID,MOUNTPOINT,RM,TYPE)"
+    # Walk children of removable disks, emit only partitions
+    echo "$raw" | jq '[
+        .blockdevices[]
+        | select(.rm == true and (.type == "disk" or .type == "part"))
+        | (.children // [.])[]
+        | select(.type == "part")
+        | {
+            device: .path,
+            uuid: (.uuid // ""),
+            size_bytes: (.size // 0),
+            fstype: (.fstype // ""),
+            label: (.label // ""),
+            mountpoint: (.mountpoint // "")
+          }
+    ]'
+}
+
+cmd_init() {
+    local device="${1:-}"
+    [[ -z "$device" ]] && die "usage: init <device>"
+    require_device_partition "$device"
+    # Refuse if the target is currently mounted
+    if findmnt -n "$device" >/dev/null 2>&1; then
+        die "device $device is currently mounted; unmount first"
+    fi
+    # Format as ext4 with the MyNet label. -F forces over existing filesystem.
+    mkfs.ext4 -F -L "$LABEL" "$device" >/dev/null
+    # Emit the resulting UUID so the caller can persist it
+    local uuid
+    uuid="$(blkid -s UUID -o value "$device")"
+    json_out --arg uuid "$uuid" --arg device "$device" --arg label "$LABEL" \
+        '{ok: true, uuid: $uuid, device: $device, label: $label}'
+}
+
+cmd_mount() {
+    local uuid="${1:-}"
+    [[ -z "$uuid" ]] && die "usage: mount <uuid>"
+    require_uuid "$uuid"
+
+    local device
+    device="$(blkid -U "$uuid" 2>/dev/null || true)"
+    [[ -z "$device" ]] && die "no block device found with UUID $uuid"
+    require_device_partition "$device"
+
+    # If the drive is already mounted at a non-MyNet path (desktop automounter),
+    # unmount it there first — try udisksctl (respects the automounter session)
+    # then fall back to plain umount.
+    local existing
+    existing="$(findmnt -n -o TARGET "$device" 2>/dev/null || true)"
+    if [[ -n "$existing" && "$existing" != "$MOUNT_POINT" ]]; then
+        if command -v udisksctl >/dev/null 2>&1; then
+            udisksctl unmount -b "$device" >/dev/null 2>&1 || true
+        fi
+        # If still mounted, try root-level umount
+        if findmnt -n -o TARGET "$device" >/dev/null 2>&1; then
+            umount "$device" || die "device is mounted at $existing and could not be unmounted"
+        fi
+    fi
+
+    mkdir -p "$MOUNT_POINT"
+    chmod 755 "$MOUNT_POINT"
+
+    # Install systemd mount unit (UUID-keyed) for persistence across reboots
+    local escaped
+    escaped="$(systemd-escape -p --suffix=mount "$MOUNT_POINT")"
+    cat > "/etc/systemd/system/$escaped" <<UNIT
+[Unit]
+Description=MyNet USB storage mount
+Before=$SERVICE_NAME
+# network.target kept loose — USB is local hardware
+Before=network.target
+
+[Mount]
+What=/dev/disk/by-uuid/$uuid
+Where=$MOUNT_POINT
+Type=ext4
+Options=defaults,noatime,errors=remount-ro
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+    systemctl daemon-reload
+    systemctl enable "$escaped" >/dev/null
+    systemctl start "$escaped"
+
+    # Ownership for the service user once the filesystem is live
+    local service_user
+    service_user="$(systemctl show -p User "$SERVICE_NAME" | cut -d= -f2)"
+    [[ -z "$service_user" ]] && service_user="root"
+    chown "$service_user:$(id -gn "$service_user")" "$MOUNT_POINT"
+
+    json_out --arg uuid "$uuid" --arg mount "$MOUNT_POINT" --arg unit "$escaped" \
+        '{ok: true, uuid: $uuid, mount: $mount, unit: $unit}'
+}
+
+cmd_unmount() {
+    local escaped
+    escaped="$(systemd-escape -p --suffix=mount "$MOUNT_POINT")"
+    if [[ -f "/etc/systemd/system/$escaped" ]]; then
+        systemctl stop "$escaped" 2>/dev/null || true
+        systemctl disable "$escaped" 2>/dev/null || true
+        rm -f "/etc/systemd/system/$escaped"
+        systemctl daemon-reload
+    fi
+    # Fall through: if the mount unit is gone but something is still mounted
+    if findmnt -n "$MOUNT_POINT" >/dev/null 2>&1; then
+        umount "$MOUNT_POINT" || true
+    fi
+    rmdir "$MOUNT_POINT" 2>/dev/null || true
+    json_out '{ok: true}'
+}
+
+cmd_swap_symlink() {
+    local target="${1:-}"
+    [[ -z "$target" ]] && die "usage: swap-symlink <target>"
+    # Target must be inside $DATA_DIR or $MOUNT_POINT — rejects arbitrary paths
+    case "$target" in
+        "$DATA_DIR"/*|"$MOUNT_POINT"/*) ;;
+        *) die "target outside allowed roots: $target" ;;
+    esac
+    # Atomic replace via rename
+    ln -sfn "$target" "$DB_PATH.new"
+    mv -Tf "$DB_PATH.new" "$DB_PATH"
+    json_out --arg target "$target" '{ok: true, target: $target}'
+}
+
+cmd_remove_symlink() {
+    if [[ -L "$DB_PATH" ]]; then
+        rm -f "$DB_PATH"
+    fi
+    json_out '{ok: true}'
+}
+
+cmd_service() {
+    local action="${1:-}"
+    case "$action" in
+        start|stop)
+            systemctl "$action" "$SERVICE_NAME"
+            ;;
+        restart)
+            # --no-block so we don't wait on the restart (which would be
+            # killing our own caller if that caller is the MyNet service)
+            systemctl --no-block restart "$SERVICE_NAME"
+            ;;
+        *) die "usage: service <start|stop|restart>" ;;
+    esac
+    json_out --arg action "$action" '{ok: true, action: $action}'
+}
+
+cmd_enable_mount_dependency() {
+    local uuid="${1:-}"
+    [[ -z "$uuid" ]] && die "usage: enable-mount-dependency <uuid>"
+    require_uuid "$uuid"
+    mkdir -p "$DROPIN_DIR"
+    cat > "$DROPIN_FILE" <<DROPIN
+# Installed by mynet-storage when USB mode is enabled.
+# Do not edit manually — remove by running: sudo mynet-storage disable-mount-dependency
+[Unit]
+RequiresMountsFor=$MOUNT_POINT
+DROPIN
+    systemctl daemon-reload
+    json_out --arg file "$DROPIN_FILE" '{ok: true, dropin: $file}'
+}
+
+cmd_disable_mount_dependency() {
+    if [[ -f "$DROPIN_FILE" ]]; then
+        rm -f "$DROPIN_FILE"
+        rmdir "$DROPIN_DIR" 2>/dev/null || true
+        systemctl daemon-reload
+    fi
+    json_out '{ok: true}'
+}
+
+cmd_status() {
+    # Non-privileged read — but still under sudo because it shares the script.
+    # Reports enough for the backend to build the Settings Storage panel
+    # without making multiple sudo calls.
+    local mode="sd"
+    local mount_active="false"
+    local usb_uuid=""
+    local dropin_installed="false"
+    local db_is_symlink="false"
+    local db_target=""
+
+    [[ -f "$DROPIN_FILE" ]] && dropin_installed="true"
+
+    if findmnt -n "$MOUNT_POINT" >/dev/null 2>&1; then
+        mount_active="true"
+        usb_uuid="$(findmnt -n -o UUID "$MOUNT_POINT" 2>/dev/null || true)"
+    fi
+
+    if [[ -L "$DB_PATH" ]]; then
+        db_is_symlink="true"
+        db_target="$(readlink "$DB_PATH")"
+        case "$db_target" in
+            "$MOUNT_POINT"/*) mode="usb" ;;
+        esac
+    fi
+
+    local db_size=0
+    if [[ -f "$DB_PATH" || -L "$DB_PATH" ]]; then
+        db_size="$(stat -L -c '%s' "$DB_PATH" 2>/dev/null || echo 0)"
+    fi
+
+    # Data dir (SD) usage
+    local sd_total=0 sd_free=0
+    read -r sd_total sd_free < <(df -B1 --output=size,avail "$DATA_DIR" | tail -n1)
+
+    # USB usage (if mounted)
+    local usb_total=0 usb_free=0
+    if [[ "$mount_active" == "true" ]]; then
+        read -r usb_total usb_free < <(df -B1 --output=size,avail "$MOUNT_POINT" | tail -n1)
+    fi
+
+    json_out \
+        --arg mode "$mode" \
+        --argjson mount_active "$mount_active" \
+        --arg usb_uuid "$usb_uuid" \
+        --argjson dropin_installed "$dropin_installed" \
+        --argjson db_is_symlink "$db_is_symlink" \
+        --arg db_target "$db_target" \
+        --argjson db_size_bytes "$db_size" \
+        --argjson sd_total_bytes "$sd_total" \
+        --argjson sd_free_bytes "$sd_free" \
+        --argjson usb_total_bytes "$usb_total" \
+        --argjson usb_free_bytes "$usb_free" \
+        '{
+            mode: $mode,
+            mount_active: $mount_active,
+            usb_uuid: $usb_uuid,
+            dropin_installed: $dropin_installed,
+            db_is_symlink: $db_is_symlink,
+            db_target: $db_target,
+            db_size_bytes: $db_size_bytes,
+            sd: {total_bytes: $sd_total_bytes, free_bytes: $sd_free_bytes},
+            usb: {total_bytes: $usb_total_bytes, free_bytes: $usb_free_bytes}
+        }'
+}
+
+# ── Dispatch ─────────────────────────────────────────────────────────────────
+[[ $# -lt 1 ]] && die "usage: mynet-storage <subcommand> [args...]"
+
+# detect / status / version are read-only — run without privileged checks
+# so the backend can poll them cheaply. (They're still gated through sudo by
+# the sudoers drop-in; running them through sudo doesn't harm anything.)
+sub="$1"; shift
+case "$sub" in
+    version)                     cmd_version "$@" ;;
+    detect)                      cmd_detect "$@" ;;
+    status)                      cmd_status "$@" ;;
+    init)                        require_root; cmd_init "$@" ;;
+    mount)                       require_root; cmd_mount "$@" ;;
+    unmount)                     require_root; cmd_unmount "$@" ;;
+    swap-symlink)                require_root; cmd_swap_symlink "$@" ;;
+    remove-symlink)              require_root; cmd_remove_symlink "$@" ;;
+    service)                     require_root; cmd_service "$@" ;;
+    enable-mount-dependency)     require_root; cmd_enable_mount_dependency "$@" ;;
+    disable-mount-dependency)    require_root; cmd_disable_mount_dependency "$@" ;;
+    *) die "unknown subcommand: $sub" ;;
+esac

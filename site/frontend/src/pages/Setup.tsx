@@ -1,13 +1,27 @@
 import { useState, useRef } from 'react'
 import { useAuthStore } from '../store/authStore'
-import { UploadCloud } from 'lucide-react'
+import { UploadCloud, Usb, Loader } from 'lucide-react'
 import api from '../lib/api'
 
 type Mode = 'create' | 'restore'
 
-export default function Setup() {
+interface StorageCandidate {
+  device: string
+  uuid: string
+  label: string
+  size_bytes: number
+}
+
+interface SetupProps {
+  storageCandidate?: StorageCandidate | null
+}
+
+export default function Setup({ storageCandidate }: SetupProps = {}) {
   const setUser = useAuthStore((s) => s.setUser)
   const [mode, setMode] = useState<Mode>('create')
+  const [dismissedUSB, setDismissedUSB] = useState(false)
+  const [adopting, setAdopting] = useState(false)
+  const [adoptError, setAdoptError] = useState('')
 
   // ── Create admin state ────────────────────────────────────────────
   const [form, setForm] = useState({ username: '', display_name: '', password: '', confirm: '' })
@@ -63,6 +77,84 @@ export default function Setup() {
     } finally {
       setRestoreLoading(false)
     }
+  }
+
+  // First-run USB gate (§6). Shown when a MYNET-STORAGE drive is present AND
+  // the user hasn't dismissed it. "Use this database" mounts the USB and
+  // restarts the service — the page is reloaded and the user lands at login.
+  const showUSBGate = storageCandidate && !dismissedUSB
+
+  const handleAdopt = async () => {
+    if (!storageCandidate) return
+    setAdopting(true)
+    setAdoptError('')
+    try {
+      await api.post('/auth/adopt-storage-candidate', { usb_uuid: storageCandidate.uuid })
+      // Service will restart shortly. Wait, then reload — /setup-required
+      // will return setup_required:false because the USB brings its users
+      // with it, sending us to the login page (or unlock if encrypted).
+      setTimeout(() => { window.location.href = '/' }, 6000)
+    } catch (err: any) {
+      setAdoptError(err.response?.data?.detail ?? 'Could not adopt USB database')
+      setAdopting(false)
+    }
+  }
+
+  function formatGB(n: number): string {
+    return n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(0)} MB` : `${(n / 1024 ** 3).toFixed(1)} GB`
+  }
+
+  if (showUSBGate) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+        <div className="w-full max-w-md relative">
+          <img src="/logo.png" alt="MyNet" className="w-[346px] max-w-full mx-auto absolute bottom-full left-0 right-0 -mb-8" />
+          <div className="glass-card p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Usb size={20} className="text-emerald-400" />
+              <h1 className="text-lg font-semibold text-white">USB database detected</h1>
+            </div>
+            <p className="text-sm text-white/60">
+              A USB drive labelled <span className="font-mono text-white/80">MYNET-STORAGE</span> was found on this server.
+              You can seed this install from the database it contains, or start fresh.
+            </p>
+            <div className="p-3 rounded bg-white/[0.02] border border-white/[0.05] text-xs text-white/60 space-y-0.5">
+              <div><span className="text-white/40">Device:</span> <span className="font-mono">{storageCandidate.device}</span></div>
+              <div><span className="text-white/40">Size:</span> {formatGB(storageCandidate.size_bytes)}</div>
+              <div><span className="text-white/40">UUID:</span> <span className="font-mono">{storageCandidate.uuid.slice(0, 13)}…</span></div>
+            </div>
+            <p className="text-xs text-white/40">
+              Using the existing database preserves every user, device, and setting from the previous install.
+              If encryption was enabled, you will be prompted for the passphrase after adoption.
+            </p>
+            {adoptError && <p className="text-xs text-red-400">{adoptError}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAdopt}
+                disabled={adopting}
+                className="flex-1 px-3 py-2 rounded text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 flex items-center justify-center gap-2"
+              >
+                {adopting ? (<><Loader size={14} className="animate-spin" />Mounting…</>) : 'Use this database'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedUSB(true)}
+                disabled={adopting}
+                className="px-3 py-2 rounded text-sm text-white/60 hover:text-white border border-white/[0.1] hover:bg-white/[0.04] disabled:opacity-40"
+              >
+                Start fresh
+              </button>
+            </div>
+            {adopting && (
+              <p className="text-xs text-white/40 text-center">
+                Mounting the USB, swapping the database pointer, and restarting the service. This takes about 10 seconds.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

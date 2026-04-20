@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor, ScanLine, Router } from 'lucide-react'
+import { Users, HardDriveDownload, MapPin, QrCode, ShieldOff, Save, ScrollText, Lock, LockOpen, KeyRound, AlertTriangle, Palette, Wifi, Trash2, Sun, Moon, Monitor, ScanLine, Router, HardDrive } from 'lucide-react'
 import { GlassCard } from '../components/GlassCard'
 import { useAuthStore } from '../store/authStore'
 import { useThemeStore, type ThemeMode } from '../store/themeStore'
@@ -58,6 +58,12 @@ const SETTINGS_ITEMS = [
     icon: HardDriveDownload,
     label: 'Backup',
     description: 'Download a backup of the database.',
+  },
+  {
+    to: '/settings/storage',
+    icon: HardDrive,
+    label: 'Storage',
+    description: 'Move the database to a USB drive to reduce SD card wear. Automatic hourly snapshots.',
   },
 ]
 

@@ -84,12 +84,69 @@ spin_run "Upgrading pip..."                    "$VENV_DIR/bin/pip" install --qui
 spin_run "Installing Python dependencies..."   "$VENV_DIR/bin/pip" install --quiet -r "$BACKEND_SRC/requirements.txt"
 success "Dependencies up to date"
 
-# ── Fix ownership and restart ─────────────────────────────────────────────────
-step "Restarting services"
+# ── Fix ownership ─────────────────────────────────────────────────────────────
+step "Restoring ownership"
 
 SERVICE_USER="${SUDO_USER:-$(whoami)}"
 SERVICE_GROUP="$(id -gn "$SERVICE_USER")"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
+success "Ownership restored"
+
+# ── USB Storage feature upgrade (idempotent) ──────────────────────────────────
+# See USB_STORAGE_DESIGN.md § 15.2. Every step is a no-op when already applied,
+# so re-running update.sh is safe. Preserves any active USB-mode runtime state:
+# /mnt/mynet-storage, storage.conf drop-in, storage_config.json, snapshots.
+step "Updating USB Storage support"
+
+SERVICE_FILE="/etc/systemd/system/mynet.service"
+UNIT_CHANGED=0
+
+if [ -f "$SERVICE_FILE" ] && grep -q '^NoNewPrivileges=yes' "$SERVICE_FILE"; then
+    sed -i '/^NoNewPrivileges=yes/d' "$SERVICE_FILE"
+    UNIT_CHANGED=1
+    success "Removed NoNewPrivileges=yes from systemd unit (required by USB Storage helper)"
+fi
+
+# Ensure jq + helper dependencies are installed (no-op when already present)
+if ! command -v jq >/dev/null 2>&1; then
+    spin_run "Installing jq (required by USB Storage helper)..." apt-get install -y -qq jq
+fi
+
+if [ -f "$REPO_ROOT/scripts/mynet-storage" ]; then
+    install -m 755 -o root -g root "$REPO_ROOT/scripts/mynet-storage" /usr/local/bin/mynet-storage
+    success "Installed/updated /usr/local/bin/mynet-storage"
+fi
+
+# Idempotent sudoers drop-in. Re-written every run so the $SERVICE_USER stays
+# correct even if the install's SUDO_USER changes between runs.
+SUDOERS_TMP="$(mktemp)"
+cat > "$SUDOERS_TMP" <<SUDOERS
+# Installed by MyNet update.sh for the USB Storage feature.
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/local/bin/mynet-storage
+SUDOERS
+chmod 0440 "$SUDOERS_TMP"
+if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then
+    install -m 0440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/mynet-storage
+    success "Ensured /etc/sudoers.d/mynet-storage"
+else
+    info "Sudoers validation failed — skipping drop-in install"
+fi
+rm -f "$SUDOERS_TMP"
+
+# Snapshots dir (SD side)
+if [ ! -d "$INSTALL_DIR/data/snapshots" ]; then
+    mkdir -p "$INSTALL_DIR/data/snapshots"
+    chown "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR/data/snapshots"
+    chmod 750 "$INSTALL_DIR/data/snapshots"
+    success "Created $INSTALL_DIR/data/snapshots"
+fi
+
+if [ "$UNIT_CHANGED" -eq 1 ]; then
+    systemctl daemon-reload
+fi
+
+# ── Restart ──────────────────────────────────────────────────────────────────
+step "Restarting services"
 systemctl restart mynet
 nginx -t && systemctl reload nginx
 success "Services restarted"

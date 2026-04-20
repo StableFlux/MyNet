@@ -38,6 +38,7 @@ import routers.wan_configs as wan_configs_router
 import routers.scan as scan_router
 import routers.unifi as unifi_router
 import routers.debug as debug_router
+import routers.storage as storage_router
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -83,6 +84,16 @@ manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # USB storage crash-recovery hook — MUST run before any DB access so we
+    # never open a half-migrated DB or the wrong file. Resolves an interrupted
+    # migration by completing or rolling back before SQLAlchemy opens a
+    # connection. No-op when no migration is in flight (the common case).
+    from services import storage as _storage
+    try:
+        _storage.resume_or_rollback_on_startup()
+    except Exception as e:
+        log.error(f"Storage resume/rollback on startup failed: {e}", exc_info=True)
+
     # Guard: if JWT_SECRET_KEY is not set, generate one and persist it to .env so it
     # survives restarts. An ephemeral key would invalidate all sessions on every restart.
     if not settings.jwt_secret_key:
@@ -229,11 +240,26 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=60,
     )
 
+    # USB storage: snapshot scheduler + pull-detection watcher + WebSocket broadcast.
+    # Only active on supported platforms (§14 decision 8). install_snapshot_job
+    # itself is safe to call on any platform — it just adds an interval job.
+    try:
+        _storage.set_broadcast_fn(manager.broadcast)
+        _storage.install_snapshot_job(scheduler)
+        if _storage.is_platform_supported():
+            _storage.pull_detector.start()
+    except Exception as e:
+        log.warning(f"Storage scheduler/watcher init failed: {e}")
+
     scheduler.start()
     log.info("MyNet started — monitoring + PiHole scheduler running")
 
     yield
 
+    try:
+        await _storage.pull_detector.stop()
+    except Exception:
+        pass
     scheduler.shutdown(wait=False)
     log.info("MyNet shutdown")
 
@@ -313,6 +339,7 @@ app.include_router(wan_configs_router.router)
 app.include_router(scan_router.router)
 app.include_router(unifi_router.router)
 app.include_router(debug_router.router)
+app.include_router(storage_router.router)
 
 
 # ---------------------------------------------------------------------------

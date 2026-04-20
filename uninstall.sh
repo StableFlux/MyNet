@@ -41,13 +41,40 @@ echo -e "  ${RED}•${RESET} The MyNet application and virtual environment"
 echo -e "  ${RED}•${RESET} The mynet systemd service"
 echo -e "  ${RED}•${RESET} The nginx site configuration for MyNet"
 echo -e "  ${RED}•${RESET} UFW firewall rules added by MyNet"
+echo -e "  ${RED}•${RESET} The mynet-storage helper and its sudoers rule"
 echo ""
 echo -e "  ${YELLOW}This cannot be undone. Make a backup first if needed.${RESET}"
+echo -e "  ${YELLOW}If your database is on a USB drive, you will be asked separately${RESET}"
+echo -e "  ${YELLOW}what to do with it.${RESET}"
 echo ""
 read -r -p "  Type UNINSTALL to confirm: " CONFIRM
 if [ "$CONFIRM" != "UNINSTALL" ]; then
     echo "Aborted."
     exit 0
+fi
+
+# ── USB Storage pre-flight ────────────────────────────────────────────────────
+# See USB_STORAGE_DESIGN.md § 15.3. Ask what to do with USB-resident data
+# BEFORE stopping the service, so SQLite has a chance to drain cleanly.
+STORAGE_CONFIG="$INSTALL_DIR/data/storage_config.json"
+USB_CHOICE="none"
+if [ -f "$STORAGE_CONFIG" ] && command -v grep >/dev/null 2>&1 && \
+   grep -q '"mode"[[:space:]]*:[[:space:]]*"usb"' "$STORAGE_CONFIG" 2>/dev/null && \
+   mountpoint -q /mnt/mynet-storage 2>/dev/null; then
+    echo ""
+    echo -e "${YELLOW}Your database currently lives on a USB drive.${RESET}"
+    echo ""
+    echo "  a) Copy database back to the SD card before uninstall  (default, safest)"
+    echo "  b) Leave database on the USB drive (keeps it portable — can seed a fresh install)"
+    echo "  c) Delete the database from the USB drive"
+    echo ""
+    read -r -p "  Choose [a/b/c]: " USB_CHOICE_RAW
+    case "${USB_CHOICE_RAW:-a}" in
+        a|A) USB_CHOICE="copy_back" ;;
+        b|B) USB_CHOICE="leave" ;;
+        c|C) USB_CHOICE="delete" ;;
+        *)   USB_CHOICE="copy_back" ;;
+    esac
 fi
 
 # ── Ask about optional removals ───────────────────────────────────────────────
@@ -56,6 +83,32 @@ read -r -p "  Remove nginx? (only say yes if nothing else uses it) [y/N] " REMOV
 read -r -p "  Remove Node.js? [y/N] " REMOVE_NODE
 read -r -p "  Remove swapfile created by setup.sh (/swapfile)? [y/N] " REMOVE_SWAP
 echo ""
+
+# ── Act on USB choice BEFORE stopping the service ────────────────────────────
+# The helper requires systemctl, so "copy back" runs while the service is
+# still up but paused via systemctl stop inside the helper path.
+if [ "$USB_CHOICE" = "copy_back" ]; then
+    step "Copying database from USB back to SD card"
+    if systemctl is-active --quiet mynet 2>/dev/null; then
+        systemctl stop mynet
+    fi
+    if [ -f /mnt/mynet-storage/mynet.db ]; then
+        cp /mnt/mynet-storage/mynet.db "$INSTALL_DIR/data/mynet.db.uninstall-copy"
+        success "Database copied to $INSTALL_DIR/data/mynet.db.uninstall-copy"
+        info "(This file will be removed along with $INSTALL_DIR below.)"
+    else
+        warn "No database found at /mnt/mynet-storage/mynet.db"
+    fi
+elif [ "$USB_CHOICE" = "delete" ]; then
+    step "Deleting database from USB"
+    if systemctl is-active --quiet mynet 2>/dev/null; then
+        systemctl stop mynet
+    fi
+    rm -f /mnt/mynet-storage/mynet.db
+    success "Database deleted from USB"
+elif [ "$USB_CHOICE" = "leave" ]; then
+    info "Leaving database on USB — the drive can seed a fresh MyNet install"
+fi
 
 # ── Stop and disable the service ─────────────────────────────────────────────
 step "Stopping MyNet service"
@@ -71,6 +124,30 @@ if systemctl is-enabled --quiet mynet 2>/dev/null; then
     systemctl disable mynet
     success "mynet service disabled"
 fi
+
+# ── USB Storage teardown ──────────────────────────────────────────────────────
+step "Tearing down USB Storage components"
+
+# Unmount + remove mount unit
+if mountpoint -q /mnt/mynet-storage 2>/dev/null; then
+    umount /mnt/mynet-storage 2>/dev/null || true
+fi
+# systemd-escape is only available from util-linux — fall back to the known name
+MOUNT_UNIT_PATH="$(ls /etc/systemd/system/ 2>/dev/null | grep -E '^mnt-mynet.x2dstorage\.mount$' | head -n1 || true)"
+if [ -n "$MOUNT_UNIT_PATH" ]; then
+    systemctl disable "$MOUNT_UNIT_PATH" 2>/dev/null || true
+    rm -f "/etc/systemd/system/$MOUNT_UNIT_PATH"
+fi
+# Drop-in dir (including storage.conf) — ignored if absent
+rm -rf /etc/systemd/system/mynet.service.d
+rmdir /mnt/mynet-storage 2>/dev/null || true
+
+# Helper + sudoers
+rm -f /usr/local/bin/mynet-storage
+rm -f /etc/sudoers.d/mynet-storage
+
+systemctl daemon-reload
+success "Storage teardown complete"
 
 # ── Remove systemd service ────────────────────────────────────────────────────
 step "Removing systemd service"

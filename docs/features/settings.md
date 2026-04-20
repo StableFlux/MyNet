@@ -21,6 +21,7 @@
 - [UniFi Settings](#unifi-settings)
 - [Label Export Settings](#label-export-settings)
 - [Locations](#locations)
+- [Storage](#storage)
 
 ---
 
@@ -178,6 +179,16 @@ These can also be set via environment variables (`QR_LABEL_WIDTH_PX`, `QR_LABEL_
 Navigate to **Settings → Locations** (`/settings/locations`).
 
 Manage the hierarchical location tree used to organise your devices. See [Locations](locations.md) for full details.
+
+---
+
+## Storage
+
+Navigate to **Settings → Storage** (`/settings/storage`).
+
+Move MyNet's database to a dedicated USB drive to reduce SD-card write wear on Raspberry Pi installs. Configure the hourly snapshot interval, download the latest snapshot, or return the database to the SD card. See [Storage](storage.md) for the full guide including recovery and cross-server migration.
+
+> Requires systemd Linux (Raspberry Pi OS / Ubuntu / Debian). The section is hidden in Docker dev environments.
 
 ---
 

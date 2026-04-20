@@ -6,6 +6,8 @@
 
 > Export a complete snapshot of your MyNet data to a JSON file. Restore it on the same instance or migrate to a new server. Factory reset returns the system to a blank state.
 
+> **Not the same thing as hourly SD snapshots.** The Backup & Restore feature is a manual JSON export you download to your browser, designed for archival and cross-version migrations. The hourly snapshots written by the [Storage](storage.md) feature are raw SQLite binaries written to the SD card to protect against USB failure; they don't leave the server unless you download them explicitly.
+
 ---
 
 ## Contents

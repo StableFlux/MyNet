@@ -31,6 +31,8 @@ import ColourSettings from './pages/ColourSettings'
 import PiholeSettings from './pages/PiholeSettings'
 import NetworkScan from './pages/NetworkScan'
 import UnifiSettings from './pages/UnifiSettings'
+import Storage from './pages/Storage'
+import DegradedMode from './pages/DegradedMode'
 import Debug from './pages/Debug'
 
 function AppInner() {
@@ -38,6 +40,8 @@ function AppInner() {
   const qc = useQueryClient()
   const [loading, setLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
+  const [storageCandidate, setStorageCandidate] = useState<any>(null)
+  const [degraded, setDegraded] = useState<any>(null)
   // Debounce monitoring invalidation: the scheduler broadcasts one ping_result per
   // device/IP, so N monitored addresses → N rapid WS messages. Without debouncing
   // this causes N back-to-back invalidations, re-rendering every monitoring consumer
@@ -61,32 +65,44 @@ function AppInner() {
     }
   })
 
-  useEffect(() => {
-    const init = async () => {
-      try {
-        // Check if first-run setup is needed
-        const { data: setupCheck } = await api.get('/auth/setup-required')
-        if (setupCheck.setup_required) {
-          setSetupRequired(true)
-          setLoading(false)
-          return
-        }
-      } catch {
-        // Server unreachable — fall through to login
+  const init = async () => {
+    // Storage health probe first — never touches the DB, so it works in
+    // degraded mode. If the DB is unreachable, we render the recovery UI
+    // instead of bouncing between login / setup / unreachable errors.
+    try {
+      const { data: health } = await api.get('/storage/health')
+      if (health.platform_supported && !health.db_reachable) {
+        setDegraded(health)
         setLoading(false)
         return
       }
-      // Try to restore session
-      try {
-        const { data: me } = await api.get('/auth/me')
-        setUser(me)
-      } catch {
-        // Not logged in — will redirect to login
-      }
-      setLoading(false)
+    } catch {
+      // Health endpoint itself failed — proceed to the normal flow, which
+      // will surface the real issue via its own error handling.
     }
-    init()
-  }, [])
+
+    try {
+      const { data: setupCheck } = await api.get('/auth/setup-required')
+      if (setupCheck.setup_required) {
+        setSetupRequired(true)
+        setStorageCandidate(setupCheck.storage_candidate ?? null)
+        setLoading(false)
+        return
+      }
+    } catch {
+      setLoading(false)
+      return
+    }
+    try {
+      const { data: me } = await api.get('/auth/me')
+      setUser(me)
+    } catch {
+      // Not logged in — will redirect to login
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { init() }, [])
 
   if (loading) {
     return (
@@ -96,7 +112,9 @@ function AppInner() {
     )
   }
 
-  if (setupRequired) return <Setup />
+  if (degraded) return <DegradedMode health={degraded} onRetry={() => { setDegraded(null); setLoading(true); init() }} />
+
+  if (setupRequired) return <Setup storageCandidate={storageCandidate} />
 
   if (!user) return <Login />
 
@@ -126,6 +144,7 @@ function AppInner() {
         <Route path="/settings/label-export" element={<AdminRoute><LabelExport /></AdminRoute>} />
         <Route path="/settings/network-scan" element={<AdminRoute><NetworkScan /></AdminRoute>} />
         <Route path="/settings/unifi" element={<AdminRoute><UnifiSettings /></AdminRoute>} />
+        <Route path="/settings/storage" element={<AdminRoute><Storage /></AdminRoute>} />
         <Route path="/debug" element={<Debug />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

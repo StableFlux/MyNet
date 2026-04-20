@@ -30,7 +30,7 @@
 | **OS** | Ubuntu 22.04+, Debian 12+, or Raspberry Pi OS Bookworm/Bullseye (headless) |
 | **Architecture** | x86_64, aarch64, armv7l (32-bit Pi 3) |
 | **RAM** | 512 MB (1 GB recommended; the frontend build needs ~800 MB — the installer adds swap automatically on low-RAM systems) |
-| **Storage** | 500 MB free (Pi users: use a high-endurance SD card or move the database to USB) |
+| **Storage** | 500 MB free (Pi users: use a high-endurance SD card, and/or activate the [USB Storage](features/storage.md) feature from Settings once installed) |
 | **Network** | Static IP or DHCP reservation recommended for your server |
 
 > **Raspberry Pi recommendation:** A **Raspberry Pi 4 (1 GB or more)** is the recommended minimum for a smooth experience. The Pi 4's Cortex-A72 cores are roughly 3–4× faster than the Pi 3B+'s Cortex-A53 for the single-threaded Python/SQLite workload that MyNet uses. A Pi 3B+ will run MyNet but may feel sluggish, particularly on the Monitoring and Switches pages. A Pi 4 or better eliminates this.
@@ -58,14 +58,15 @@ The script will:
 
 1. Detect your OS, architecture, and available RAM
 2. Add swap space if needed (for low-RAM systems like Pi 3B+)
-3. Install system packages: Python 3.10+, Node.js 20, nginx, fonts-dejavu-core
+3. Install system packages: Python 3.10+, Node.js 20, nginx, fonts-dejavu-core, jq, util-linux, e2fsprogs
 4. Build the React frontend with Vite
 5. Create a Python virtual environment and install backend dependencies
 6. Generate a secure `JWT_SECRET_KEY` and write `/opt/mynet/.env`
 7. Configure nginx as a reverse proxy on port 80
 8. Create and enable a `mynet` systemd service
-9. Configure UFW to allow port 80 (if UFW is installed)
-10. Run a health check and print the URL
+9. Install `/usr/local/bin/mynet-storage` and a narrow `/etc/sudoers.d/mynet-storage` drop-in for the [USB Storage](features/storage.md) feature (feature is opt-in; default storage stays on the SD card)
+10. Configure UFW to allow port 80 (if UFW is installed)
+11. Run a health check and print the URL
 
 When it finishes you will see:
 
@@ -98,6 +99,8 @@ Click **Create Account** — you will be logged in immediately as an admin.
 
 > **Tip:** If you have a backup from a previous installation, you can restore it directly from the first-run screen instead of creating a new account. See [Backup & Restore](features/backup-restore.md).
 
+> **Migrating from another server?** If you plug in a USB drive that contains a MyNet database (drives labelled `MYNET-STORAGE`) **before** opening the setup wizard, MyNet will offer to adopt it — skipping the create-account form and bringing all your users, devices, and settings across. See [Storage](features/storage.md#using-an-existing-mynet-usb-on-a-new-server).
+
 ---
 
 ## Environment Configuration
@@ -120,7 +123,7 @@ sudo systemctl restart mynet
 |---|---|---|
 | `JWT_SECRET_KEY` | Auto-generated | Secret used to sign JWT tokens. Auto-generated on first run if blank. **Keep this secret.** |
 | `JWT_EXPIRE_MINUTES` | `480` | Session length in minutes (default 8 hours). |
-| `DB_PATH` | `/opt/mynet/data/mynet.db` | Path to the SQLite database. Move to a USB drive on Pi to reduce SD card wear. |
+| `DB_PATH` | `/opt/mynet/data/mynet.db` | Path to the SQLite database. Leave as default and use the in-app **[Storage](features/storage.md)** feature to move the database to a USB drive — don't edit this by hand. |
 | `CORS_ORIGINS` | *(LAN auto)* | Comma-separated list of allowed browser origins. Leave blank for automatic LAN detection. Set explicitly for internet-facing deployments (e.g. `https://mynet.example.com`). |
 | `PIHOLE1_URL` | *(blank)* | URL of your first Pi-hole (e.g. `http://192.168.1.2`). See [Pi-hole Integration](features/pihole.md). |
 | `PIHOLE2_URL` | *(blank)* | Optional second Pi-hole URL. |

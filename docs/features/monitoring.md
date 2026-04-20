@@ -180,9 +180,9 @@ For large installations (300+ devices), consider:
 
 At 85 devices with 60-second intervals, MyNet writes approximately 70–100 MB/day to SQLite. Recommendations:
 
+- **Move the database to a dedicated USB drive** via the built-in [Storage](storage.md) feature (Settings → Storage). MyNet handles the migration, keeps hourly SD snapshots for recovery, and surfaces USB health in the UI — no manual `.env` edits or file moves.
 - Use a **high-endurance SD card** (Samsung Pro Endurance, SanDisk High Endurance)
-- Move `DB_PATH` in `.env` to a USB drive
-- Increase `TICK_SECS` from 60 to 120 in `services/monitoring_scheduler.py`
+- Increase `TICK_SECS` from 60 to 120 in `services/monitoring_scheduler.py` if your monitoring needs tolerate a slower tick
 
 ---
 

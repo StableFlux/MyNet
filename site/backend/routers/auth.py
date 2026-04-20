@@ -8,7 +8,11 @@ from datetime import datetime, timezone
 
 import re as _re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+
+log = logging.getLogger(__name__)
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -118,8 +122,78 @@ class UserOut(BaseModel):
 
 @router.get("/setup-required")
 def setup_required(db: Session = Depends(get_db)):
-    """Returns true if no users exist yet (first-run)."""
-    return {"setup_required": db.query(User).count() == 0}
+    """Returns true if no users exist yet (first-run).
+
+    When the install is in first-run state, also reports any USB drive labelled
+    `MYNET-STORAGE` that could seed this instance — see USB_STORAGE_DESIGN.md
+    §6. The field is populated ONLY while no users exist, so there's no
+    unauthenticated filesystem-info leak after setup.
+    """
+    users_count = db.query(User).count()
+    payload: dict = {"setup_required": users_count == 0}
+    if users_count == 0:
+        try:
+            from services import storage as _storage
+            payload["storage_candidate"] = _storage.first_run_storage_candidate()
+        except Exception:
+            payload["storage_candidate"] = None
+    return payload
+
+
+class AdoptStorageRequest(BaseModel):
+    usb_uuid: str
+
+
+@router.post("/adopt-storage-candidate")
+def adopt_storage_candidate(
+    req: AdoptStorageRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Adopt a pre-existing MyNet database from a USB drive during first-run.
+
+    Gated on users_count == 0 (same unauthenticated gate as /setup-required).
+    Mounts the USB, installs the mount-dependency drop-in, swaps the DB_PATH
+    symlink, persists storage_config.json, then schedules a service restart
+    so the new DB becomes live. See USB_STORAGE_DESIGN.md §6.
+    """
+    if db.query(User).count() > 0:
+        raise HTTPException(status_code=400, detail="Setup already complete")
+
+    from services import storage as _storage
+    if not _storage.is_platform_supported():
+        raise HTTPException(status_code=501, detail=_storage.platform_unsupported_reason())
+
+    # Verify the requested UUID matches the currently detected candidate —
+    # prevents a crafted request from mounting a random USB.
+    candidate = _storage.first_run_storage_candidate()
+    if not candidate or candidate.get("uuid") != req.usb_uuid:
+        raise HTTPException(status_code=400, detail="USB candidate not found or UUID mismatch")
+
+    try:
+        _storage.run_helper("mount", req.usb_uuid)
+        _storage.run_helper("enable-mount-dependency", req.usb_uuid)
+        _storage.run_helper("swap-symlink", str(_storage.MOUNT_POINT / "mynet.db"))
+    except _storage.HelperError as e:
+        raise HTTPException(status_code=502, detail=f"Storage setup failed: {e}")
+
+    cfg = _storage.load_config()
+    cfg.mode = _storage.MODE_USB
+    cfg.usb_uuid = req.usb_uuid
+    _storage.save_config(cfg)
+
+    # Schedule the service restart AFTER the response flushes to the client.
+    # Uses --no-block inside the helper so systemctl returns immediately;
+    # the restart completes a few seconds later, by which point the client
+    # has reloaded /setup-required and sees users exist on the new DB.
+    def _schedule_restart():
+        try:
+            _storage.run_helper("service", "restart")
+        except Exception as ex:
+            log.warning(f"service restart after adoption failed: {ex}")
+
+    background_tasks.add_task(_schedule_restart)
+    return {"ok": True, "restart_scheduled": True, "restart_delay_ms": 1000}
 
 
 @router.post("/setup", response_model=UserOut)

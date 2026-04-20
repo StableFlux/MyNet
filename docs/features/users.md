@@ -39,6 +39,7 @@
 | Export/import backup | — | — | ✓ |
 | Factory reset | — | — | ✓ |
 | Manage UniFi / Pi-hole integration | — | — | ✓ |
+| Manage USB Storage (migration, snapshots, download) | — | — | ✓ |
 
 ---
 

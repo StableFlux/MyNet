@@ -49,6 +49,61 @@ HELPER_PATH = "/usr/local/bin/mynet-storage"
 SERVICE_NAME = "mynet.service"
 
 
+# ── Corruption flag ──────────────────────────────────────────────────────────
+# Set at startup when PRAGMA quick_check fails; read by /api/storage/health
+# and by the unauthenticated /api/storage/recover/* gate. A corrupt DB would
+# otherwise crashloop mynet.service (lifespan's Base.metadata.create_all
+# would raise DatabaseError), hiding the problem behind an nginx 502. With
+# the flag set we skip normal init and keep the service up to serve the
+# degraded-mode UI + recovery endpoints.
+
+_db_corrupt_reason: Optional[str] = None
+
+
+def set_db_corrupt(reason: str) -> None:
+    global _db_corrupt_reason
+    _db_corrupt_reason = reason
+
+
+def clear_db_corrupt() -> None:
+    global _db_corrupt_reason
+    _db_corrupt_reason = None
+
+
+def get_db_corrupt_reason() -> Optional[str]:
+    return _db_corrupt_reason
+
+
+def db_quick_check() -> tuple[bool, str]:
+    """Run SQLite's PRAGMA quick_check against DB_PATH.
+
+    quick_check catches the common corruption cases (pointer errors, malformed
+    pages, orphaned rows) without the cost of the full integrity_check
+    (which scans every cell). On a 50 MB DB this completes in well under a
+    second; a full integrity_check can take 5–10×.
+
+    Returns (ok, reason). reason is empty string on success.
+    """
+    if not DB_PATH.exists():
+        # Don't treat "missing file" as corruption — the lifespan has its
+        # own handling for that (SQLAlchemy will create it fresh).
+        return True, ""
+    try:
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=5)
+        try:
+            rows = conn.execute("PRAGMA quick_check").fetchall()
+            if rows and all(r[0] == "ok" for r in rows):
+                return True, ""
+            errors = [str(r[0])[:120] for r in rows if r[0] != "ok"]
+            return False, "; ".join(errors[:5]) or "quick_check reported unknown failure"
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as e:
+        return False, f"{type(e).__name__}: {e}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
 def _chown_to_service_user(path: Path) -> None:
     """Transfer ownership of `path` to the mynet service user.
 

@@ -326,6 +326,53 @@ cmd_disable_mount_dependency() {
     json_out '{ok: true}'
 }
 
+cmd_run_restore_snapshot() {
+    # Restore a snapshot over the current DB path, keeping current storage
+    # mode. DB_PATH is a symlink in USB mode and a plain file in SD mode —
+    # we resolve the symlink and write to the underlying file either way,
+    # so the mode stays intact.
+    #
+    # Needs a detached scope to survive the systemctl stop on mynet.service.
+    local which="${1:-}"
+    case "$which" in
+        current|previous) ;;
+        *) die "usage: run-restore-snapshot <current|previous>" ;;
+    esac
+
+    local snapshot="$SNAPSHOTS_DIR/mynet-${which}.db"
+    [[ -f "$snapshot" ]] || die "snapshot $which does not exist at $snapshot"
+
+    local service_user
+    service_user="$(systemctl show -p User --value "$SERVICE_NAME" 2>/dev/null || true)"
+    [[ -z "$service_user" ]] && service_user="root"
+    local service_group
+    service_group="$(id -gn "$service_user" 2>/dev/null || echo root)"
+
+    # shellcheck disable=SC2016
+    systemd-run \
+        --unit="mynet-storage-restore-snapshot" \
+        --collect \
+        --quiet \
+        bash -c "
+            set -x
+            systemctl stop mynet.service
+            sleep 1
+            # Resolve the symlink if DB_PATH is one (USB mode) — we want to
+            # overwrite the target, not replace the symlink with the snapshot.
+            target=\$(readlink -f '$DB_PATH' 2>/dev/null || echo '$DB_PATH')
+            [[ -z \"\$target\" ]] && target='$DB_PATH'
+            cp '$snapshot' \"\${target}.restore-tmp\"
+            chown '$service_user:$service_group' \"\${target}.restore-tmp\"
+            chmod 600 \"\${target}.restore-tmp\"
+            mv -Tf \"\${target}.restore-tmp\" \"\$target\"
+            # Drop any sibling -shm / -wal since they belong to the old DB
+            rm -f \"\${target}-shm\" \"\${target}-wal\" 2>/dev/null || true
+            systemctl start mynet.service
+        "
+
+    json_out --arg which "$which" '{ok: true, which: $which, detached: true}'
+}
+
 cmd_run_remount_recovery() {
     # Remount recovery (called by /api/storage/recover/remount) has to
     # survive stopping mynet.service — the service holds file descriptors
@@ -488,5 +535,6 @@ case "$sub" in
     disable-mount-dependency)    require_root; cmd_disable_mount_dependency "$@" ;;
     run-migration)               require_root; cmd_run_migration "$@" ;;
     run-remount-recovery)        require_root; cmd_run_remount_recovery "$@" ;;
+    run-restore-snapshot)        require_root; cmd_run_restore_snapshot "$@" ;;
     *) die "unknown subcommand: $sub" ;;
 esac

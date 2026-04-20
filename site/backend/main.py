@@ -113,6 +113,33 @@ async def lifespan(app: FastAPI):
         except OSError as e:
             log.warning(f"Could not persist JWT_SECRET_KEY to .env ({e}) — sessions will be lost on restart.")
 
+    # DB integrity gate. PRAGMA quick_check catches common corruption
+    # (pointer errors, malformed pages) before Base.metadata.create_all
+    # would blow up on it. If we skipped this and just let create_all raise,
+    # the service would crashloop invisibly behind an nginx 502 — no way
+    # to reach the Degraded Mode UI to recover. Instead: flag the corruption,
+    # skip all DB-dependent init, keep the service alive to serve
+    # /api/storage/health and /api/storage/recover/*.
+    _db_ok, _db_reason = _storage.db_quick_check()
+    if not _db_ok:
+        log.error(f"DB integrity check failed: {_db_reason}")
+        log.warning("Starting in DB-DEGRADED mode — only health/recover endpoints are functional")
+        _storage.set_db_corrupt(_db_reason)
+        # Still wire WebSocket broadcast so the frontend can receive live
+        # recovery status; the pull detector also stays up so a USB
+        # re-insertion after a corruption event is noticed.
+        _storage.set_broadcast_fn(manager.broadcast)
+        if _storage.is_platform_supported():
+            _storage.pull_detector.start()
+        try:
+            yield
+        finally:
+            try:
+                await _storage.pull_detector.stop()
+            except Exception:
+                pass
+        return
+
     # Create all tables
     Base.metadata.create_all(bind=engine)
 

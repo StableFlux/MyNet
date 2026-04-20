@@ -34,8 +34,8 @@ def health():
 
     Intentionally requires no DB access — the frontend falls back to this
     when authenticated endpoints start returning 5xx, to tell the user
-    whether the problem is the database (usually USB missing) or something
-    transient. Returns 200 + {db_reachable: bool, platform_supported: bool}.
+    whether the problem is the database (usually USB missing or DB corrupt)
+    or something transient.
     """
     import sqlite3
     import os
@@ -43,22 +43,32 @@ def health():
     db_reachable = False
     reason = ""
     db_path = Path(storage.DB_PATH)
-    try:
-        if db_path.is_symlink() and not os.path.exists(db_path):
-            reason = "database symlink target is missing (USB unmounted?)"
-        elif not db_path.exists():
-            reason = "database file does not exist"
-        else:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
-            try:
-                conn.execute("SELECT 1").fetchone()
-                db_reachable = True
-            finally:
-                conn.close()
-    except Exception as e:
-        reason = f"{type(e).__name__}: {e}"
+
+    # Corruption detected at startup takes precedence over everything else —
+    # even if the file is technically "reachable" it's not usable.
+    corrupt_reason = storage.get_db_corrupt_reason()
+    if corrupt_reason:
+        reason = f"database corruption: {corrupt_reason}"
+    else:
+        try:
+            if db_path.is_symlink() and not os.path.exists(db_path):
+                reason = "database symlink target is missing (USB unmounted?)"
+            elif not db_path.exists():
+                reason = "database file does not exist"
+            else:
+                conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
+                try:
+                    conn.execute("SELECT 1").fetchone()
+                    db_reachable = True
+                finally:
+                    conn.close()
+        except Exception as e:
+            reason = f"{type(e).__name__}: {e}"
+
     return {
         "db_reachable": db_reachable,
+        "db_integrity_ok": corrupt_reason is None,
+        "db_integrity_reason": corrupt_reason or "",
         "platform_supported": storage.is_platform_supported(),
         "mode": storage.load_config().mode,
         "reason": reason,
@@ -66,10 +76,14 @@ def health():
     }
 
 
-def _require_db_unreachable() -> None:
-    """Gate for the unauthenticated recovery endpoints. Prevents use when
-    everything is actually working — recovery is only valid when the DB
-    genuinely can't be opened."""
+def _require_db_unreachable_or_corrupt() -> None:
+    """Gate for the unauthenticated recovery endpoints. Allows the call
+    when the DB is genuinely unhealthy — either it can't be opened (mount
+    missing, file gone) or quick_check has flagged it as corrupt at
+    startup. Rejects calls when the DB is plainly working, to prevent
+    these unauthenticated endpoints being used in normal operation."""
+    if storage.get_db_corrupt_reason():
+        return
     import sqlite3
     try:
         conn = sqlite3.connect(f"file:{storage.DB_PATH}?mode=ro", uri=True, timeout=2)
@@ -80,6 +94,39 @@ def _require_db_unreachable() -> None:
         raise
     except Exception:
         return
+
+
+# Legacy alias so existing endpoints that only checked unreachability keep
+# the same behaviour (the broader gate also covers unreachable cases).
+_require_db_unreachable = _require_db_unreachable_or_corrupt
+
+
+@router.post("/recover/restore-snapshot", status_code=202)
+def recover_restore_snapshot(body: dict = Body(...)):
+    """Degraded-mode recovery: restore an SD snapshot IN PLACE, keeping the
+    current storage mode. Overwrites the DB at DB_PATH (which is a symlink
+    to the USB in USB mode, or a plain file in SD mode) with the contents
+    of the chosen snapshot.
+
+    Used when the current DB is corrupt but the storage medium itself is
+    fine. For a dead USB, use /recover/revert-to-sd instead.
+
+    Body: {which: "current"|"previous"}. Restart handled in a detached
+    worker; returns 202 immediately.
+    """
+    _require_db_unreachable_or_corrupt()
+    if not storage.is_platform_supported():
+        raise HTTPException(status_code=501, detail=storage.platform_unsupported_reason())
+    which = body.get("which", "current")
+    if which not in ("current", "previous"):
+        raise HTTPException(status_code=400, detail='which must be "current" or "previous"')
+    src = storage.SNAPSHOT_CURRENT if which == "current" else storage.SNAPSHOT_PREVIOUS
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"snapshot {which} does not exist")
+    try:
+        return storage.run_helper("run-restore-snapshot", which)
+    except storage.HelperError as e:
+        raise HTTPException(status_code=502, detail=f"failed to spawn restore worker: {e}")
 
 
 @router.post("/recover/remount", status_code=202)

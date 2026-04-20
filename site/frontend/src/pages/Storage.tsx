@@ -151,11 +151,34 @@ export default function Storage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
 
+  // `handoffPending` covers the window between clicking "Start migration" and
+  // the backend worker writing migration_state.json — without it the UI sits
+  // silent for several seconds, which reads as "nothing happened".
+  const [handoffPending, setHandoffPending] = useState(false)
+
   const { data: status, isLoading, refetch } = useQuery<StorageStatus>({
     queryKey: ['storage-status'],
     queryFn: async () => (await api.get('/storage/status')).data,
-    refetchInterval: (q) => (q.state.data?.migration_in_progress ? 1000 : 5000),
+    refetchInterval: (q) => {
+      if (handoffPending) return 500
+      if (q.state.data?.migration_in_progress) return 1000
+      return 5000
+    },
   })
+
+  // Clear the handoff banner the instant the worker picks up the lock.
+  useEffect(() => {
+    if (status?.migration_in_progress) setHandoffPending(false)
+  }, [status?.migration_in_progress])
+
+  // Safety net: if something goes wrong and migration_in_progress never flips
+  // to true, don't leave the banner up forever. 30s is comfortably longer
+  // than the worker's spin-up under normal conditions.
+  useEffect(() => {
+    if (!handoffPending) return
+    const t = setTimeout(() => setHandoffPending(false), 30000)
+    return () => clearTimeout(t)
+  }, [handoffPending])
 
   const { data: candidatesData, refetch: rescan, isFetching: scanning } = useQuery<{ candidates: Candidate[] }>({
     queryKey: ['storage-candidates'],
@@ -169,7 +192,12 @@ export default function Storage() {
   const migrateMutation = useMutation({
     mutationFn: async (body: { target: string; confirm: string; usb_uuid?: string }) =>
       (await api.post('/storage/migrate', body)).data,
-    onSettled: () => { qc.invalidateQueries({ queryKey: ['storage-status'] }) },
+    onError: () => { setHandoffPending(false) },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['storage-status'] })
+      // Immediate status refetch — don't wait for the next scheduled poll
+      refetch()
+    },
   })
 
   const initialiseMutation = useMutation({
@@ -296,7 +324,35 @@ export default function Storage() {
           </div>
 
           {/* Migration status / result — backend-driven so it survives the
-              service restart that happens mid-migration. */}
+              service restart that happens mid-migration. Banners are ordered
+              so only one is visible at a time, matching the migration's
+              current phase. */}
+
+          {/* 1. Handoff window: shown immediately on click and held until the
+              worker takes over. Covers the gap between HTTP 202 and the
+              first /status poll that reports migration_in_progress=true. */}
+          {handoffPending && !status.migration_in_progress && (
+            <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
+              <Loader size={14} className="animate-spin flex-shrink-0" />
+              <div>
+                <strong>Starting migration…</strong> spinning up the background worker. The service will restart in a few seconds; you'll be asked to log in again once it's done.
+              </div>
+            </div>
+          )}
+
+          {/* 2. Pre-worker failure (mount failed, validation failed, etc.) —
+              shown when the mutation itself errors before the worker is
+              even spawned. */}
+          {!migrateMutation.isPending && migrateMutation.isError && !handoffPending && (
+            <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
+              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <strong>Could not start migration:</strong> {(migrateMutation.error as any)?.response?.data?.detail ?? String(migrateMutation.error)}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Worker is running — phase-by-phase status. */}
           {status.migration_in_progress && (
             <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
               <Loader size={14} className="animate-spin flex-shrink-0" />
@@ -309,6 +365,9 @@ export default function Storage() {
               </div>
             </div>
           )}
+
+          {/* 4. Worker finished and rolled back after an error — persists
+              until dismissed. Next migration attempt also clears it. */}
           {!status.migration_in_progress && status.migration_state && status.migration_state.phase === 'rolling_back' && (
             <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
               <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
@@ -324,12 +383,6 @@ export default function Storage() {
               >
                 Dismiss
               </button>
-            </div>
-          )}
-          {!status.migration_in_progress && migrateMutation.isSuccess && !status.migration_state && (
-            <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
-              <Loader size={14} className="animate-spin flex-shrink-0" />
-              <div>Migration handed off to background worker. Service will restart shortly; after ~10 seconds you'll be asked to log in again.</div>
             </div>
           )}
 
@@ -564,6 +617,10 @@ export default function Storage() {
           candidate={migrateModal.candidate}
           onCancel={() => setMigrateModal(null)}
           onConfirm={() => {
+            // Flip the banner on BEFORE firing the mutation so the user sees
+            // feedback the instant the modal closes. If the mutation errors
+            // (pre-worker failure like mount fail), onError clears this.
+            setHandoffPending(true)
             migrateMutation.mutate({
               target: migrateModal.target,
               confirm: 'MIGRATE',

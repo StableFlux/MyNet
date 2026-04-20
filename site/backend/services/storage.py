@@ -833,6 +833,26 @@ class PullDetector:
             if self._lost:
                 self._lost = False
             return
+
+        # Check the UUID-keyed device node first. /proc/mounts is NOT a
+        # reliable signal on its own: with our soft Wants= dependency,
+        # systemd doesn't eagerly unmount when the device disappears, so
+        # the mount entry lingers while reads return garbage ("database
+        # disk image is malformed" to SQLite). udev, however, removes
+        # /dev/disk/by-uuid/<uuid> the moment the USB is pulled — that's
+        # the authoritative "device is gone" signal.
+        if cfg.usb_uuid:
+            device_node = Path(f"/dev/disk/by-uuid/{cfg.usb_uuid}")
+            if not device_node.exists():
+                if not self._lost:
+                    self._lost = True
+                    log.warning(f"USB device {cfg.usb_uuid} gone — emitting usb_lost")
+                    await emit("usb_lost", reason="device_gone")
+                return
+
+        # Belt-and-braces: also watch for ext4 remounting read-only after
+        # I/O errors (errors=remount-ro in the mount unit) and for the
+        # mount being cleanly unmounted.
         try:
             raw = Path("/proc/mounts").read_text()
         except OSError:
@@ -846,13 +866,20 @@ class PullDetector:
         if mount_line is None:
             if not self._lost:
                 self._lost = True
+                log.warning("USB mount point missing — emitting usb_lost")
                 await emit("usb_lost", reason="mount_missing")
             return
         opts = mount_line[3] if len(mount_line) > 3 else ""
         if "ro" in opts.split(","):
             if not self._lost:
                 self._lost = True
+                log.warning("USB mount is read-only — emitting usb_lost")
                 await emit("usb_lost", reason="mounted_read_only")
+            return
+        # All clear. Reset the flag so a re-insertion (after Retry triggers a
+        # remount) returns the app to normal mode.
+        if self._lost:
+            self._lost = False
 
 
 pull_detector = PullDetector()

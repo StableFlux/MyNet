@@ -82,6 +82,31 @@ def _require_db_unreachable() -> None:
         return
 
 
+@router.post("/recover/remount")
+def recover_remount():
+    """Degraded-mode recovery: attempt to re-mount the configured USB drive.
+
+    Called by the "Retry" button on the Degraded Mode screen. Reads the
+    UUID from storage_config.json and invokes the helper's mount subcommand,
+    which is idempotent — if the mount unit is already active (user plugged
+    the drive back in and udev/systemd auto-handled it) this is a no-op.
+    Returns the latest /health result so the frontend can decide whether
+    to stay on the degraded screen or return to normal.
+    """
+    _require_db_unreachable()
+    if not storage.is_platform_supported():
+        raise HTTPException(status_code=501, detail=storage.platform_unsupported_reason())
+    cfg = storage.load_config()
+    if not cfg.usb_uuid:
+        raise HTTPException(status_code=400, detail="no USB UUID recorded in storage_config.json")
+    try:
+        storage.run_helper("mount", cfg.usb_uuid)
+    except storage.HelperError as e:
+        raise HTTPException(status_code=502, detail=f"mount failed: {e}")
+    # Return the post-remount health so the caller can short-circuit
+    return health()
+
+
 @router.post("/recover/revert-to-sd")
 def recover_revert_to_sd():
     """Degraded-mode recovery: remove the USB symlink + drop-in, restore the

@@ -38,6 +38,12 @@ export default function DegradedMode({ health, onRetry }: { health: DegradedHeal
 
   const handleRetry = async () => {
     setRetrying(true)
+    // Ask the backend to attempt a remount first (in case the user plugged
+    // the drive back in). If that succeeds, the DB becomes reachable and
+    // onRetry's health probe will take us back to the normal UI. We ignore
+    // errors here because we're about to re-probe anyway — if remount
+    // failed we'll just stay on this screen.
+    try { await api.post('/storage/recover/remount') } catch { /* ignore */ }
     try { onRetry() } finally { setTimeout(() => setRetrying(false), 1500) }
   }
 

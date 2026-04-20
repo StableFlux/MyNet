@@ -18,6 +18,11 @@ MyNet is a self-hosted web application for managing every device on your home ne
 
 Designed to run on a Raspberry Pi or any Linux server on your LAN.
 
+<p align="center">
+  If this app is useful to you, a coffee is always appreciated ❤<br><br>
+  <a href="https://buymeacoffee.com/stableflux"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200"/></a>
+</p>
+
 ---
 
 ## Features
@@ -177,6 +182,16 @@ You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also
   <img src="docs/images/locations.png" alt="Location tree" width="49%" />
   <img src="docs/images/stock-deployment-1.png" alt="Stock and undeployed" width="49%" />
 </div>
+
+---
+
+## Support the project
+
+MyNet is free and open source. If it's helped you tame your home network or retire a sprawling device spreadsheet, consider buying me a coffee — it keeps the updates coming!
+
+<p align="center">
+  <a href="https://buymeacoffee.com/stableflux"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200"/></a>
+</p>
 
 ---
 

@@ -50,14 +50,22 @@ require_device_partition() {
     [[ -b "$d" ]] || die "not a block device: $d"
     local rootdev
     rootdev="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
-    [[ -n "$rootdev" && "$d" == "$rootdev" ]] && die "refusing to operate on the root filesystem partition"
+    if [[ -n "$rootdev" && "$d" == "$rootdev" ]]; then
+        die "refusing to operate on the root filesystem partition"
+    fi
     local parent
     parent="$(lsblk -no PKNAME "$d" 2>/dev/null || true)"
     if [[ -n "$parent" && -n "$rootdev" ]]; then
         local rootparent
         rootparent="$(lsblk -no PKNAME "$rootdev" 2>/dev/null || true)"
-        [[ "$parent" == "$rootparent" ]] && die "refusing to format a partition on the root disk"
+        if [[ "$parent" == "$rootparent" ]]; then
+            die "refusing to format a partition on the root disk"
+        fi
     fi
+    # Trailing `[[ x ]] && die` patterns exit non-zero on the happy path,
+    # which propagates through `set -e` and kills the caller silently.
+    # Always return 0 from a guard that passed.
+    return 0
 }
 
 require_uuid() {

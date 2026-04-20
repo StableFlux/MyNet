@@ -128,6 +128,25 @@ if [ -f "$SERVICE_FILE" ] && grep -q '^ProtectSystem=full' "$SERVICE_FILE"; then
     success "Stepped ProtectSystem from full to yes (required by USB Storage helper)"
 fi
 
+# Rewrite any existing USB-mode drop-in that still uses RequiresMountsFor=.
+# That directive is a hard requirement: when the mount dies (user pulls USB),
+# systemd stops mynet.service before our pull detector can emit usb_lost.
+# Replace with Wants= + After= so the service stays up on mount loss.
+STORAGE_DROPIN="/etc/systemd/system/mynet.service.d/storage.conf"
+if [ -f "$STORAGE_DROPIN" ] && grep -q '^RequiresMountsFor=' "$STORAGE_DROPIN"; then
+    ESCAPED_MOUNT="$(systemd-escape -p --suffix=mount /mnt/mynet-storage)"
+    cat > "$STORAGE_DROPIN" <<DROPIN
+# Installed by mynet-storage when USB mode is enabled.
+# Rewritten by update.sh to use soft dependency (Wants= + After=) so a
+# runtime USB pull doesn't also take mynet.service down with it.
+[Unit]
+Wants=$ESCAPED_MOUNT
+After=$ESCAPED_MOUNT
+DROPIN
+    UNIT_CHANGED=1
+    success "Rewrote $STORAGE_DROPIN to use soft mount dependency"
+fi
+
 # Ensure jq + helper dependencies are installed (no-op when already present)
 if ! command -v jq >/dev/null 2>&1; then
     spin_run "Installing jq (required by USB Storage helper)..." apt-get install -y -qq jq

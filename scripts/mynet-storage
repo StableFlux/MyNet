@@ -264,11 +264,20 @@ cmd_enable_mount_dependency() {
     [[ -z "$uuid" ]] && die "usage: enable-mount-dependency <uuid>"
     require_uuid "$uuid"
     mkdir -p "$DROPIN_DIR"
+    # Soft dependency (Wants=/After=) NOT RequiresMountsFor=. The latter is a
+    # hard requirement: if the mount goes down at runtime (user pulls the USB),
+    # systemd stops mynet.service too, killing the pull detector before it can
+    # emit usb_lost. Wants= still pulls the mount in on boot, and After=
+    # orders correctly, but the service stays up when the mount dies —
+    # so our detector can do its job and the frontend can flip to degraded mode.
+    local escaped_mount
+    escaped_mount="$(systemd-escape -p --suffix=mount "$MOUNT_POINT")"
     cat > "$DROPIN_FILE" <<DROPIN
 # Installed by mynet-storage when USB mode is enabled.
 # Do not edit manually — remove by running: sudo mynet-storage disable-mount-dependency
 [Unit]
-RequiresMountsFor=$MOUNT_POINT
+Wants=$escaped_mount
+After=$escaped_mount
 DROPIN
     systemctl daemon-reload
     json_out --arg file "$DROPIN_FILE" '{ok: true, dropin: $file}'

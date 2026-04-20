@@ -38,13 +38,33 @@ export default function DegradedMode({ health, onRetry }: { health: DegradedHeal
 
   const handleRetry = async () => {
     setRetrying(true)
-    // Ask the backend to attempt a remount first (in case the user plugged
-    // the drive back in). If that succeeds, the DB becomes reachable and
-    // onRetry's health probe will take us back to the normal UI. We ignore
-    // errors here because we're about to re-probe anyway — if remount
-    // failed we'll just stay on this screen.
-    try { await api.post('/storage/recover/remount') } catch { /* ignore */ }
-    try { onRetry() } finally { setTimeout(() => setRetrying(false), 1500) }
+    setRevertError('')
+    try {
+      // Recovery is async: the backend spawns a detached worker that stops
+      // the service, cleans the stale mount, remounts, and restarts the
+      // service. We poll /health until the DB is reachable again (or give
+      // up after ~25s — enough for a normal restart plus some slack).
+      await api.post('/storage/recover/remount')
+      const start = Date.now()
+      while (Date.now() - start < 25_000) {
+        await new Promise((r) => setTimeout(r, 2000))
+        try {
+          const { data } = await api.get('/storage/health')
+          if (data.db_reachable) {
+            // Back online — let the parent re-probe and clear degraded state
+            onRetry()
+            return
+          }
+        } catch { /* service still restarting, keep polling */ }
+      }
+      // Timed out — either the USB isn't actually available, or something
+      // deeper is wrong. Tell the user and give them the escape hatch.
+      setRevertError('Retry timed out. If the drive is definitely re-inserted, try Restore from snapshot instead.')
+    } catch (err: any) {
+      setRevertError(err?.response?.data?.detail ?? 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
   }
 
   const handleRevert = async () => {
@@ -95,7 +115,9 @@ export default function DegradedMode({ health, onRetry }: { health: DegradedHeal
               disabled={retrying}
               className="w-full px-3 py-2 rounded text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 flex items-center justify-center gap-2"
             >
-              {retrying ? (<><Loader size={14} className="animate-spin" />Checking…</>) : (<><RefreshCw size={14} />Retry</>)}
+              {retrying
+                ? (<><Loader size={14} className="animate-spin" />Recovering — restarting service…</>)
+                : (<><RefreshCw size={14} />Retry</>)}
             </button>
 
             {hasSnapshot && health.platform_supported && (

@@ -326,6 +326,39 @@ cmd_disable_mount_dependency() {
     json_out '{ok: true}'
 }
 
+cmd_run_remount_recovery() {
+    # Remount recovery (called by /api/storage/recover/remount) has to
+    # survive stopping mynet.service — the service holds file descriptors
+    # on the stale filesystem, so umount -l alone leaves it zombie-alive
+    # and blocks a clean remount. systemctl stop releases the fds but
+    # kills any in-process recovery, so we do the whole sequence in a
+    # detached systemd-run scope (same pattern as migration).
+    local uuid="${1:-}"
+    [[ -z "$uuid" ]] && die "usage: run-remount-recovery <uuid>"
+    require_uuid "$uuid"
+
+    local escaped
+    escaped="$(systemd-escape -p --suffix=mount "$MOUNT_POINT")"
+
+    # shellcheck disable=SC2016
+    systemd-run \
+        --unit="mynet-storage-remount-recovery" \
+        --collect \
+        --quiet \
+        bash -c "
+            set -x
+            systemctl stop mynet.service
+            # Give the kernel a moment to actually release the fds
+            sleep 1
+            umount -l '$MOUNT_POINT' 2>/dev/null || true
+            systemctl reset-failed '$escaped' 2>/dev/null || true
+            /usr/local/bin/mynet-storage mount '$uuid'
+            systemctl start mynet.service
+        "
+
+    json_out --arg uuid "$uuid" '{ok: true, uuid: $uuid, detached: true}'
+}
+
 cmd_run_migration() {
     # Spawn the Python migration worker as a detached systemd transient unit so
     # it survives `systemctl stop mynet.service` mid-migration. Without this
@@ -454,5 +487,6 @@ case "$sub" in
     enable-mount-dependency)     require_root; cmd_enable_mount_dependency "$@" ;;
     disable-mount-dependency)    require_root; cmd_disable_mount_dependency "$@" ;;
     run-migration)               require_root; cmd_run_migration "$@" ;;
+    run-remount-recovery)        require_root; cmd_run_remount_recovery "$@" ;;
     *) die "unknown subcommand: $sub" ;;
 esac

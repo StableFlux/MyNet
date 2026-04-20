@@ -82,16 +82,21 @@ def _require_db_unreachable() -> None:
         return
 
 
-@router.post("/recover/remount")
+@router.post("/recover/remount", status_code=202)
 def recover_remount():
-    """Degraded-mode recovery: attempt to re-mount the configured USB drive.
+    """Degraded-mode recovery: restart mynet.service and remount the USB.
 
-    Called by the "Retry" button on the Degraded Mode screen. Reads the
-    UUID from storage_config.json and invokes the helper's mount subcommand,
-    which is idempotent — if the mount unit is already active (user plugged
-    the drive back in and udev/systemd auto-handled it) this is a no-op.
-    Returns the latest /health result so the frontend can decide whether
-    to stay on the degraded screen or return to normal.
+    Called by the "Retry" button on the Degraded Mode screen. After a USB
+    pull, SQLAlchemy's connection pool keeps file descriptors on the stale
+    filesystem — umount -l alone can't fully release it, and a subsequent
+    mount trips "target is busy" or "dependency failed" on the mount unit.
+    Proper recovery needs the service stopped first.
+
+    To avoid the self-stop deadlock (we're executing inside mynet.service),
+    we invoke the helper's run-remount-recovery subcommand, which dispatches
+    the stop/unmount/mount/start dance to a detached systemd-run scope.
+    Returns 202 immediately; the frontend polls /health to see when
+    recovery completes.
     """
     _require_db_unreachable()
     if not storage.is_platform_supported():
@@ -100,11 +105,9 @@ def recover_remount():
     if not cfg.usb_uuid:
         raise HTTPException(status_code=400, detail="no USB UUID recorded in storage_config.json")
     try:
-        storage.run_helper("mount", cfg.usb_uuid)
+        return storage.run_helper("run-remount-recovery", cfg.usb_uuid)
     except storage.HelperError as e:
-        raise HTTPException(status_code=502, detail=f"mount failed: {e}")
-    # Return the post-remount health so the caller can short-circuit
-    return health()
+        raise HTTPException(status_code=502, detail=f"failed to spawn recovery worker: {e}")
 
 
 @router.post("/recover/revert-to-sd")

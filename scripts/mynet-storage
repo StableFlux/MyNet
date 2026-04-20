@@ -301,8 +301,12 @@ cmd_run_migration() {
 
     local worker_py="/opt/mynet/venv/bin/python"
     [[ -x "$worker_py" ]] || die "Python interpreter not found at $worker_py"
-    local backend_dir="/opt/mynet/site/backend"
-    [[ -d "$backend_dir" ]] || die "Backend dir not found at $backend_dir"
+    # Resolve the backend source dir from the installed systemd unit rather than
+    # hardcoding a path — update.sh runs from the git clone, which may live
+    # anywhere (commonly /home/<user>/MyNet/site/backend, not /opt/mynet/site/).
+    local backend_dir
+    backend_dir="$(systemctl show -p WorkingDirectory --value "$SERVICE_NAME" 2>/dev/null || true)"
+    [[ -z "$backend_dir" || ! -d "$backend_dir" ]] && die "Backend dir not resolvable from $SERVICE_NAME (WorkingDirectory=${backend_dir:-<empty>})"
 
     # --collect removes the transient unit once it exits; --quiet suppresses
     # the "Running as unit:" line; a predictable unit name is handy for

@@ -305,6 +305,69 @@ export default function Storage() {
         </div>
       )}
 
+      {/* Migration status / result — sits adjacent to the Current Storage
+          card so the user's eye catches it, but not *inside* the card where
+          it disrupts the mode/path/usage reading flow. Backend-driven so it
+          survives the service restart mid-migration. Only one banner visible
+          at a time: handoff → pre-worker error → in-progress → rolling-back. */}
+
+      {/* 1. Handoff window: the instant the user confirms, held until the
+          worker picks up the lock. Covers the gap between HTTP 202 and
+          first /status poll reporting migration_in_progress=true. */}
+      {handoffPending && !status.migration_in_progress && (
+        <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
+          <Loader size={14} className="animate-spin flex-shrink-0" />
+          <div>
+            <strong>Starting migration…</strong> spinning up the background worker. The service will restart in a few seconds; you'll be asked to log in again once it's done.
+          </div>
+        </div>
+      )}
+
+      {/* 2. Pre-worker failure (mount failed, validation failed, etc.) —
+          mutation itself errored before the worker was spawned. */}
+      {!migrateMutation.isPending && migrateMutation.isError && !handoffPending && (
+        <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
+          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <strong>Could not start migration:</strong> {(migrateMutation.error as any)?.response?.data?.detail ?? String(migrateMutation.error)}
+          </div>
+        </div>
+      )}
+
+      {/* 3. Worker is running — phase-by-phase status. */}
+      {status.migration_in_progress && (
+        <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
+          <Loader size={14} className="animate-spin flex-shrink-0" />
+          <div>
+            <strong>Migration in progress:</strong> {(() => {
+              const p = phase ?? status.migration_state?.phase ?? 'starting'
+              return PHASE_LABELS[p] ?? p
+            })()}
+            <span className="ml-2 text-white/40">— the service will restart; you'll briefly lose the connection, then need to log back in.</span>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Worker finished and rolled back after an error — persists until
+          dismissed. Next migration attempt also clears it. */}
+      {!status.migration_in_progress && status.migration_state && status.migration_state.phase === 'rolling_back' && (
+        <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
+          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <strong>Migration failed and rolled back.</strong>
+            {status.migration_state.error && <div className="mt-1 text-red-400/90 font-mono text-[10px] break-all">{status.migration_state.error}</div>}
+          </div>
+          <button
+            type="button"
+            onClick={() => dismissMutation.mutate()}
+            disabled={dismissMutation.isPending}
+            className="text-[10px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40 flex-shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Current location */}
       <GlassCard>
         <div className="p-5 space-y-3">
@@ -322,69 +385,6 @@ export default function Storage() {
             </div>
             <HardDrive size={24} className={isUSB ? 'text-amber-400' : 'text-white/30'} />
           </div>
-
-          {/* Migration status / result — backend-driven so it survives the
-              service restart that happens mid-migration. Banners are ordered
-              so only one is visible at a time, matching the migration's
-              current phase. */}
-
-          {/* 1. Handoff window: shown immediately on click and held until the
-              worker takes over. Covers the gap between HTTP 202 and the
-              first /status poll that reports migration_in_progress=true. */}
-          {handoffPending && !status.migration_in_progress && (
-            <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
-              <Loader size={14} className="animate-spin flex-shrink-0" />
-              <div>
-                <strong>Starting migration…</strong> spinning up the background worker. The service will restart in a few seconds; you'll be asked to log in again once it's done.
-              </div>
-            </div>
-          )}
-
-          {/* 2. Pre-worker failure (mount failed, validation failed, etc.) —
-              shown when the mutation itself errors before the worker is
-              even spawned. */}
-          {!migrateMutation.isPending && migrateMutation.isError && !handoffPending && (
-            <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
-              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-              <div>
-                <strong>Could not start migration:</strong> {(migrateMutation.error as any)?.response?.data?.detail ?? String(migrateMutation.error)}
-              </div>
-            </div>
-          )}
-
-          {/* 3. Worker is running — phase-by-phase status. */}
-          {status.migration_in_progress && (
-            <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
-              <Loader size={14} className="animate-spin flex-shrink-0" />
-              <div>
-                <strong>Migration in progress:</strong> {(() => {
-                  const p = phase ?? status.migration_state?.phase ?? 'starting'
-                  return PHASE_LABELS[p] ?? p
-                })()}
-                <span className="ml-2 text-white/40">— the service will restart; you'll briefly lose the connection, then need to log back in.</span>
-              </div>
-            </div>
-          )}
-
-          {/* 4. Worker finished and rolled back after an error — persists
-              until dismissed. Next migration attempt also clears it. */}
-          {!status.migration_in_progress && status.migration_state && status.migration_state.phase === 'rolling_back' && (
-            <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
-              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <strong>Migration failed and rolled back.</strong>
-                {status.migration_state.error && <div className="mt-1 text-red-400/90 font-mono text-[10px] break-all">{status.migration_state.error}</div>}
-              </div>
-              <button
-                type="button"
-                onClick={() => dismissMutation.mutate()}
-                disabled={dismissMutation.isPending}
-                className="text-[10px] px-2 py-0.5 rounded text-red-400/70 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40 flex-shrink-0"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
 
           {/* SD usage bar */}
           <div>

@@ -225,16 +225,34 @@ cmd_unmount() {
 cmd_force_unmount_stale() {
     # Called by the pull detector when it notices the USB device has
     # disappeared (udev removed /dev/disk/by-uuid/<uuid>) or the mount
-    # has gone read-only. umount -l (lazy) because reads/writes are
-    # returning I/O errors and a blocking umount would hang indefinitely.
+    # has gone read-only.
     #
-    # Crucially, we do NOT remove the mount unit file or the mountpoint
-    # directory — the user may reinsert the drive and the existing mount
-    # unit needs to be there so `systemctl start` or the helper's
-    # `mount <uuid>` reattaches cleanly.
+    # Must do THREE things to fully clean up, or the next remount will fail:
+    #
+    #   1. systemctl stop the mount unit so systemd's own accounting no
+    #      longer shows it as "active (mounted)" pointing at the now-dead
+    #      device. This does its own umount which often fails with
+    #      "target is busy" because mynet.service holds open file
+    #      descriptors on the filesystem — that's fine, we continue.
+    #   2. umount -l (lazy) to actually detach the mount from the kernel
+    #      namespace in spite of the open fds. Removes the entry from
+    #      /proc/mounts immediately.
+    #   3. systemctl reset-failed to clear any "failed to unmount" state
+    #      left by step 1, so `systemctl start` (triggered by a later
+    #      helper mount call) doesn't refuse with "dependency failed".
+    #
+    # Crucially, we do NOT remove the mount unit FILE or the mountpoint
+    # directory — the user may reinsert the drive and we want the
+    # existing mount unit to be there for clean remount.
+    local escaped
+    escaped="$(systemd-escape -p --suffix=mount "$MOUNT_POINT")"
+
+    systemctl stop "$escaped" 2>/dev/null || true
     if findmnt -n "$MOUNT_POINT" >/dev/null 2>&1; then
         umount -l "$MOUNT_POINT" 2>/dev/null || true
     fi
+    systemctl reset-failed "$escaped" 2>/dev/null || true
+
     json_out '{ok: true}'
 }
 

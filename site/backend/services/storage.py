@@ -447,12 +447,28 @@ def first_run_storage_candidate() -> Optional[dict]:
 
 def _sqlite_online_backup(source: Path, dest: Path) -> None:
     """Take a consistent online copy of `source` to `dest` using SQLite's
-    backup API. Safe to run while writers are active."""
+    backup API. Safe to run while writers are active.
+
+    IMPORTANT: the destination's journal mode is explicitly switched to
+    DELETE after the backup completes. SQLite's backup API inherits the
+    source's journal mode on the destination, and if the source is in
+    WAL mode (which MyNet's live DB always is under concurrent access),
+    the destination is left with un-checkpointed data in a -wal sidecar.
+    Callers that subsequently rename only the main file (migration,
+    snapshot) would strand that sidecar and produce structural
+    corruption — the main file references pages that live in the now
+    orphaned WAL. Switching to DELETE mode triggers an implicit
+    checkpoint (WAL → main) and removes the -shm / -wal sidecars, so the
+    destination file is fully self-contained.
+    """
     src_conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     try:
         dst_conn = sqlite3.connect(str(dest))
         try:
             src_conn.backup(dst_conn)
+            # Flush WAL into main, drop the sidecars.
+            dst_conn.execute("PRAGMA journal_mode=DELETE").fetchall()
+            dst_conn.commit()
         finally:
             dst_conn.close()
     finally:

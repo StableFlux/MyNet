@@ -63,6 +63,26 @@ function AppInner() {
       qc.invalidateQueries({ queryKey: ['events-count'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
     }
+    // USB drive has disappeared from /proc/mounts while we're in USB mode.
+    // Probe /storage/health to confirm the DB is genuinely unreachable, then
+    // flip the whole app into Degraded Mode — no need for the user to refresh.
+    if (msg.type === 'storage' && msg.subtype === 'usb_lost') {
+      api.get('/storage/health').then(({ data }) => {
+        if (data.platform_supported && !data.db_reachable) {
+          setDegraded(data)
+        }
+      }).catch(() => {
+        // Health endpoint itself unreachable — treat as degraded with a
+        // minimal synthetic health object so the recovery UI still renders.
+        setDegraded({
+          platform_supported: true,
+          db_reachable: false,
+          mode: 'usb',
+          reason: 'USB drive removed',
+          snapshots: { current: { exists: false }, previous: { exists: false } },
+        })
+      })
+    }
   })
 
   const init = async () => {

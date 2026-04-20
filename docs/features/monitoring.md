@@ -164,16 +164,16 @@ By default, up to 20 pings run concurrently. For faster monitoring of many devic
 MONITORING_MAX_CONCURRENT_PINGS=50
 ```
 
-On a Raspberry Pi 3B+, a safe ceiling is about 150 concurrent pings. Beyond that, the 30-second scheduler tick may take longer than the tick interval.
+On a Raspberry Pi 3B+, a safe ceiling is about 150 concurrent pings. Beyond that, the 60-second scheduler tick may take longer than the tick interval.
 
 ### Monitoring interval
 
-The scheduler ticks every 30 seconds. Each device is pinged no more frequently than its configured interval. The default interval for new devices is 60 seconds.
+The scheduler ticks every 60 seconds. Each device is pinged no more frequently than its configured interval. The default interval for new devices is 60 seconds.
 
 For large installations (300+ devices), consider:
 
 - Setting intervals to 120s or longer
-- Reducing result retention from 48h to 24h (edit `MONITORING_CLEANUP_AFTER_HOURS` in `monitoring_scheduler.py`)
+- Reducing result retention from 48h to 24h (change the `hours=48` value in `cleanup_old_results()` in `services/monitoring_scheduler.py`)
 - Moving the database to a faster medium (USB SSD instead of SD card on Pi)
 
 ### Raspberry Pi SD card wear
@@ -182,7 +182,7 @@ At 85 devices with 60-second intervals, MyNet writes approximately 70–100 MB/d
 
 - Use a **high-endurance SD card** (Samsung Pro Endurance, SanDisk High Endurance)
 - Move `DB_PATH` in `.env` to a USB drive
-- Increase `TICK_SECS` from 30 to 60 in `monitoring_scheduler.py`
+- Increase `TICK_SECS` from 60 to 120 in `services/monitoring_scheduler.py`
 
 ---
 

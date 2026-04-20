@@ -76,7 +76,7 @@ The form adapts to the selected device type — fields that are not relevant to 
 | Field | Notes |
 |---|---|
 | **Name** | A unique, human-readable name (e.g. `Living Room TV`, `Pi-hole 1`) |
-| **Device Type** | Select from 170+ predefined types, or a custom type you have created |
+| **Device Type** | Select from 90+ predefined types, or a custom type you have created |
 
 Everything else is optional, but the more you fill in, the more useful MyNet becomes.
 
@@ -84,7 +84,7 @@ Everything else is optional, but the more you fill in, the more useful MyNet bec
 
 ## Device Types
 
-MyNet includes 170+ predefined device types organised into categories. Each type controls which fields appear in the device form.
+MyNet includes 90+ predefined device types organised into categories. Each type controls which fields appear in the device form.
 
 | Category | Examples |
 |---|---|

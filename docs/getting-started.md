@@ -44,8 +44,8 @@
 **1. Clone the repository**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mynet.git
-cd mynet
+git clone https://github.com/StableFlux/MyNet.git
+cd MyNet
 ```
 
 **2. Run the setup script as root**

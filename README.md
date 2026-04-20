@@ -29,7 +29,7 @@ Designed to run on a Raspberry Pi, Ubuntu, or Debian server on your LAN.
 
 | Category | What you get |
 |---|---|
-| **Device inventory** | 170+ device types, per-device NICs, credentials, SSH keys, services, notes |
+| **Device inventory** | 90+ device types, per-device NICs, credentials, SSH keys, services, notes |
 | **Network management** | VLANs, CIDR subnets, DHCP ranges, DNS config, visual subnet maps |
 | **Monitoring** | Scheduled ping monitoring, latency sparklines, WAN uptime tracking |
 | **Topology** | Auto-derived network graph, point-to-point path tracer |
@@ -57,8 +57,8 @@ Designed to run on a Raspberry Pi, Ubuntu, or Debian server on your LAN.
 ### Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mynet.git
-cd mynet
+git clone https://github.com/StableFlux/MyNet.git
+cd MyNet
 sudo bash setup.sh
 ```
 
@@ -127,9 +127,9 @@ You will be prompted to confirm by typing `UNINSTALL`, and asked whether to also
 
 ## Raspberry Pi Notes
 
-**Ping monitoring scale (Pi 3B+):** Safe ceiling is ~300 monitored devices before the 30-second scheduler tick becomes noticeably slow. Raise `concurrent_tasks` in `monitoring_scheduler.py` from 150 to 256 if monitoring more than 150 devices.
+**Ping monitoring scale (Pi 3B+):** Safe ceiling is ~300 monitored devices before the 60-second scheduler tick becomes noticeably slow. Raise `concurrent_tasks` in `services/monitoring_scheduler.py` from 150 to 256 if monitoring more than 150 devices.
 
-**SD card write wear:** At 85 devices the scheduler writes ~70–100 MB/day to SQLite. Standard SD cards may last 2–4 years; high-endurance cards (Samsung Pro Endurance, SanDisk High Endurance) are strongly recommended. To reduce wear: move `DB_PATH` in `.env` to a USB drive, or increase `TICK_SECS` from 30s to 60s.
+**SD card write wear:** At 85 devices the scheduler writes ~70–100 MB/day to SQLite. Standard SD cards may last 2–4 years; high-endurance cards (Samsung Pro Endurance, SanDisk High Endurance) are strongly recommended. To reduce wear: move `DB_PATH` in `.env` to a USB drive, or increase `TICK_SECS` in `services/monitoring_scheduler.py` from 60s to 120s.
 
 ---
 

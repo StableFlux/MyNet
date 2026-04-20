@@ -262,23 +262,12 @@ export default function Storage() {
         </button>
       </div>
 
-      {/* USB-mode warning banner */}
+      {/* USB-mode warning banner — persistent safety reminder, stays at top */}
       {isUSB && (
         <div className="p-3 rounded border border-amber-500/30 bg-amber-500/[0.08] text-xs text-amber-400 flex items-start gap-2">
           <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
           <div>
             <strong>USB mode active.</strong> Never insert or remove the USB drive while the server is powered on — doing so will corrupt the database.
-          </div>
-        </div>
-      )}
-
-      {/* Migration-in-progress banner */}
-      {status.migration_in_progress && (
-        <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
-          <Loader size={14} className="animate-spin" />
-          <div>
-            <strong>Migration in progress:</strong> {phase ? PHASE_LABELS[phase] ?? phase : (status.migration_state?.phase ?? 'starting')}
-            {phaseError && <span className="ml-2 text-red-400">({phaseError})</span>}
           </div>
         </div>
       )}
@@ -300,6 +289,32 @@ export default function Storage() {
             </div>
             <HardDrive size={24} className={isUSB ? 'text-amber-400' : 'text-white/30'} />
           </div>
+
+          {/* Migration status / result — lives here so the user sees it
+              in their natural focus area rather than below the USB picker. */}
+          {status.migration_in_progress && (
+            <div className="p-3 rounded border border-indigo-500/30 bg-indigo-500/[0.08] text-xs text-indigo-300 flex items-center gap-2">
+              <Loader size={14} className="animate-spin flex-shrink-0" />
+              <div>
+                <strong>Migration in progress:</strong> {phase ? PHASE_LABELS[phase] ?? phase : (status.migration_state?.phase ?? 'starting')}
+                {phaseError && <span className="ml-2 text-red-400">({phaseError})</span>}
+              </div>
+            </div>
+          )}
+          {!status.migration_in_progress && migrateMutation.isError && (
+            <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
+              <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <strong>Migration failed:</strong> {(migrateMutation.error as any)?.response?.data?.detail ?? String(migrateMutation.error)}
+              </div>
+            </div>
+          )}
+          {!status.migration_in_progress && migrateMutation.isSuccess && (
+            <div className="p-3 rounded border border-emerald-500/30 bg-emerald-500/[0.08] text-xs text-emerald-400 flex items-start gap-2">
+              <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />
+              <div>Migration complete. If encryption is enabled, you'll need to unlock again.</div>
+            </div>
+          )}
 
           {/* SD usage bar */}
           <div>
@@ -540,21 +555,6 @@ export default function Storage() {
             setMigrateModal(null)
           }}
         />
-      )}
-
-      {migrateMutation.isError && (
-        <div className="p-3 rounded border border-red-500/30 bg-red-500/[0.08] text-xs text-red-400 flex items-start gap-2">
-          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-          <div>
-            <strong>Migration failed:</strong> {(migrateMutation.error as any)?.response?.data?.detail ?? String(migrateMutation.error)}
-          </div>
-        </div>
-      )}
-      {migrateMutation.isSuccess && !status.migration_in_progress && (
-        <div className="p-3 rounded border border-emerald-500/30 bg-emerald-500/[0.08] text-xs text-emerald-400 flex items-start gap-2">
-          <CheckCircle size={14} className="mt-0.5 flex-shrink-0" />
-          <div>Migration complete. If encryption is enabled, you'll need to unlock again.</div>
-        </div>
       )}
     </div>
   )

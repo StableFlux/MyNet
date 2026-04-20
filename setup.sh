@@ -445,9 +445,11 @@ AmbientCapabilities=CAP_NET_RAW
 # NOTE: NoNewPrivileges=yes is intentionally NOT set here. The USB Storage
 # feature (docs/features/storage.md) requires the backend to sudo into the
 # helper via a narrow sudoers drop-in. Setting this flag would block that.
-# ProtectSystem=full and PrivateTmp=yes remain.
+# ProtectSystem=yes (not "full") — the helper writes systemd unit files under
+# /etc/systemd/system when activating USB mode; `full` makes /etc read-only
+# even for privileged children via the inherited mount namespace.
 PrivateTmp=yes
-ProtectSystem=full
+ProtectSystem=yes
 
 [Install]
 WantedBy=multi-user.target

@@ -118,6 +118,16 @@ if [ -f "$SERVICE_FILE" ] && grep -q '^CapabilityBoundingSet=' "$SERVICE_FILE"; 
     success "Removed CapabilityBoundingSet from systemd unit (required by USB Storage helper)"
 fi
 
+# ProtectSystem=full also bind-mounts /etc read-only for the service and its
+# privileged children — the helper needs to write unit files and drop-ins under
+# /etc/systemd/system during USB activation. Step it down to "yes", which keeps
+# /usr and /boot read-only but allows writes to /etc.
+if [ -f "$SERVICE_FILE" ] && grep -q '^ProtectSystem=full' "$SERVICE_FILE"; then
+    sed -i 's/^ProtectSystem=full/ProtectSystem=yes/' "$SERVICE_FILE"
+    UNIT_CHANGED=1
+    success "Stepped ProtectSystem from full to yes (required by USB Storage helper)"
+fi
+
 # Ensure jq + helper dependencies are installed (no-op when already present)
 if ! command -v jq >/dev/null 2>&1; then
     spin_run "Installing jq (required by USB Storage helper)..." apt-get install -y -qq jq

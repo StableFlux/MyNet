@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or support request
+    url: https://github.com/StableFlux/MyNet/discussions
+    about: For questions about how to use or configure MyNet, please open a Discussion rather than an issue.
+  - name: Documentation
+    url: https://github.com/StableFlux/MyNet/tree/main/docs
+    about: Setup, feature, and recovery guides — check here before opening an issue.
+  - name: Security vulnerability
+    url: https://github.com/StableFlux/MyNet/security/advisories/new
+    about: Please report security issues privately rather than via a public issue.
